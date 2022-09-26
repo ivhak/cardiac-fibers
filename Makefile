@@ -51,7 +51,8 @@ CC=hipcc
 ldrb-gpu: ldrb-gpu.cpp
 	$(CC) $(CFLAGS) $(IFLAGS) -o $@ $^  $(LFLAGS)
 
-debug: CFLAGS += -DDEBUG -g
+debug: CFLAGS += -DDEBUG -g -Wall
+debug: MFEM_ROOT=${HOME}/packages/mfem-dbg-4.4
 debug: ldrb-gpu
 
 .PHONY: clean
