@@ -1,0 +1,4 @@
+transfer.sh
+data/
+out/
+rocprof/
