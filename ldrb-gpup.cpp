@@ -27,7 +27,7 @@ typedef struct {
     const char *out;
     const char *device_config;
     int order;
-} Option;
+} Options;
 
 typedef enum {
     BASE   = 1,
@@ -37,39 +37,41 @@ typedef enum {
 } MeshAttributes;
 
 void laplace(
-        GridFunction *x,
-        Mesh *mesh,
+        ParGridFunction *x,
+        ParMesh *pmesh,
         Array<int> &essential_borders,
         Array<int> &nonzero_essential_borders,
         Array<int> &zero_essential_borders,
         int dim,
-        Option *opts)
+        Options *opts,
+        int rank)
 {
     // Define a finite element space on the mesh.
     FiniteElementCollection *fec;
 
     fec = new H1_FECollection(opts->order, dim);
-    FiniteElementSpace * fespace = new FiniteElementSpace(mesh, fec);
-    cout << "Number of finite element unknowns: "
-         << fespace->GetTrueVSize() << endl;
+    ParFiniteElementSpace *fespace = new ParFiniteElementSpace(pmesh, fec);
+    HYPRE_BigInt size = fespace->GlobalTrueVSize();
+    if (rank == 0)
+        cout << "Number of finite element unknowns: " << size << endl;
 
     // Determine the list of true (i.e. parallel conforming) essential boundary
     // dofs, defined by the boundary attributes marked as essential (Dirichlet)
     // and converting to a list of true dofs..
     Array<int> ess_tdof_list;
-    MFEM_ASSERT(mesh->bdr_attributes.Size() != 0, "Boundary size cannot be zero.");
+    MFEM_ASSERT(pmesh->bdr_attributes.Size() != 0, "Boundary size cannot be zero.");
 
     fespace->GetEssentialTrueDofs(essential_borders, ess_tdof_list);
 
     // Set up the parallel linear form b(.) which corresponds to the right-hand
     // side of the FEM linear system, which in this case is (1,phi_i) where
     // phi_i are the basis functions in fespace.
-    LinearForm b(fespace);
+    ParLinearForm b(fespace);
     ConstantCoefficient one(1.0);
     b.AddDomainIntegrator(new DomainLFIntegrator(one));
     b.Assemble();
 
-    // Define the solution vector x as a finite element grid function
+    // Define the solution vector x as a parallel finite element grid function
     // corresponding to fespace. Initialize x with initial guess of zero, which
     // satisfies the boundary conditions.
     x->SetSpace(fespace);
@@ -86,7 +88,7 @@ void laplace(
     // Set up the parallel bilinear form a(.,.) on the finite element space
     // corresponding to the Laplacian operator -Delta, by adding the
     // Diffusion domain integrator.
-    BilinearForm a(fespace);
+    ParBilinearForm a(fespace);
     a.AddDomainIntegrator(new DiffusionIntegrator(one));
 
     // Assemble the parallel bilinear form and the corresponding linear system.
@@ -97,21 +99,30 @@ void laplace(
     a.FormLinearSystem(ess_tdof_list, *x, b, A, X, B);
 
     // Solve the linear system A X = B.
-    // Use a simple symmetric Gauss-Seidel preconditioner with PCG.
-    GSSmoother M((SparseMatrix&)(*A));
-    PCG(*A, M, B, X, 1, 200, 1e-12, 0.0);
+    // * With full assembly, use the BoomerAMG preconditioner from hypre.
+    Solver *prec = NULL;
+    prec = new HypreBoomerAMG;
+    CGSolver cg(MPI_COMM_WORLD);
+    cg.SetRelTol(1e-12);
+    cg.SetMaxIter(2000);
+    cg.SetPrintLevel(1);
+    if (prec) { cg.SetPreconditioner(*prec); }
+    cg.SetOperator(*A);
+    cg.Mult(B, X);
+    delete prec;
 
-    // Recover the grid function corresponding to X.
+    // Recover the parallel grid function corresponding to X. This is the local
+    // finite element solution on each processor.
     a.RecoverFEMSolution(X, b, *x);
 }
 
-void laplace_psi_epi(GridFunction *x, Mesh *mesh, int dim, Option *opts)
+void laplace_psi_epi(ParGridFunction *x, ParMesh *pmesh, int dim, Options *opts, int rank)
 {
     // Define the following three arrays to determine (1) which border surfaces
     // to include in the Laplace equation, (2) which of said borders should be
     // set to a nonzero value (1.0) and (3) which of said border surfaces
     // should be set to zero.
-    int nattr = mesh->bdr_attributes.Max();
+    int nattr = pmesh->bdr_attributes.Max();
     Array<int> essential_borders(nattr);
     Array<int> nonzero_essential_borders(nattr);
     Array<int> zero_essential_borders(nattr);
@@ -131,16 +142,16 @@ void laplace_psi_epi(GridFunction *x, Mesh *mesh, int dim, Option *opts)
     zero_essential_borders[LV_ENDO-1] = 1;
     zero_essential_borders[RV_ENDO-1] = 1;
 
-    laplace(x, mesh, essential_borders, nonzero_essential_borders, zero_essential_borders, dim, opts);
+    laplace(x, pmesh, essential_borders, nonzero_essential_borders, zero_essential_borders, dim,opts, rank);
 }
 
-void laplace_psi_lv(GridFunction *x, Mesh *mesh, int dim, Option *opts)
+void laplace_psi_lv(ParGridFunction *x, ParMesh *pmesh, int dim, Options *opts, int rank)
 {
     // Define the following three arrays to determine (1) which border surfaces
     // to include in the Laplace equation, (2) which of said borders should be
     // set to a nonzero value (1.0) and (3) which of said border surfaces
     // should be set to zero.
-    int nattr = mesh->bdr_attributes.Max();
+    int nattr = pmesh->bdr_attributes.Max();
     Array<int> essential_borders(nattr);
     Array<int> nonzero_essential_borders(nattr);
     Array<int> zero_essential_borders(nattr);
@@ -160,16 +171,16 @@ void laplace_psi_lv(GridFunction *x, Mesh *mesh, int dim, Option *opts)
     zero_essential_borders[LV_ENDO-1] = 0;
     zero_essential_borders[RV_ENDO-1] = 1;
 
-    laplace(x, mesh, essential_borders, nonzero_essential_borders, zero_essential_borders, dim, opts);
+    laplace(x, pmesh, essential_borders, nonzero_essential_borders, zero_essential_borders, dim, opts, rank);
 }
 
-void laplace_psi_rv(GridFunction *x, Mesh *mesh, int dim, Option *opts)
+void laplace_psi_rv(ParGridFunction *x, ParMesh *pmesh, int dim, Options *opts, int rank)
 {
     // Define the following three arrays to determine (1) which border surfaces
     // to include in the Laplace equation, (2) which of said borders should be
     // set to a nonzero value (1.0) and (3) which of said border surfaces
     // should be set to zero.
-    int nattr = mesh->bdr_attributes.Max();
+    int nattr = pmesh->bdr_attributes.Max();
     Array<int> essential_borders(nattr);
     Array<int> nonzero_essential_borders(nattr);
     Array<int> zero_essential_borders(nattr);
@@ -189,19 +200,23 @@ void laplace_psi_rv(GridFunction *x, Mesh *mesh, int dim, Option *opts)
     zero_essential_borders[LV_ENDO-1] = 1;
     zero_essential_borders[RV_ENDO-1] = 0;
 
-    laplace(x, mesh, essential_borders, nonzero_essential_borders, zero_essential_borders, dim, opts);
+    laplace(x, pmesh, essential_borders, nonzero_essential_borders, zero_essential_borders, dim, opts, rank);
 }
 
 int main(int argc, char *argv[])
 {
+    // 1. Initialize MPI and HYPRE
+    Mpi::Init();
+    int rank = Mpi::WorldRank();
+    Hypre::Init();
 
-    Option opts;
-    // 1. Parse command-line options
+    Options opts;
+    // 2. Parse command-line options
 
     // Set program defaults
     opts.mesh_file = NULL;
     opts.out = "./out";
-    opts.device_config = "hip";
+    opts.device_config = "cpu";
     opts.order = 1;
 
     OptionsParser args(argc, argv);
@@ -209,24 +224,27 @@ int main(int argc, char *argv[])
             "Mesh file to use (required)");
     args.AddOption(&opts.out, "-o", "--out",
             "Basename of the ouput files. Outputs will be of the form <basename>_*.gf");
-    // args.AddOption(&opts.device_config, "-d", "--device",
-    //         "Device configuration string, see Device::Configure().");
+    args.AddOption(&opts.device_config, "-d", "--device",
+            "Device configuration string, see Device::Configure().");
     args.AddOption(&opts.order, "-o", "--order",
             "Finite element order (polynomial degree) or -1 for "
             "isoparametric space.");
     args.Parse();
 
     if (!args.Good() || opts.mesh_file == NULL) {
-        args.PrintUsage(cout);
+        if (rank == 0)
+            args.PrintUsage(cout);
         exit(1);
     }
 
-    args.PrintOptions(cout);
+    if (rank == 0)
+        args.PrintOptions(cout);
 
-    // 2. Enable hardware devices such as GPUs, and programming models such as
+    // 3. Enable hardware devices such as GPUs, and programming models such as
     //    HIP, CUDA, OCCA, RAJA and OpenMP based on command line options.
     Device device(opts.device_config);
-    device.Print();
+    if (rank == 0)
+        device.Print();
 
     // 4. Load the mesh
     Mesh mesh(opts.mesh_file, 1, 1);
@@ -234,12 +252,12 @@ int main(int argc, char *argv[])
 
 #ifdef DEBUG
     {
-        // Check that the boundary elements have to proper attributes.
+        // Check that the border elements have to proper attributes.
         //                   Base Epi  Lv   Rv
         int attributes[4] = {0,   0,   0,   0};
 
-        int num_boundary_elements = mesh.GetNBE();
-        for (int i = 0; i < num_boundary_elements; i++) {
+        int num_border_elements = mesh.GetNBE();
+        for (int i = 0; i < num_border_elements; i++) {
             Element *ele = mesh.GetBdrElement(i);
             int attr = ele->GetAttribute();
             MFEM_ASSERT(attr >= BASE && attr <=RV_ENDO,
@@ -248,19 +266,25 @@ int main(int argc, char *argv[])
             attributes[attr-1]++;
         }
 
-        cout << "Number of boundary elements: " << num_boundary_elements << endl
-             << "Number of boundary elements at each surface:" << endl
-             << "\tBase: " << attributes[0] << " elements" << endl
-             << "\tEpi:  " << attributes[1] << " elements" << endl
-             << "\tLv: "   << attributes[2] << " elements" << endl
-             << "\tRv: "   << attributes[3] << " elements" << endl;
+        if (rank == 0) {
+            cout << "Number of border elements: " << num_border_elements << endl
+                 << "Number of border elements at each surface:" << endl
+                 << "\tBase: " << attributes[0] << " elements" << endl
+                 << "\tEpi:  " << attributes[1] << " elements" << endl
+                 << "\tLv: "   << attributes[2] << " elements" << endl
+                 << "\tRv: "   << attributes[3] << " elements" << endl;
+        }
     }
 #endif
 
+    // 6. Define a parallel mesh by a partitioning of the serial mesh.
+    ParMesh pmesh(MPI_COMM_WORLD, mesh);
+    mesh.Clear();
+
     // Laplace PSI_EPI:
     // Solve the Laplace equation from EPI (1.0) to (LV_ENDO union RV_ENDO) (0.0)
-    GridFunction x_psi_epi;
-    laplace_psi_epi(&x_psi_epi, &mesh, dim, &opts);
+    ParGridFunction x_psi_epi;
+    laplace_psi_epi(&x_psi_epi, &pmesh, dim, &opts, rank);
 
     {
         string x_psi_epi_out(opts.out);
@@ -272,8 +296,8 @@ int main(int argc, char *argv[])
 
     // Laplace PSI_LV;
     // Solve the Laplace equation from LV_ENDO (1.0) to (RV_ENDO union EPI) (0.0)
-    GridFunction x_psi_lv;
-    laplace_psi_lv(&x_psi_lv, &mesh, dim, &opts);
+    ParGridFunction x_psi_lv;
+    laplace_psi_lv(&x_psi_lv, &pmesh, dim, &opts, rank);
 
     {
         string x_psi_lv_out(opts.out);
@@ -285,8 +309,8 @@ int main(int argc, char *argv[])
 
     // Laplace PSI_RV
     // Solve the Laplace equation from RV_ENDO (1.0) to (LV_ENDO union EPI) (0.0)
-    GridFunction x_psi_rv;
-    laplace_psi_rv(&x_psi_rv, &mesh, dim, &opts);
+    ParGridFunction x_psi_rv;
+    laplace_psi_rv(&x_psi_rv, &pmesh, dim, &opts, rank);
 
     {
         string x_psi_rv_out(opts.out);
@@ -301,11 +325,12 @@ int main(int argc, char *argv[])
 
     // Save the mesh
     {
+
         string mesh_out(opts.out);
         mesh_out += ".mesh";
         ofstream mesh_ofs(mesh_out.c_str());
         mesh_ofs.precision(8);
-        mesh.Print(mesh_ofs);
+        pmesh.Print(mesh_ofs);
 
     }
 }

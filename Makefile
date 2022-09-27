@@ -11,50 +11,68 @@
 # General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with hyprep.  If not, see <https://www.gnu.org/licenses/>.
+# along with ldrb-gpu.  If not, see <https://www.gnu.org/licenses/>.
 #
 # Authors: Iver Håkonsen <hakonseniver@yahoo.no
 
-MFEM_ROOT=${HOME}/packages/mfem-4.4
+MFEM_SERIAL_ROOT=${HOME}/packages/mfem-serial-4.4
+MFEM_PARALLEL_ROOT=${HOME}/packages/mfem-4.4
+
+MFEM_ROOT=
 MFEM_INCDIR=$(MFEM_ROOT)/include
 MFEM_LIBDIR=$(MFEM_ROOT)/lib
 
 CFLAGS =
-#CFLAGS = -Wall -Wextra -march=native -O3
-CFLAGS += $(shell hipconfig -C)
+ifneq ($(DEBUG), YES)
+CFLAGS += -march=native -O3
+else
+CFLAGS += -DDEBUG -g -Wall
+MFEM_SERIAL_ROOT=${HOME}/packages/mfem-serial-dbg-4.4
+MFEM_PARALLEL_ROOT=${HOME}/packages/mfem-dbg-4.4
+endif
 
 IFLAGS=
 LFLAGS=
 
 # HIP
-CFLAGS += --gcc-toolchain=${GCC_ROOT}
-LFLAGS += -lhipsparse
+CFLAGS += $(shell hipconfig -C) --gcc-toolchain=${GCC_ROOT}
+HIP_LFLAGS = -lhipsparse
 
 # MFEM
-IFLAGS += -I$(MFEM_INCDIR)
-LFLAGS += -L$(MFEM_LIBDIR) -lmfem
+MFEM_IFLAGS = -I$(MFEM_INCDIR)
+MFEM_LFLAGS = -L$(MFEM_LIBDIR) -lmfem
 
 # MPI
-IFLAGS += -I${MPI_HOME}/include
-LFLAGS += -L${MPI_HOME}/lib -lmpi
+MPI_IFLAGS = -I${MPI_HOME}/include
+MPI_LFLAGS = -L${MPI_HOME}/lib -lmpi
 
 # HYPRE
-IFLAGS += -I${HYPRE_INCDIR}
-LFLAGS += -L${HYPRE_LIBDIR} -lHYPRE
+HYPRE_IFLAGS = -I${HYPRE_INCDIR}
+HYPRE_LFLAGS = -L${HYPRE_LIBDIR} -lHYPRE
 
 # Metis
-IFLAGS += -I${METIS_INCDIR}
-LFLAGS += -L${METIS_LIBDIR} -lmetis
+METIS_IFLAGS = -I${METIS_INCDIR}
+METIS_LFLAGS = -L${METIS_LIBDIR} -lmetis
 
 CC=hipcc
 
-ldrb-gpu: ldrb-gpu.cpp
-	$(CC) $(CFLAGS) $(IFLAGS) -o $@ $^  $(LFLAGS)
+PARALLEL_IFLAGS = $(HIP_IFLAGS) $(MFEM_IFLAGS) $(MPI_IFLAGS) $(HYPRE_IFLAGS) $(METIS_IFLAGS)
+PARALLEL_LFLAGS = $(HIP_LFLAGS) $(MFEM_LFLAGS) $(MPI_LFLAGS) $(HYPRE_LFLAGS) $(METIS_LFLAGS)
 
-debug: CFLAGS += -DDEBUG -g -Wall
-debug: MFEM_ROOT=${HOME}/packages/mfem-dbg-4.4
-debug: ldrb-gpu
+SERIAL_IFLAGS = $(HIP_IFLAGS) $(MFEM_IFLAGS)
+SERIAL_LFLAGS = $(HIP_LFLAGS) $(MFEM_LFLAGS)
+
+
+all: ldrb-gpup ldrb-gpu
+
+ldrb-gpup: MFEM_ROOT=$(MFEM_PARALLEL_ROOT)
+ldrb-gpup: ldrb-gpup.cpp
+	$(CC) $(CFLAGS) $(PARALLEL_IFLAGS) -o $@ $^ $(PARALLEL_LFLAGS)
+
+ldrb-gpu: MFEM_ROOT=$(MFEM_SERIAL_ROOT)
+ldrb-gpu: ldrb-gpu.cpp
+	$(CC) $(CFLAGS) $(SERIAL_IFLAGS) -o $@ $^ $(SERIAL_LFLAGS)
 
 .PHONY: clean
 clean:
-	$(RM) ldrb-gpu
+	$(RM) ldrb-gpu ldrb-gpup
