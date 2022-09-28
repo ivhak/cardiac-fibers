@@ -39,9 +39,9 @@ typedef enum {
 void laplace(
         ParGridFunction *x,
         ParMesh *pmesh,
-        Array<int> &essential_borders,
-        Array<int> &nonzero_essential_borders,
-        Array<int> &zero_essential_borders,
+        Array<int> &essential_boundaries,
+        Array<int> &nonzero_essential_boundaries,
+        Array<int> &zero_essential_boundaries,
         int dim,
         Options *opts,
         int rank)
@@ -61,7 +61,7 @@ void laplace(
     Array<int> ess_tdof_list;
     MFEM_ASSERT(pmesh->bdr_attributes.Size() != 0, "Boundary size cannot be zero.");
 
-    fespace->GetEssentialTrueDofs(essential_borders, ess_tdof_list);
+    fespace->GetEssentialTrueDofs(essential_boundaries, ess_tdof_list);
 
     // Set up the parallel linear form b(.) which corresponds to the right-hand
     // side of the FEM linear system, which in this case is (1,phi_i) where
@@ -77,13 +77,13 @@ void laplace(
     x->SetSpace(fespace);
     *x = 0.0;
 
-    // Project the constant value 1.0 to all the essential borders marked as nonzero.
+    // Project the constant value 1.0 to all the essential boundaries marked as nonzero.
     ConstantCoefficient nonzero_bdr(1.0);
-    x->ProjectBdrCoefficient(nonzero_bdr, nonzero_essential_borders);
+    x->ProjectBdrCoefficient(nonzero_bdr, nonzero_essential_boundaries);
 
-    // Project the constant value 0.0 to all the essential borders marked as zero.
+    // Project the constant value 0.0 to all the essential boundaries marked as zero.
     ConstantCoefficient zero_bdr(0.0);
-    x->ProjectBdrCoefficient(zero_bdr, zero_essential_borders);
+    x->ProjectBdrCoefficient(zero_bdr, zero_essential_boundaries);
 
     // Set up the parallel bilinear form a(.,.) on the finite element space
     // corresponding to the Laplacian operator -Delta, by adding the
@@ -119,88 +119,88 @@ void laplace(
 void laplace_psi_epi(ParGridFunction *x, ParMesh *pmesh, int dim, Options *opts, int rank)
 {
     // Define the following three arrays to determine (1) which border surfaces
-    // to include in the Laplace equation, (2) which of said borders should be
+    // to include in the Laplace equation, (2) which of said boundaries should be
     // set to a nonzero value (1.0) and (3) which of said border surfaces
     // should be set to zero.
     int nattr = pmesh->bdr_attributes.Max();
-    Array<int> essential_borders(nattr);
-    Array<int> nonzero_essential_borders(nattr);
-    Array<int> zero_essential_borders(nattr);
+    Array<int> essential_boundaries(nattr);
+    Array<int> nonzero_essential_boundaries(nattr);
+    Array<int> zero_essential_boundaries(nattr);
 
     // Laplace PSI_EPI:
     // Solve the Laplace equation from EPI (1.0) to (LV_ENDO union RV_ENDO) (0.0)
-    essential_borders[BASE   -1] = 0;
-    essential_borders[EPI    -1] = 1;
-    essential_borders[LV_ENDO-1] = 1;
-    essential_borders[RV_ENDO-1] = 1;
+    essential_boundaries[BASE   -1] = 0;
+    essential_boundaries[EPI    -1] = 1;
+    essential_boundaries[LV_ENDO-1] = 1;
+    essential_boundaries[RV_ENDO-1] = 1;
 
-    nonzero_essential_borders[EPI    -1] = 1;
-    nonzero_essential_borders[LV_ENDO-1] = 0;
-    nonzero_essential_borders[RV_ENDO-1] = 0;
+    nonzero_essential_boundaries[EPI    -1] = 1;
+    nonzero_essential_boundaries[LV_ENDO-1] = 0;
+    nonzero_essential_boundaries[RV_ENDO-1] = 0;
 
-    zero_essential_borders[EPI    -1] = 0;
-    zero_essential_borders[LV_ENDO-1] = 1;
-    zero_essential_borders[RV_ENDO-1] = 1;
+    zero_essential_boundaries[EPI    -1] = 0;
+    zero_essential_boundaries[LV_ENDO-1] = 1;
+    zero_essential_boundaries[RV_ENDO-1] = 1;
 
-    laplace(x, pmesh, essential_borders, nonzero_essential_borders, zero_essential_borders, dim,opts, rank);
+    laplace(x, pmesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, dim,opts, rank);
 }
 
 void laplace_psi_lv(ParGridFunction *x, ParMesh *pmesh, int dim, Options *opts, int rank)
 {
     // Define the following three arrays to determine (1) which border surfaces
-    // to include in the Laplace equation, (2) which of said borders should be
+    // to include in the Laplace equation, (2) which of said boundaries should be
     // set to a nonzero value (1.0) and (3) which of said border surfaces
     // should be set to zero.
     int nattr = pmesh->bdr_attributes.Max();
-    Array<int> essential_borders(nattr);
-    Array<int> nonzero_essential_borders(nattr);
-    Array<int> zero_essential_borders(nattr);
+    Array<int> essential_boundaries(nattr);
+    Array<int> nonzero_essential_boundaries(nattr);
+    Array<int> zero_essential_boundaries(nattr);
 
     // Laplace PSI_LV;
     // Solve the Laplace equation from LV_ENDO (1.0) to (RV_ENDO union EPI) (0.0)
-    essential_borders[BASE   -1] = 0;
-    essential_borders[EPI    -1] = 1;
-    essential_borders[LV_ENDO-1] = 1;
-    essential_borders[RV_ENDO-1] = 1;
+    essential_boundaries[BASE   -1] = 0;
+    essential_boundaries[EPI    -1] = 1;
+    essential_boundaries[LV_ENDO-1] = 1;
+    essential_boundaries[RV_ENDO-1] = 1;
 
-    nonzero_essential_borders[EPI    -1] = 0;
-    nonzero_essential_borders[LV_ENDO-1] = 1;
-    nonzero_essential_borders[RV_ENDO-1] = 0;
+    nonzero_essential_boundaries[EPI    -1] = 0;
+    nonzero_essential_boundaries[LV_ENDO-1] = 1;
+    nonzero_essential_boundaries[RV_ENDO-1] = 0;
 
-    zero_essential_borders[EPI    -1] = 1;
-    zero_essential_borders[LV_ENDO-1] = 0;
-    zero_essential_borders[RV_ENDO-1] = 1;
+    zero_essential_boundaries[EPI    -1] = 1;
+    zero_essential_boundaries[LV_ENDO-1] = 0;
+    zero_essential_boundaries[RV_ENDO-1] = 1;
 
-    laplace(x, pmesh, essential_borders, nonzero_essential_borders, zero_essential_borders, dim, opts, rank);
+    laplace(x, pmesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, dim, opts, rank);
 }
 
 void laplace_psi_rv(ParGridFunction *x, ParMesh *pmesh, int dim, Options *opts, int rank)
 {
     // Define the following three arrays to determine (1) which border surfaces
-    // to include in the Laplace equation, (2) which of said borders should be
+    // to include in the Laplace equation, (2) which of said boundaries should be
     // set to a nonzero value (1.0) and (3) which of said border surfaces
     // should be set to zero.
     int nattr = pmesh->bdr_attributes.Max();
-    Array<int> essential_borders(nattr);
-    Array<int> nonzero_essential_borders(nattr);
-    Array<int> zero_essential_borders(nattr);
+    Array<int> essential_boundaries(nattr);
+    Array<int> nonzero_essential_boundaries(nattr);
+    Array<int> zero_essential_boundaries(nattr);
 
     // Laplace PSI_RV;
     // Solve the Laplace equation from RV_ENDO (1.0) to (LV_ENDO union EPI) (0.0)
-    essential_borders[BASE   -1] = 0;
-    essential_borders[EPI    -1] = 1;
-    essential_borders[LV_ENDO-1] = 1;
-    essential_borders[RV_ENDO-1] = 1;
+    essential_boundaries[BASE   -1] = 0;
+    essential_boundaries[EPI    -1] = 1;
+    essential_boundaries[LV_ENDO-1] = 1;
+    essential_boundaries[RV_ENDO-1] = 1;
 
-    nonzero_essential_borders[EPI    -1] = 0;
-    nonzero_essential_borders[LV_ENDO-1] = 0;
-    nonzero_essential_borders[RV_ENDO-1] = 1;
+    nonzero_essential_boundaries[EPI    -1] = 0;
+    nonzero_essential_boundaries[LV_ENDO-1] = 0;
+    nonzero_essential_boundaries[RV_ENDO-1] = 1;
 
-    zero_essential_borders[EPI    -1] = 1;
-    zero_essential_borders[LV_ENDO-1] = 1;
-    zero_essential_borders[RV_ENDO-1] = 0;
+    zero_essential_boundaries[EPI    -1] = 1;
+    zero_essential_boundaries[LV_ENDO-1] = 1;
+    zero_essential_boundaries[RV_ENDO-1] = 0;
 
-    laplace(x, pmesh, essential_borders, nonzero_essential_borders, zero_essential_borders, dim, opts, rank);
+    laplace(x, pmesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, dim, opts, rank);
 }
 
 int main(int argc, char *argv[])
