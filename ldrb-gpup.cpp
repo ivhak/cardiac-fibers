@@ -116,7 +116,7 @@ void laplace(
     a.RecoverFEMSolution(X, b, *x);
 }
 
-void laplace_psi_epi(ParGridFunction *x, ParMesh *pmesh, int dim, Options *opts, int rank)
+void laplace_phi_epi(ParGridFunction *x, ParMesh *pmesh, int dim, Options *opts, int rank)
 {
     // Define the following three arrays to determine (1) which border surfaces
     // to include in the Laplace equation, (2) which of said boundaries should be
@@ -127,7 +127,6 @@ void laplace_psi_epi(ParGridFunction *x, ParMesh *pmesh, int dim, Options *opts,
     Array<int> nonzero_essential_boundaries(nattr);
     Array<int> zero_essential_boundaries(nattr);
 
-    // Laplace PSI_EPI:
     // Solve the Laplace equation from EPI (1.0) to (LV_ENDO union RV_ENDO) (0.0)
     essential_boundaries[BASE   -1] = 0;
     essential_boundaries[EPI    -1] = 1;
@@ -145,7 +144,7 @@ void laplace_psi_epi(ParGridFunction *x, ParMesh *pmesh, int dim, Options *opts,
     laplace(x, pmesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, dim,opts, rank);
 }
 
-void laplace_psi_lv(ParGridFunction *x, ParMesh *pmesh, int dim, Options *opts, int rank)
+void laplace_phi_lv(ParGridFunction *x, ParMesh *pmesh, int dim, Options *opts, int rank)
 {
     // Define the following three arrays to determine (1) which border surfaces
     // to include in the Laplace equation, (2) which of said boundaries should be
@@ -156,7 +155,6 @@ void laplace_psi_lv(ParGridFunction *x, ParMesh *pmesh, int dim, Options *opts, 
     Array<int> nonzero_essential_boundaries(nattr);
     Array<int> zero_essential_boundaries(nattr);
 
-    // Laplace PSI_LV;
     // Solve the Laplace equation from LV_ENDO (1.0) to (RV_ENDO union EPI) (0.0)
     essential_boundaries[BASE   -1] = 0;
     essential_boundaries[EPI    -1] = 1;
@@ -174,7 +172,7 @@ void laplace_psi_lv(ParGridFunction *x, ParMesh *pmesh, int dim, Options *opts, 
     laplace(x, pmesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, dim, opts, rank);
 }
 
-void laplace_psi_rv(ParGridFunction *x, ParMesh *pmesh, int dim, Options *opts, int rank)
+void laplace_phi_rv(ParGridFunction *x, ParMesh *pmesh, int dim, Options *opts, int rank)
 {
     // Define the following three arrays to determine (1) which border surfaces
     // to include in the Laplace equation, (2) which of said boundaries should be
@@ -185,7 +183,6 @@ void laplace_psi_rv(ParGridFunction *x, ParMesh *pmesh, int dim, Options *opts, 
     Array<int> nonzero_essential_boundaries(nattr);
     Array<int> zero_essential_boundaries(nattr);
 
-    // Laplace PSI_RV;
     // Solve the Laplace equation from RV_ENDO (1.0) to (LV_ENDO union EPI) (0.0)
     essential_boundaries[BASE   -1] = 0;
     essential_boundaries[EPI    -1] = 1;
@@ -281,43 +278,43 @@ int main(int argc, char *argv[])
     ParMesh pmesh(MPI_COMM_WORLD, mesh);
     mesh.Clear();
 
-    // Laplace PSI_EPI:
+    // Laplace phi_EPI:
     // Solve the Laplace equation from EPI (1.0) to (LV_ENDO union RV_ENDO) (0.0)
-    ParGridFunction x_psi_epi;
-    laplace_psi_epi(&x_psi_epi, &pmesh, dim, &opts, rank);
+    ParGridFunction x_phi_epi;
+    laplace_phi_epi(&x_phi_epi, &pmesh, dim, &opts, rank);
 
     {
-        string x_psi_epi_out(opts.out);
-        x_psi_epi_out += "_psi_epi.gf";
-        ofstream x_psi_epi_ofs(x_psi_epi_out.c_str());
-        x_psi_epi_ofs.precision(8);
-        x_psi_epi.Save(x_psi_epi_ofs);
+        string x_phi_epi_out(opts.out);
+        x_phi_epi_out += "_phi_epi.gf";
+        ofstream x_phi_epi_ofs(x_phi_epi_out.c_str());
+        x_phi_epi_ofs.precision(8);
+        x_phi_epi.Save(x_phi_epi_ofs);
     }
 
-    // Laplace PSI_LV;
+    // Laplace phi_LV;
     // Solve the Laplace equation from LV_ENDO (1.0) to (RV_ENDO union EPI) (0.0)
-    ParGridFunction x_psi_lv;
-    laplace_psi_lv(&x_psi_lv, &pmesh, dim, &opts, rank);
+    ParGridFunction x_phi_lv;
+    laplace_phi_lv(&x_phi_lv, &pmesh, dim, &opts, rank);
 
     {
-        string x_psi_lv_out(opts.out);
-        x_psi_lv_out += "_psi_lv.gf";
-        ofstream x_psi_lv_ofs(x_psi_lv_out.c_str());
-        x_psi_lv_ofs.precision(8);
-        x_psi_lv.Save(x_psi_lv_ofs);
+        string x_phi_lv_out(opts.out);
+        x_phi_lv_out += "_phi_lv.gf";
+        ofstream x_phi_lv_ofs(x_phi_lv_out.c_str());
+        x_phi_lv_ofs.precision(8);
+        x_phi_lv.Save(x_phi_lv_ofs);
     }
 
-    // Laplace PSI_RV
+    // Laplace phi_RV
     // Solve the Laplace equation from RV_ENDO (1.0) to (LV_ENDO union EPI) (0.0)
-    ParGridFunction x_psi_rv;
-    laplace_psi_rv(&x_psi_rv, &pmesh, dim, &opts, rank);
+    ParGridFunction x_phi_rv;
+    laplace_phi_rv(&x_phi_rv, &pmesh, dim, &opts, rank);
 
     {
-        string x_psi_rv_out(opts.out);
-        x_psi_rv_out += "_psi_rv.gf";
-        ofstream x_psi_rv_ofs(x_psi_rv_out.c_str());
-        x_psi_rv_ofs.precision(8);
-        x_psi_rv.Save(x_psi_rv_ofs);
+        string x_phi_rv_out(opts.out);
+        x_phi_rv_out += "_phi_rv.gf";
+        ofstream x_phi_rv_ofs(x_phi_rv_out.c_str());
+        x_phi_rv_ofs.precision(8);
+        x_phi_rv.Save(x_phi_rv_ofs);
     }
 
     // TODO: Laplace GAMMA_AB (apex -> base)
