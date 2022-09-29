@@ -118,16 +118,15 @@ void laplace_phi_epi(GridFunction *x, Mesh *mesh, int dim, Options *opts)
     Array<int> zero_essential_boundaries(nattr);
 
     // Solve the Laplace equation from EPI (1.0) to (LV_ENDO union RV_ENDO) (0.0)
-    essential_boundaries[BASE   -1] = 0;
+    essential_boundaries = 0;
     essential_boundaries[EPI    -1] = 1;
     essential_boundaries[LV_ENDO-1] = 1;
     essential_boundaries[RV_ENDO-1] = 1;
 
-    nonzero_essential_boundaries[EPI    -1] = 1;
-    nonzero_essential_boundaries[LV_ENDO-1] = 0;
-    nonzero_essential_boundaries[RV_ENDO-1] = 0;
+    nonzero_essential_boundaries = 0;
+    nonzero_essential_boundaries[EPI-1] = 1;
 
-    zero_essential_boundaries[EPI    -1] = 0;
+    zero_essential_boundaries = 0;
     zero_essential_boundaries[LV_ENDO-1] = 1;
     zero_essential_boundaries[RV_ENDO-1] = 1;
 
@@ -146,17 +145,16 @@ void laplace_phi_lv(GridFunction *x, Mesh *mesh, int dim, Options *opts)
     Array<int> zero_essential_boundaries(nattr);
 
     // Solve the Laplace equation from LV_ENDO (1.0) to (RV_ENDO union EPI) (0.0)
-    essential_boundaries[BASE   -1] = 0;
+    essential_boundaries = 0;
     essential_boundaries[EPI    -1] = 1;
     essential_boundaries[LV_ENDO-1] = 1;
     essential_boundaries[RV_ENDO-1] = 1;
 
-    nonzero_essential_boundaries[EPI    -1] = 0;
+    nonzero_essential_boundaries = 0;
     nonzero_essential_boundaries[LV_ENDO-1] = 1;
-    nonzero_essential_boundaries[RV_ENDO-1] = 0;
 
+    zero_essential_boundaries = 0;
     zero_essential_boundaries[EPI    -1] = 1;
-    zero_essential_boundaries[LV_ENDO-1] = 0;
     zero_essential_boundaries[RV_ENDO-1] = 1;
 
     laplace(x, mesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, dim, opts);
@@ -174,18 +172,17 @@ void laplace_phi_rv(GridFunction *x, Mesh *mesh, int dim, Options *opts)
     Array<int> zero_essential_boundaries(nattr);
 
     // Solve the Laplace equation from RV_ENDO (1.0) to (LV_ENDO union EPI) (0.0)
-    essential_boundaries[BASE   -1] = 0;
+    essential_boundaries = 0;
     essential_boundaries[EPI    -1] = 1;
     essential_boundaries[LV_ENDO-1] = 1;
     essential_boundaries[RV_ENDO-1] = 1;
 
-    nonzero_essential_boundaries[EPI    -1] = 0;
-    nonzero_essential_boundaries[LV_ENDO-1] = 0;
+    nonzero_essential_boundaries = 0;
     nonzero_essential_boundaries[RV_ENDO-1] = 1;
 
+    zero_essential_boundaries = 0;
     zero_essential_boundaries[EPI    -1] = 1;
     zero_essential_boundaries[LV_ENDO-1] = 1;
-    zero_essential_boundaries[RV_ENDO-1] = 0;
 
     laplace(x, mesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, dim, opts);
 }
