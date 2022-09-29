@@ -187,6 +187,27 @@ void laplace_phi_rv(GridFunction *x, Mesh *mesh, int dim, Options *opts)
     laplace(x, mesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, dim, opts);
 }
 
+void apex_to_base(GridFunction *x, Mesh *mesh, int dim, Options *opts)
+{
+    // Define the following three arrays to determine (1) which border surfaces
+    // to include in the Laplace equation, (2) which of said boundaries should be
+    // set to a nonzero value (1.0) and (3) which of said border surfaces
+    // should be set to zero.
+    int nattr = mesh->bdr_attributes.Max();
+    Array<int> essential_boundaries(nattr);
+    Array<int> nonzero_essential_boundaries(nattr);
+    Array<int> zero_essential_boundaries(nattr);
+
+    // Find the apex by solving a laplacian with base solution = 0. The apex
+    // will be at he maximum of the solution.
+    essential_boundaries = 0;
+    essential_boundaries[BASE-1] = 1;
+    nonzero_essential_boundaries = 0;
+    zero_essential_boundaries = 0;
+    laplace(x, mesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, dim, opts);
+
+}
+
 int main(int argc, char *argv[])
 {
 
@@ -293,6 +314,16 @@ int main(int argc, char *argv[])
 
     // TODO: Laplace GAMMA_AB (apex -> base)
     // TODO: Solve the Laplace equation from BASE (1.0) to APEX (0.0)
+    GridFunction x_apex_to_base;
+    apex_to_base(&x_apex_to_base, &mesh, dim, &opts);
+
+    {
+        string x_apex_to_base_out(opts.out);
+        x_apex_to_base_out += "_apex_to_base.gf";
+        ofstream x_apex_to_base_ofs(x_apex_to_base_out.c_str());
+        x_apex_to_base_ofs.precision(8);
+        x_apex_to_base.Save(x_apex_to_base_ofs);
+    }
 
     // Save the mesh
     {
