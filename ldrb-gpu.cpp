@@ -39,6 +39,7 @@ typedef enum {
 void laplace(
         GridFunction *x,
         Mesh *mesh,
+        double rhs,
         Array<int> &essential_boundaries,
         Array<int> &nonzero_essential_boundaries,
         Array<int> &zero_essential_boundaries,
@@ -62,11 +63,11 @@ void laplace(
     fespace->GetEssentialTrueDofs(essential_boundaries, ess_tdof_list);
 
     // Set up the linear form b(.) which corresponds to the right-hand
-    // side of the FEM linear system, which in this case is (0,phi_i) where
+    // side of the FEM linear system, which in this case is (rhs,phi_i) where
     // phi_i are the basis functions in fespace.
     LinearForm b(fespace);
-    ConstantCoefficient zero(0.0);
-    b.AddDomainIntegrator(new DomainLFIntegrator(zero));
+    ConstantCoefficient rhs_coeff(rhs);
+    b.AddDomainIntegrator(new DomainLFIntegrator(rhs_coeff));
     b.Assemble();
 
     // Define the solution vector x as a finite element grid function
@@ -130,7 +131,10 @@ void laplace_phi_epi(GridFunction *x, Mesh *mesh, int dim, Options *opts)
     zero_essential_boundaries[LV_ENDO-1] = 1;
     zero_essential_boundaries[RV_ENDO-1] = 1;
 
-    laplace(x, mesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, dim, opts);
+    // Solving the Laplace equation Delta u = 0
+    double rhs = 0.0;
+
+    laplace(x, mesh, rhs, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, dim, opts);
 }
 
 void laplace_phi_lv(GridFunction *x, Mesh *mesh, int dim, Options *opts)
@@ -157,7 +161,10 @@ void laplace_phi_lv(GridFunction *x, Mesh *mesh, int dim, Options *opts)
     zero_essential_boundaries[EPI    -1] = 1;
     zero_essential_boundaries[RV_ENDO-1] = 1;
 
-    laplace(x, mesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, dim, opts);
+    // Solving the Laplace equation Delta u = 0
+    double rhs = 0.0;
+
+    laplace(x, mesh, rhs, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, dim, opts);
 }
 
 void laplace_phi_rv(GridFunction *x, Mesh *mesh, int dim, Options *opts)
@@ -184,7 +191,10 @@ void laplace_phi_rv(GridFunction *x, Mesh *mesh, int dim, Options *opts)
     zero_essential_boundaries[EPI    -1] = 1;
     zero_essential_boundaries[LV_ENDO-1] = 1;
 
-    laplace(x, mesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, dim, opts);
+    // Solving the Laplace equation Delta u = 0
+    double rhs = 0.0;
+
+    laplace(x, mesh, rhs, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, dim, opts);
 }
 
 void apex_to_base(GridFunction *x, Mesh *mesh, int dim, Options *opts)
@@ -198,13 +208,19 @@ void apex_to_base(GridFunction *x, Mesh *mesh, int dim, Options *opts)
     Array<int> nonzero_essential_boundaries(nattr);
     Array<int> zero_essential_boundaries(nattr);
 
-    // Find the apex by solving a laplacian with base solution = 0. The apex
-    // will be at he maximum of the solution.
+    // Find the apex by solving the Laplace equation Delta u = 1 with boundary
+    // condition 0 on the base. The apex will be at he maximum of the solution.
     essential_boundaries = 0;
     essential_boundaries[BASE-1] = 1;
+
     nonzero_essential_boundaries = 0;
+
     zero_essential_boundaries = 0;
-    laplace(x, mesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, dim, opts);
+    zero_essential_boundaries[BASE-1] = 1;
+
+    double rhs = 1.0;
+
+    laplace(x, mesh, rhs, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, dim, opts);
 
 }
 
