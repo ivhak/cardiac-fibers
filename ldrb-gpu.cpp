@@ -61,12 +61,12 @@ void laplace(
 
     fespace->GetEssentialTrueDofs(essential_boundaries, ess_tdof_list);
 
-    // Set up the parallel linear form b(.) which corresponds to the right-hand
-    // side of the FEM linear system, which in this case is (1,phi_i) where
+    // Set up the linear form b(.) which corresponds to the right-hand
+    // side of the FEM linear system, which in this case is (0,phi_i) where
     // phi_i are the basis functions in fespace.
     LinearForm b(fespace);
-    ConstantCoefficient one(1.0);
-    b.AddDomainIntegrator(new DomainLFIntegrator(one));
+    ConstantCoefficient zero(0.0);
+    b.AddDomainIntegrator(new DomainLFIntegrator(zero));
     b.Assemble();
 
     // Define the solution vector x as a finite element grid function
@@ -87,6 +87,7 @@ void laplace(
     // corresponding to the Laplacian operator -Delta, by adding the
     // Diffusion domain integrator.
     BilinearForm a(fespace);
+    ConstantCoefficient one(1.0);
     a.AddDomainIntegrator(new DiffusionIntegrator(one));
 
     // Assemble the parallel bilinear form and the corresponding linear system.
