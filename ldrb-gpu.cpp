@@ -228,7 +228,7 @@ int main(int argc, char *argv[])
 {
 
     Options opts;
-    // 1. Parse command-line options
+    // Parse command-line options
 
     // Set program defaults
     opts.mesh_file = NULL;
@@ -255,12 +255,12 @@ int main(int argc, char *argv[])
 
     args.PrintOptions(cout);
 
-    // 2. Enable hardware devices such as GPUs, and programming models such as
-    //    HIP, CUDA, OCCA, RAJA and OpenMP based on command line options.
+    // Enable hardware devices such as GPUs, and programming models such as
+    // HIP, CUDA, OCCA, RAJA and OpenMP based on command line options.
     Device device(opts.device_config);
     device.Print();
 
-    // 4. Load the mesh
+    // Load the mesh
     Mesh mesh(opts.mesh_file, 1, 1);
     int dim = mesh.Dimension();
 
@@ -289,7 +289,6 @@ int main(int argc, char *argv[])
     }
 #endif
 
-    // Laplace phi_EPI:
     // Solve the Laplace equation from EPI (1.0) to (LV_ENDO union RV_ENDO) (0.0)
     GridFunction x_phi_epi;
     laplace_phi_epi(&x_phi_epi, &mesh, dim, &opts);
@@ -302,7 +301,6 @@ int main(int argc, char *argv[])
         x_phi_epi.Save(x_phi_epi_ofs);
     }
 
-    // Laplace phi_LV;
     // Solve the Laplace equation from LV_ENDO (1.0) to (RV_ENDO union EPI) (0.0)
     GridFunction x_phi_lv;
     laplace_phi_lv(&x_phi_lv, &mesh, dim, &opts);
@@ -315,7 +313,6 @@ int main(int argc, char *argv[])
         x_phi_lv.Save(x_phi_lv_ofs);
     }
 
-    // Laplace phi_RV
     // Solve the Laplace equation from RV_ENDO (1.0) to (LV_ENDO union EPI) (0.0)
     GridFunction x_phi_rv;
     laplace_phi_rv(&x_phi_rv, &mesh, dim, &opts);
