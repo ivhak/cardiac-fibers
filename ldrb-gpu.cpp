@@ -18,6 +18,7 @@
 #include "mfem.hpp"
 #include <fstream>
 #include <limits>
+#include <iomanip>
 #include <time.h>
 
 using namespace std;
@@ -49,7 +50,8 @@ double timespec_duration(
 }
 
 void log_timing(ostream& out, const char *log_string, double seconds) {
-    out << "[" << log_string << "]:\t\t" << seconds << "s" << endl;
+    out << "[" << left << setw(12) << log_string << "]: "
+        << right << fixed << setw(12) << setprecision(6)<< seconds << " s" << endl;
 }
 
 void laplace(
