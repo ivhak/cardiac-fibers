@@ -67,8 +67,8 @@ void laplace(
     // side of the FEM linear system, which in this case is (1,phi_i) where
     // phi_i are the basis functions in fespace.
     ParLinearForm b(fespace);
-    ConstantCoefficient one(1.0);
-    b.AddDomainIntegrator(new DomainLFIntegrator(one));
+    ConstantCoefficient zero(0.0);
+    b.AddDomainIntegrator(new DomainLFIntegrator(zero));
     b.Assemble();
 
     // Define the solution vector x as a parallel finite element grid function
@@ -89,6 +89,7 @@ void laplace(
     // corresponding to the Laplacian operator -Delta, by adding the
     // Diffusion domain integrator.
     ParBilinearForm a(fespace);
+    ConstantCoefficient one(1.0);
     a.AddDomainIntegrator(new DiffusionIntegrator(one));
 
     // Assemble the parallel bilinear form and the corresponding linear system.
@@ -128,16 +129,15 @@ void laplace_phi_epi(ParGridFunction *x, ParMesh *pmesh, int dim, Options *opts,
     Array<int> zero_essential_boundaries(nattr);
 
     // Solve the Laplace equation from EPI (1.0) to (LV_ENDO union RV_ENDO) (0.0)
-    essential_boundaries[BASE   -1] = 0;
+    essential_boundaries = 0;
     essential_boundaries[EPI    -1] = 1;
     essential_boundaries[LV_ENDO-1] = 1;
     essential_boundaries[RV_ENDO-1] = 1;
 
-    nonzero_essential_boundaries[EPI    -1] = 1;
-    nonzero_essential_boundaries[LV_ENDO-1] = 0;
-    nonzero_essential_boundaries[RV_ENDO-1] = 0;
+    nonzero_essential_boundaries = 0;
+    nonzero_essential_boundaries[EPI -1] = 1;
 
-    zero_essential_boundaries[EPI    -1] = 0;
+    zero_essential_boundaries = 0;
     zero_essential_boundaries[LV_ENDO-1] = 1;
     zero_essential_boundaries[RV_ENDO-1] = 1;
 
@@ -156,17 +156,16 @@ void laplace_phi_lv(ParGridFunction *x, ParMesh *pmesh, int dim, Options *opts, 
     Array<int> zero_essential_boundaries(nattr);
 
     // Solve the Laplace equation from LV_ENDO (1.0) to (RV_ENDO union EPI) (0.0)
-    essential_boundaries[BASE   -1] = 0;
+    essential_boundaries = 0;
     essential_boundaries[EPI    -1] = 1;
     essential_boundaries[LV_ENDO-1] = 1;
     essential_boundaries[RV_ENDO-1] = 1;
 
-    nonzero_essential_boundaries[EPI    -1] = 0;
+    nonzero_essential_boundaries = 0;
     nonzero_essential_boundaries[LV_ENDO-1] = 1;
-    nonzero_essential_boundaries[RV_ENDO-1] = 0;
 
+    zero_essential_boundaries = 0;
     zero_essential_boundaries[EPI    -1] = 1;
-    zero_essential_boundaries[LV_ENDO-1] = 0;
     zero_essential_boundaries[RV_ENDO-1] = 1;
 
     laplace(x, pmesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, dim, opts, rank);
@@ -184,19 +183,38 @@ void laplace_phi_rv(ParGridFunction *x, ParMesh *pmesh, int dim, Options *opts, 
     Array<int> zero_essential_boundaries(nattr);
 
     // Solve the Laplace equation from RV_ENDO (1.0) to (LV_ENDO union EPI) (0.0)
-    essential_boundaries[BASE   -1] = 0;
+    essential_boundaries = 0;
     essential_boundaries[EPI    -1] = 1;
     essential_boundaries[LV_ENDO-1] = 1;
     essential_boundaries[RV_ENDO-1] = 1;
 
-    nonzero_essential_boundaries[EPI    -1] = 0;
-    nonzero_essential_boundaries[LV_ENDO-1] = 0;
+    nonzero_essential_boundaries = 0;
     nonzero_essential_boundaries[RV_ENDO-1] = 1;
 
+    zero_essential_boundaries = 0;
     zero_essential_boundaries[EPI    -1] = 1;
     zero_essential_boundaries[LV_ENDO-1] = 1;
-    zero_essential_boundaries[RV_ENDO-1] = 0;
 
+    laplace(x, pmesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, dim, opts, rank);
+}
+
+void apex_to_base(ParGridFunction *x, ParMesh *pmesh, int dim, Options *opts, int rank)
+{
+    // Define the following three arrays to determine (1) which border surfaces
+    // to include in the Laplace equation, (2) which of said boundaries should be
+    // set to a nonzero value (1.0) and (3) which of said border surfaces
+    // should be set to zero.
+    int nattr = pmesh->bdr_attributes.Max();
+    Array<int> essential_boundaries(nattr);
+    Array<int> nonzero_essential_boundaries(nattr);
+    Array<int> zero_essential_boundaries(nattr);
+
+    // Find the apex by solving a laplacian with base solution = 0. The apex
+    // will be at he maximum of the solution.
+    essential_boundaries = 0;
+    essential_boundaries[BASE-1] = 1;
+    nonzero_essential_boundaries = 0;
+    zero_essential_boundaries = 0;
     laplace(x, pmesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, dim, opts, rank);
 }
 
@@ -319,6 +337,16 @@ int main(int argc, char *argv[])
 
     // TODO: Laplace GAMMA_AB (apex -> base)
     // TODO: Solve the Laplace equation from BASE (1.0) to APEX (0.0)
+    ParGridFunction x_apex_to_base;
+    apex_to_base(&x_apex_to_base, &pmesh, dim, &opts, rank);
+
+    {
+        string x_apex_to_base_out(opts.out);
+        x_apex_to_base_out += "_apex_to_base.gf";
+        ofstream x_apex_to_base_ofs(x_apex_to_base_out.c_str());
+        x_apex_to_base_ofs.precision(8);
+        x_apex_to_base.Save(x_apex_to_base_ofs);
+    }
 
     // Save the mesh
     {
