@@ -18,6 +18,7 @@
 #include "mfem.hpp"
 #include <fstream>
 #include <limits>
+#include <time.h>
 
 using namespace std;
 using namespace mfem;
@@ -28,8 +29,7 @@ typedef struct {
     const char *mesh_file;
     const char *out;
     const char *device_config;
-    int order;
-    double apex[3];
+    Vector apex;
 } Options;
 
 typedef enum {
@@ -39,6 +39,18 @@ typedef enum {
     RV_ENDO = 4,
     APEX = 5
 } MeshAttributes;
+
+double timespec_duration(
+    struct timespec t0,
+    struct timespec t1)
+{
+    return (t1.tv_sec - t0.tv_sec) +
+        (t1.tv_nsec - t0.tv_nsec) * 1e-9;
+}
+
+void log_timing(ostream& out, const char *log_string, double seconds) {
+    out << "[" << log_string << "]:\t\t" << seconds << "s" << endl;
+}
 
 void laplace(
         GridFunction *x,
@@ -52,10 +64,10 @@ void laplace(
     // Define a finite element space on the mesh.
     FiniteElementCollection *fec;
 
-    fec = new H1_FECollection(opts->order, dim);
+    fec = new H1_FECollection(1, dim);
     FiniteElementSpace * fespace = new FiniteElementSpace(mesh, fec);
-    cout << "Number of finite element unknowns: "
-         << fespace->GetTrueVSize() << endl;
+    if (opts->verbose > 1)
+        cout << "Number of finite element unknowns: " << fespace->GetTrueVSize() << endl;
 
     // Determine the list of true (i.e. parallel conforming) essential boundary
     // dofs, defined by the boundary attributes marked as essential (Dirichlet)
@@ -104,7 +116,7 @@ void laplace(
     // Solve the linear system A X = B.
     // Use a simple symmetric Gauss-Seidel preconditioner with PCG.
     GSSmoother M((SparseMatrix&)(*A));
-    PCG(*A, M, B, X, 1, 200, 1e-12, 0.0);
+    PCG(*A, M, B, X, opts->verbose > 1 ? 1 : 0, 200, 1e-12, 0.0);
 
     // Recover the grid function corresponding to X.
     a.RecoverFEMSolution(X, b, *x);
@@ -112,9 +124,9 @@ void laplace(
 
 void laplace_phi_epi(GridFunction *x, Mesh *mesh, int dim, Options *opts)
 {
-    // Define the following three arrays to determine (1) which border surfaces
+    // Define the following three arrays to determine (1) which boundary surfaces
     // to include in the Laplace equation, (2) which of said boundaries should be
-    // set to a nonzero value (1.0) and (3) which of said border surfaces
+    // set to a nonzero value (1.0) and (3) which of said boundary surfaces
     // should be set to zero.
     int nattr = mesh->bdr_attributes.Max();
     Array<int> essential_boundaries(nattr);
@@ -141,9 +153,9 @@ void laplace_phi_epi(GridFunction *x, Mesh *mesh, int dim, Options *opts)
 
 void laplace_phi_lv(GridFunction *x, Mesh *mesh, int dim, Options *opts)
 {
-    // Define the following three arrays to determine (1) which border surfaces
+    // Define the following three arrays to determine (1) which boundary surfaces
     // to include in the Laplace equation, (2) which of said boundaries should be
-    // set to a nonzero value (1.0) and (3) which of said border surfaces
+    // set to a nonzero value (1.0) and (3) which of said boundary surfaces
     // should be set to zero.
     int nattr = mesh->bdr_attributes.Max();
     Array<int> essential_boundaries(nattr);
@@ -170,9 +182,9 @@ void laplace_phi_lv(GridFunction *x, Mesh *mesh, int dim, Options *opts)
 
 void laplace_phi_rv(GridFunction *x, Mesh *mesh, int dim, Options *opts)
 {
-    // Define the following three arrays to determine (1) which border surfaces
+    // Define the following three arrays to determine (1) which boundary surfaces
     // to include in the Laplace equation, (2) which of said boundaries should be
-    // set to a nonzero value (1.0) and (3) which of said border surfaces
+    // set to a nonzero value (1.0) and (3) which of said boundary surfaces
     // should be set to zero.
     int nattr = mesh->bdr_attributes.Max();
     Array<int> essential_boundaries(nattr);
@@ -197,11 +209,11 @@ void laplace_phi_rv(GridFunction *x, Mesh *mesh, int dim, Options *opts)
     laplace(x, mesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, dim, opts);
 }
 
-void apex_to_base(GridFunction *x, Mesh *mesh, int dim, Options *opts)
+void laplace_psi_ab(GridFunction *x, Mesh *mesh, int dim, Options *opts)
 {
-    // Define the following three arrays to determine (1) which border surfaces
+    // Define the following three arrays to determine (1) which boundary surfaces
     // to include in the Laplace equation, (2) which of said boundaries should be
-    // set to a nonzero value (1.0) and (3) which of said border surfaces
+    // set to a nonzero value (1.0) and (3) which of said boundary surfaces
     // should be set to zero.
     int nattr = mesh->bdr_attributes.Max();
     Array<int> essential_boundaries(nattr);
@@ -234,30 +246,15 @@ int main(int argc, char *argv[])
     opts.mesh_file = NULL;
     opts.out = "./out";
     opts.device_config = "hip";
-    opts.order = 1;
     opts.verbose = 0;
-    opts.apex[0] = 0.0;
-    opts.apex[1] = 0.0;
-    opts.apex[2] = 0.0;
+    opts.apex = Vector(3);
 
     OptionsParser args(argc, argv);
-    args.AddOption(&opts.verbose, "-v", "--verbose",
-            "Be verbose");
-    args.AddOption(&opts.mesh_file, "-m", "--mesh",
-            "Mesh file to use (required)");
-    args.AddOption(&opts.out, "-o", "--out",
-            "Basename of the ouput files. Outputs will be of the form <basename>_*.gf");
-    args.AddOption(&opts.device_config, "-d", "--device",
-            "Device configuration string, see Device::Configure().");
-    args.AddOption(&opts.order, "-o", "--order",
-            "Finite element order (polynomial degree) or -1 for "
-            "isoparametric space.");
-    args.AddOption(&opts.apex[0], "-x", "--apex-x",
-            "x-coordinate of apex");
-    args.AddOption(&opts.apex[1], "-y", "--apex-y",
-            "y-coordinate of apex");
-    args.AddOption(&opts.apex[2], "-z", "--apex-z",
-            "z-coordinate of apex");
+    args.AddOption(&opts.verbose,       "-v", "--verbose", "Be verbose");
+    args.AddOption(&opts.mesh_file,     "-m", "--mesh",    "Mesh file to use", true);
+    args.AddOption(&opts.out,           "-o", "--out",     "Basename of the ouput files. Outputs will be of the form <basename>_*.gf");
+    args.AddOption(&opts.device_config, "-d", "--device",  "Device configuration string, see Device::Configure().");
+    args.AddOption(&opts.apex,          "-a", "--apex",    "Coordinate of apex, space separated list: 'x y z'.", true);
     args.Parse();
 
     if (!args.Good() || opts.mesh_file == NULL) {
@@ -265,66 +262,65 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    args.PrintOptions(cout);
+    if (opts.verbose > 1)
+        args.PrintOptions(cout);
+
+    struct timespec t0, t1;
 
     // Enable hardware devices such as GPUs, and programming models such as
     // HIP, CUDA, OCCA, RAJA and OpenMP based on command line options.
     Device device(opts.device_config);
-    device.Print();
+    if (opts.verbose > 1)
+        device.Print();
 
     // Load the mesh
+
+    clock_gettime(CLOCK_MONOTONIC, &t0);
     Mesh mesh(opts.mesh_file, 1, 1);
+    clock_gettime(CLOCK_MONOTONIC, &t1);
     int dim = mesh.Dimension();
 
-#ifdef DEBUG
-    {
-        // Check that the boundary elements have to proper attributes.
-        //                   Base Epi  Lv   Rv
-        int attributes[4] = {0,   0,   0,   0};
+    if (opts.verbose > 1) {
+        cout << "Loaded meshfile '" << opts.mesh_file << "' "
+             << "consisting of " << mesh.GetNV() << " vertices "
+             << "and " << mesh.GetNE() << " elements" << endl;
 
-        int num_boundary_elements = mesh.GetNBE();
-        for (int i = 0; i < num_boundary_elements; i++) {
-            Element *ele = mesh.GetBdrElement(i);
-            int attr = ele->GetAttribute();
-            MFEM_ASSERT(attr >= BASE && attr <=RV_ENDO,
-                    "The element attributes should be 1 (base), 2 (epicardium), "
-                    "3 (left ventricle endocardium) or 4 (right ventricle endocardium)");
-            attributes[attr-1]++;
-        }
-
-        cout << "Number of boundary elements: " << num_boundary_elements << endl
-             << "Number of boundary elements at each surface:" << endl
-             << "\tBase: " << attributes[0] << " elements" << endl
-             << "\tEpi:  " << attributes[1] << " elements" << endl
-             << "\tLv: "   << attributes[2] << " elements" << endl
-             << "\tRv: "   << attributes[3] << " elements" << endl;
     }
-#endif
+
+    if (opts.verbose)
+        log_timing(cout, "Mesh load", timespec_duration(t0, t1));
 
     // Set the APEX boundary based on the prescribed apex coordinate.
     {
         // Find the vertex closest to the prescribed apex, Euclidean distance.
+
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+
         int apex_vertex_index = 0;
         double distance = numeric_limits<double>::max();
         for (int i = 0; i < mesh.GetNV(); i++) {
             double *vertices = mesh.GetVertex(i);
             double this_distance = (vertices[0]-opts.apex[0]) * (vertices[0]-opts.apex[0])
-                                 + (vertices[1]-opts.apex[1]) * (vertices[1]-opts.apex[1])
-                                 + (vertices[2]-opts.apex[2]) * (vertices[2]-opts.apex[2]);
-
+                + (vertices[1]-opts.apex[1]) * (vertices[1]-opts.apex[1])
+                + (vertices[2]-opts.apex[2]) * (vertices[2]-opts.apex[2]);
             if (this_distance < distance) {
                 apex_vertex_index = i;
                 distance = this_distance;
             }
         }
+        clock_gettime(CLOCK_MONOTONIC, &t1);
 
-        if (opts.verbose) {
+        if (opts.verbose > 1) {
             double *closest_vertex = mesh.GetVertex(apex_vertex_index);
             cout << "Found closest vertex to prescribed apex "
                  << "(" << opts.apex[0] << ", " << opts.apex[1] << ", " << opts.apex[2] << ")"
                  << " at "
                  << "(" << closest_vertex[0] << ", " << closest_vertex[1] << ", " << closest_vertex[2] << ")" << endl;
+
         }
+        if (opts.verbose)
+            log_timing(cout, "Find apex", timespec_duration(t0, t1));
+
 
         // Set the apex boundary to be the boundary elements that has the apex vertex as one of its vertices
         for (int i = 0; i < mesh.GetNBE(); i++) {
@@ -340,8 +336,49 @@ int main(int argc, char *argv[])
     }
 
     // Solve the Laplace equation from EPI (1.0) to (LV_ENDO union RV_ENDO) (0.0)
+    clock_gettime(CLOCK_MONOTONIC, &t0);
     GridFunction x_phi_epi;
     laplace_phi_epi(&x_phi_epi, &mesh, dim, &opts);
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    if (opts.verbose)
+        log_timing(cout, "phi_epi", timespec_duration(t0, t1));
+
+
+    // Solve the Laplace equation from LV_ENDO (1.0) to (RV_ENDO union EPI) (0.0)
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    GridFunction x_phi_lv;
+    laplace_phi_lv(&x_phi_lv, &mesh, dim, &opts);
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    if (opts.verbose)
+        log_timing(cout, "phi_lv", timespec_duration(t0, t1));
+
+
+    // Solve the Laplace equation from RV_ENDO (1.0) to (LV_ENDO union EPI) (0.0)
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    GridFunction x_phi_rv;
+    laplace_phi_rv(&x_phi_rv, &mesh, dim, &opts);
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    if (opts.verbose)
+        log_timing(cout, "phi_rv", timespec_duration(t0, t1));
+
+
+    // Solve the Laplace equation from BASE (1.0) to APEX (0.0)
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    GridFunction x_psi_ab;
+    laplace_psi_ab(&x_psi_ab, &mesh, dim, &opts);
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    if (opts.verbose)
+        log_timing(cout, "psi_ab", timespec_duration(t0, t1));
+
+    // Save the mesh and solutions
+    {
+        string mesh_out(opts.out);
+        mesh_out += ".mesh";
+        ofstream mesh_ofs(mesh_out.c_str());
+        mesh_ofs.precision(8);
+        mesh.Print(mesh_ofs);
+
+    }
 
     {
         string x_phi_epi_out(opts.out);
@@ -351,10 +388,6 @@ int main(int argc, char *argv[])
         x_phi_epi.Save(x_phi_epi_ofs);
     }
 
-    // Solve the Laplace equation from LV_ENDO (1.0) to (RV_ENDO union EPI) (0.0)
-    GridFunction x_phi_lv;
-    laplace_phi_lv(&x_phi_lv, &mesh, dim, &opts);
-
     {
         string x_phi_lv_out(opts.out);
         x_phi_lv_out += "_phi_lv.gf";
@@ -362,10 +395,6 @@ int main(int argc, char *argv[])
         x_phi_lv_ofs.precision(8);
         x_phi_lv.Save(x_phi_lv_ofs);
     }
-
-    // Solve the Laplace equation from RV_ENDO (1.0) to (LV_ENDO union EPI) (0.0)
-    GridFunction x_phi_rv;
-    laplace_phi_rv(&x_phi_rv, &mesh, dim, &opts);
 
     {
         string x_phi_rv_out(opts.out);
@@ -375,26 +404,12 @@ int main(int argc, char *argv[])
         x_phi_rv.Save(x_phi_rv_ofs);
     }
 
-    // Solve the Laplace equation from BASE (1.0) to APEX (0.0)
-    GridFunction x_psi_ab;
-    apex_to_base(&x_psi_ab, &mesh, dim, &opts);
-
     {
         string x_psi_ab_out(opts.out);
         x_psi_ab_out += "_psi_ab.gf";
         ofstream x_psi_ab_ofs(x_psi_ab_out.c_str());
         x_psi_ab_ofs.precision(8);
         x_psi_ab.Save(x_psi_ab_ofs);
-    }
-
-    // Save the mesh
-    {
-        string mesh_out(opts.out);
-        mesh_out += ".mesh";
-        ofstream mesh_ofs(mesh_out.c_str());
-        mesh_ofs.precision(8);
-        mesh.Print(mesh_ofs);
-
     }
 }
 
