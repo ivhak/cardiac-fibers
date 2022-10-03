@@ -67,19 +67,18 @@ void save_solution(
 }
 
 void laplace(
-        GridFunction *x,
-        Mesh *mesh,
-        Array<int> &essential_boundaries,
-        Array<int> &nonzero_essential_boundaries,
-        Array<int> &zero_essential_boundaries,
-        int apex,
-        int dim,
-        Options *opts)
+    GridFunction *x,
+    Mesh *mesh,
+    Array<int> &essential_boundaries,
+    Array<int> &nonzero_essential_boundaries,
+    Array<int> &zero_essential_boundaries,
+    int apex,
+    Options *opts)
 {
     // Define a finite element space on the mesh.
     FiniteElementCollection *fec;
 
-    fec = new H1_FECollection(1, dim);
+    fec = new H1_FECollection(1, mesh->Dimension());
     FiniteElementSpace * fespace = new FiniteElementSpace(mesh, fec);
     if (opts->verbose > 1)
         cout << "Number of finite element unknowns: " << fespace->GetTrueVSize() << endl;
@@ -159,7 +158,10 @@ void laplace(
     a.RecoverFEMSolution(X, b, *x);
 }
 
-void laplace_phi_epi(GridFunction *x, Mesh *mesh, int dim, Options *opts)
+void laplace_phi_epi(
+    GridFunction *x,
+    Mesh *mesh,
+    Options *opts)
 {
     // Define the following three arrays to determine (1) which boundary surfaces
     // to include in the Laplace equation, (2) which of said boundaries should be
@@ -183,10 +185,13 @@ void laplace_phi_epi(GridFunction *x, Mesh *mesh, int dim, Options *opts)
     zero_essential_boundaries[LV_ENDO-1] = 1;
     zero_essential_boundaries[RV_ENDO-1] = 1;
 
-    laplace(x, mesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, -1, dim, opts);
+    laplace(x, mesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, -1, opts);
 }
 
-void laplace_phi_lv(GridFunction *x, Mesh *mesh, int dim, Options *opts)
+void laplace_phi_lv(
+    GridFunction *x,
+    Mesh *mesh,
+    Options *opts)
 {
     // Define the following three arrays to determine (1) which boundary surfaces
     // to include in the Laplace equation, (2) which of said boundaries should be
@@ -210,10 +215,13 @@ void laplace_phi_lv(GridFunction *x, Mesh *mesh, int dim, Options *opts)
     zero_essential_boundaries[EPI    -1] = 1;
     zero_essential_boundaries[RV_ENDO-1] = 1;
 
-    laplace(x, mesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, -1, dim, opts);
+    laplace(x, mesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, -1, opts);
 }
 
-void laplace_phi_rv(GridFunction *x, Mesh *mesh, int dim, Options *opts)
+void laplace_phi_rv(
+    GridFunction *x,
+    Mesh *mesh,
+    Options *opts)
 {
     // Define the following three arrays to determine (1) which boundary surfaces
     // to include in the Laplace equation, (2) which of said boundaries should be
@@ -237,10 +245,14 @@ void laplace_phi_rv(GridFunction *x, Mesh *mesh, int dim, Options *opts)
     zero_essential_boundaries[EPI    -1] = 1;
     zero_essential_boundaries[LV_ENDO-1] = 1;
 
-    laplace(x, mesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, -1, dim, opts);
+    laplace(x, mesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, -1, opts);
 }
 
-void laplace_psi_ab(GridFunction *x, Mesh *mesh, int apex, int dim, Options *opts)
+void laplace_psi_ab(
+    GridFunction *x,
+    Mesh *mesh,
+    int apex,
+    Options *opts)
 {
     // Define the following three arrays to determine (1) which boundary surfaces
     // to include in the Laplace equation, (2) which of said boundaries should be
@@ -262,7 +274,7 @@ void laplace_psi_ab(GridFunction *x, Mesh *mesh, int apex, int dim, Options *opt
     zero_essential_boundaries = 0;
     zero_essential_boundaries[BASE-1] = 1;
 
-    laplace(x, mesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, apex, dim, opts);
+    laplace(x, mesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, apex, opts);
 
 }
 
@@ -308,7 +320,6 @@ int main(int argc, char *argv[])
     clock_gettime(CLOCK_MONOTONIC, &t0);
     Mesh mesh(opts.mesh_file, 1, 1);
     clock_gettime(CLOCK_MONOTONIC, &t1);
-    int dim = mesh.Dimension();
 
     if (opts.verbose > 1) {
         cout << "Loaded meshfile '" << opts.mesh_file << "' "
@@ -355,7 +366,7 @@ int main(int argc, char *argv[])
     // Solve the Laplace equation from EPI (1.0) to (LV_ENDO union RV_ENDO) (0.0)
     clock_gettime(CLOCK_MONOTONIC, &t0);
     GridFunction x_phi_epi;
-    laplace_phi_epi(&x_phi_epi, &mesh, dim, &opts);
+    laplace_phi_epi(&x_phi_epi, &mesh, &opts);
     clock_gettime(CLOCK_MONOTONIC, &t1);
     if (opts.verbose)
         log_timing(cout, "phi_epi", timespec_duration(t0, t1));
@@ -364,7 +375,7 @@ int main(int argc, char *argv[])
     // Solve the Laplace equation from LV_ENDO (1.0) to (RV_ENDO union EPI) (0.0)
     clock_gettime(CLOCK_MONOTONIC, &t0);
     GridFunction x_phi_lv;
-    laplace_phi_lv(&x_phi_lv, &mesh, dim, &opts);
+    laplace_phi_lv(&x_phi_lv, &mesh, &opts);
     clock_gettime(CLOCK_MONOTONIC, &t1);
     if (opts.verbose)
         log_timing(cout, "phi_lv", timespec_duration(t0, t1));
@@ -373,7 +384,7 @@ int main(int argc, char *argv[])
     // Solve the Laplace equation from RV_ENDO (1.0) to (LV_ENDO union EPI) (0.0)
     clock_gettime(CLOCK_MONOTONIC, &t0);
     GridFunction x_phi_rv;
-    laplace_phi_rv(&x_phi_rv, &mesh, dim, &opts);
+    laplace_phi_rv(&x_phi_rv, &mesh, &opts);
     clock_gettime(CLOCK_MONOTONIC, &t1);
     if (opts.verbose)
         log_timing(cout, "phi_rv", timespec_duration(t0, t1));
@@ -382,7 +393,7 @@ int main(int argc, char *argv[])
     // Solve the Laplace equation from BASE (1.0) to APEX (0.0)
     clock_gettime(CLOCK_MONOTONIC, &t0);
     GridFunction x_psi_ab;
-    laplace_psi_ab(&x_psi_ab, &mesh, apex, dim, &opts);
+    laplace_psi_ab(&x_psi_ab, &mesh, apex, &opts);
     clock_gettime(CLOCK_MONOTONIC, &t1);
     if (opts.verbose)
         log_timing(cout, "psi_ab", timespec_duration(t0, t1));
