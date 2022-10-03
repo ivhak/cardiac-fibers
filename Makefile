@@ -66,13 +66,20 @@ SERIAL_LFLAGS = $(HIP_LFLAGS) $(MFEM_LFLAGS)
 all: ldrb-gpup ldrb-gpu
 
 ldrb-gpup: MFEM_ROOT=$(MFEM_PARALLEL_ROOT)
-ldrb-gpup: ldrb-gpup.cpp
-	$(CC) $(CFLAGS) $(PARALLEL_IFLAGS) -o $@ $^ $(PARALLEL_LFLAGS)
+ldrb-gpu: IFLAGS=$(PARALLEL_IFLAGS)
+ldrb-gpu: LFLAGS=$(PARALLEL_LFLAGS)
+ldrb-gpup: ldrb-gpup.cpp calculus.cpp
+	$(CC) $(CFLAGS) $(IFLAGS) -o $@ $^ $(LFLAGS)
 
 ldrb-gpu: MFEM_ROOT=$(MFEM_SERIAL_ROOT)
-ldrb-gpu: ldrb-gpu.cpp
-	$(CC) $(CFLAGS) $(SERIAL_IFLAGS) -o $@ $^ $(SERIAL_LFLAGS)
+ldrb-gpu: IFLAGS=$(SERIAL_IFLAGS)
+ldrb-gpu: LFLAGS=$(SERIAL_LFLAGS)
+ldrb-gpu: ldrb-gpu.o calculus.o
+	$(CC) $(CFLAGS) $(IFLAGS) -o $@ $^ $(LFLAGS)
+
+%.o: %.cpp
+	$(CC) -c $(CFLAGS) $(IFLAGS) -o $@ $^
 
 .PHONY: clean
 clean:
-	$(RM) ldrb-gpu ldrb-gpup
+	$(RM) ldrb-gpu ldrb-gpup calculus.o ldrb-gpu.o

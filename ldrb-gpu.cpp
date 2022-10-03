@@ -15,11 +15,13 @@
 //
 // Authors: Iver Håkonsen <hakonseniver@yahoo.no
 
-#include "mfem.hpp"
 #include <fstream>
 #include <limits>
 #include <iomanip>
 #include <time.h>
+
+#include "mfem.hpp"
+#include "calculus.hpp"
 
 using namespace std;
 using namespace mfem;
@@ -281,6 +283,9 @@ void laplace_psi_ab(
     laplace(x, mesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, apex, opts);
 
 }
+
+
+
 
 int main(int argc, char *argv[])
 {
