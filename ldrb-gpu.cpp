@@ -48,7 +48,11 @@ double timespec_duration(
         (t1.tv_nsec - t0.tv_nsec) * 1e-9;
 }
 
-void log_timing(ostream& out, const char *log_string, double seconds) {
+void log_timing(
+    ostream& out,
+    const char *log_string,
+    double seconds)
+{
     out << "[" << left << setw(12) << log_string << "]: "
         << right << fixed << setw(12) << setprecision(6)<< seconds << " s" << endl;
 }
@@ -352,11 +356,12 @@ int main(int argc, char *argv[])
 
         if (opts.verbose > 1) {
             double *closest_vertex = mesh.GetVertex(apex);
-            cout << "Found closest vertex to prescribed apex "
+            cout << setprecision(2)
+                 << "Found closest vertex to prescribed apex "
                  << "(" << opts.apex[0] << ", " << opts.apex[1] << ", " << opts.apex[2] << ")"
                  << " at "
                  << "(" << closest_vertex[0] << ", " << closest_vertex[1] << ", " << closest_vertex[2] << "), "
-                 << "apex index is " << apex << endl;
+                 << "apex index is " << apex << "." << endl;
 
         }
         if (opts.verbose)
