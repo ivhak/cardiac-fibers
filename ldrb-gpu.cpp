@@ -53,6 +53,19 @@ void log_timing(ostream& out, const char *log_string, double seconds) {
         << right << fixed << setw(12) << setprecision(6)<< seconds << " s" << endl;
 }
 
+// Save a solution (in form of a GridFunction) to a file named "<prefix><suffix>".
+void save_solution(
+    GridFunction *x,
+    const char *prefix,
+    const char *suffix)
+{
+    string filename(prefix);
+    filename += suffix;
+    ofstream x_ofs(filename.c_str());
+    x_ofs.precision(8);
+    x->Save(x_ofs);
+}
+
 void laplace(
         GridFunction *x,
         Mesh *mesh,
@@ -384,36 +397,12 @@ int main(int argc, char *argv[])
 
     }
 
+    // Save the solutions
     {
-        string x_phi_epi_out(opts.out);
-        x_phi_epi_out += "_phi_epi.gf";
-        ofstream x_phi_epi_ofs(x_phi_epi_out.c_str());
-        x_phi_epi_ofs.precision(8);
-        x_phi_epi.Save(x_phi_epi_ofs);
-    }
-
-    {
-        string x_phi_lv_out(opts.out);
-        x_phi_lv_out += "_phi_lv.gf";
-        ofstream x_phi_lv_ofs(x_phi_lv_out.c_str());
-        x_phi_lv_ofs.precision(8);
-        x_phi_lv.Save(x_phi_lv_ofs);
-    }
-
-    {
-        string x_phi_rv_out(opts.out);
-        x_phi_rv_out += "_phi_rv.gf";
-        ofstream x_phi_rv_ofs(x_phi_rv_out.c_str());
-        x_phi_rv_ofs.precision(8);
-        x_phi_rv.Save(x_phi_rv_ofs);
-    }
-
-    {
-        string x_psi_ab_out(opts.out);
-        x_psi_ab_out += "_psi_ab.gf";
-        ofstream x_psi_ab_ofs(x_psi_ab_out.c_str());
-        x_psi_ab_ofs.precision(8);
-        x_psi_ab.Save(x_psi_ab_ofs);
+        save_solution(&x_phi_epi, opts.out, "_phi_epi.gf");
+        save_solution(&x_phi_lv,  opts.out, "_phi_lv.gf");
+        save_solution(&x_phi_rv,  opts.out, "_phi_rv.gf");
+        save_solution(&x_psi_ab,  opts.out, "_psi_ab.gf");
     }
 }
 
