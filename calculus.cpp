@@ -174,6 +174,30 @@ static void quat2rot(DenseMatrix& Q, Vector& q)
 
 }
 
+// Spherical Linear intERPolation
+static void slerp(Vector& q, Vector& q1, Vector &q2, double t)
+{
+    double dot = q1 * q2;
+    q = q2;
+
+    if (dot < 0) {
+        dot = -dot;
+        q.Neg();
+    }
+
+    // Slerp(q1, q2, t) = ((sin(1-t)*theta)/sin(theta))q1 + ((sin(t)*theta)/sin(theta))q2
+    // where theta = acos(q1 dot q2)
+    double angle = acos(dot);
+    double a = sin(angle * (1-t))/sin(angle);
+    double b = sin(angle * t)/sin(angle);
+
+    Vector q1a = q1;
+    q1a *= a;
+    q *= b;
+    q += q1a;
+
+}
+
 // BIdirection SLERP
 void bislerp(DenseMatrix& Qab, DenseMatrix& Qa, DenseMatrix& Qb, double t)
 {
@@ -232,26 +256,3 @@ void bislerp(DenseMatrix& Qab, DenseMatrix& Qa, DenseMatrix& Qb, double t)
 
 }
 
-// Spherical Linear intERPolation
-static void slerp(Vector& q, Vector& q1, Vector &q2, double t)
-{
-    double dot = q1 * q2;
-    q = q2;
-
-    if (dot < 0) {
-        dot = -dot;
-        q.Neg();
-    }
-
-    // Slerp(q1, q2, t) = ((sin(1-t)*theta)/sin(theta))q1 + ((sin(t)*theta)/sin(theta))q2
-    // where theta = acos(q1 dot q2)
-    double angle = acos(dot);
-    double a = sin(angle * (1-t))/sin(angle);
-    double b = sin(angle * t)/sin(angle);
-
-    Vector q1a = q1;
-    q1a *= a;
-    q *= b;
-    q += q1a;
-
-}
