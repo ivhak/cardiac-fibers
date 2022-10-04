@@ -22,6 +22,7 @@
 
 #include "mfem.hpp"
 #include "calculus.hpp"
+#include "util.hpp"
 
 using namespace std;
 using namespace mfem;
@@ -30,8 +31,10 @@ using namespace mfem;
 typedef struct {
     int verbose;
     const char *mesh_file;
-    const char *out;
+    string mesh_basename;
+    const char *output_dir;
     const char *device_config;
+    bool paraview;
     Vector apex;
 } Options;
 
@@ -62,10 +65,13 @@ void log_timing(
 // Save a solution (in form of a GridFunction) to a file named "<prefix><suffix>".
 void save_solution(
     GridFunction *x,
-    const char *prefix,
-    const char *suffix)
+    string const& dir,
+    string const& base_name,
+    string const& suffix)
 {
-    string filename(prefix);
+    string filename(dir);
+    filename += "/";
+    filename += base_name;
     filename += suffix;
     ofstream x_ofs(filename.c_str());
     x_ofs.precision(8);
@@ -284,9 +290,6 @@ void laplace_psi_ab(
 
 }
 
-
-
-
 int main(int argc, char *argv[])
 {
 
@@ -295,26 +298,35 @@ int main(int argc, char *argv[])
 
     // Set program defaults
     opts.mesh_file = NULL;
-    opts.out = "./out";
+    opts.output_dir = "./out";
     opts.device_config = "hip";
     opts.verbose = 0;
     opts.apex = Vector(3);
+    opts.paraview = false;
 
     OptionsParser args(argc, argv);
     args.AddOption(&opts.verbose,       "-v", "--verbose", "Be verbose");
     args.AddOption(&opts.mesh_file,     "-m", "--mesh",    "Mesh file to use", true);
-    args.AddOption(&opts.out,           "-o", "--out",     "Basename of the ouput files. Outputs will be of the form <basename>_*.gf");
-    args.AddOption(&opts.device_config, "-d", "--device",  "Device configuration string, see Device::Configure().");
     args.AddOption(&opts.apex,          "-a", "--apex",    "Coordinate of apex, space separated list: 'x y z'.", true);
+    args.AddOption(&opts.output_dir,    "-o", "--out",     "Directory for output files.");
+    args.AddOption(&opts.device_config, "-d", "--device",  "Device configuration string, see Device::Configure().");
+    args.AddOption(&opts.paraview,      "-p", "--paraview", "-np", "--no-paraview", "Save data files for ParaView (paraview.org) visualization.");
+
     args.Parse();
 
-    if (!args.Good() || opts.mesh_file == NULL) {
+    if (!args.Good()) {
         args.PrintUsage(cout);
         exit(1);
     }
 
     if (opts.verbose > 1)
         args.PrintOptions(cout);
+
+    // Set the basename of the mesh
+    opts.mesh_basename = remove_extension(basename(std::string(opts.mesh_file)));
+
+    // Make sure the output direcory exists
+    mksubdir(opts.output_dir);
 
     struct timespec t0, t1;
 
@@ -410,20 +422,45 @@ int main(int argc, char *argv[])
 
     // Save the mesh and solutions
     {
-        string mesh_out(opts.out);
-        mesh_out += ".mesh";
+        // Output the normal solutions in the mfem subdirectory
+        string mfem_output_dir(opts.output_dir);
+        mfem_output_dir += "/mfem";
+        mksubdir(mfem_output_dir);
+
+        // Save the MFEM mesh
+        string mesh_out(mfem_output_dir);
+        mesh_out += "/" + opts.mesh_basename + ".mesh";
         ofstream mesh_ofs(mesh_out.c_str());
         mesh_ofs.precision(8);
         mesh.Print(mesh_ofs);
 
-    }
+        // Save the solutions
+        save_solution(&x_phi_epi, mfem_output_dir, opts.mesh_basename, "_phi_epi.gf");
+        save_solution(&x_phi_lv,  mfem_output_dir, opts.mesh_basename, "_phi_lv.gf");
+        save_solution(&x_phi_rv,  mfem_output_dir, opts.mesh_basename, "_phi_rv.gf");
+        save_solution(&x_psi_ab,  mfem_output_dir, opts.mesh_basename, "_psi_ab.gf");
 
-    // Save the solutions
-    {
-        save_solution(&x_phi_epi, opts.out, "_phi_epi.gf");
-        save_solution(&x_phi_lv,  opts.out, "_phi_lv.gf");
-        save_solution(&x_phi_rv,  opts.out, "_phi_rv.gf");
-        save_solution(&x_psi_ab,  opts.out, "_psi_ab.gf");
+        // Save in paraview as well
+        ParaViewDataCollection *pd = NULL;
+        if (opts.paraview) {
+            string paraview_path(opts.output_dir);
+            paraview_path += "/paraview";
+            mksubdir(paraview_path);
+
+            pd = new ParaViewDataCollection(opts.mesh_basename, &mesh);
+            pd->SetPrefixPath(paraview_path);
+            pd->RegisterField("phi epi", &x_phi_epi);
+            pd->RegisterField("phi lv",  &x_phi_lv);
+            pd->RegisterField("phi rv",  &x_phi_rv);
+            pd->RegisterField("psi ab",  &x_psi_ab);
+            pd->SetLevelsOfDetail(1);
+            pd->SetDataFormat(VTKFormat::BINARY);
+            pd->SetHighOrderOutput(true);
+            pd->SetCycle(0);
+            pd->SetTime(0.0);
+            pd->Save();
+        }
+
     }
 }
 

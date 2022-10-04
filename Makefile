@@ -68,13 +68,13 @@ all: ldrb-gpup ldrb-gpu
 ldrb-gpup: MFEM_ROOT=$(MFEM_PARALLEL_ROOT)
 ldrb-gpu: IFLAGS=$(PARALLEL_IFLAGS)
 ldrb-gpu: LFLAGS=$(PARALLEL_LFLAGS)
-ldrb-gpup: ldrb-gpup.cpp calculus.cpp
+ldrb-gpup: ldrb-gpup.o calculus.o util.o
 	$(CC) $(CFLAGS) $(IFLAGS) -o $@ $^ $(LFLAGS)
 
 ldrb-gpu: MFEM_ROOT=$(MFEM_SERIAL_ROOT)
 ldrb-gpu: IFLAGS=$(SERIAL_IFLAGS)
 ldrb-gpu: LFLAGS=$(SERIAL_LFLAGS)
-ldrb-gpu: ldrb-gpu.o calculus.o
+ldrb-gpu: ldrb-gpu.o calculus.o util.o
 	$(CC) $(CFLAGS) $(IFLAGS) -o $@ $^ $(LFLAGS)
 
 %.o: %.cpp
