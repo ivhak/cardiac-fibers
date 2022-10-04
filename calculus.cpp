@@ -20,38 +20,7 @@
 
 using namespace mfem;
 
-void orient(DenseMatrix& Q_out, DenseMatrix& Q, double a, double b)
-{
-    MFEM_ASSERT(Q_out.Size() == 3, "Q_out is the wrong size, should be 3x3.")
-    MFEM_ASSERT(Q.Size() == 3,     "Q_out is the wrong size, should be 3x3.")
-
-
-    const double sina = sin(a*PI/180);
-    const double sinb = sin(b*PI/180);
-    const double cosa = cos(a*PI/180);
-    const double cosb = cos(b*PI/180);
-
-    const double A_vals[3][3] = {
-        {cosa, -sina, 0},
-        {sina,  cosa, 0},
-        {0,     0,    1}
-    };
-
-    const double B_vals[3][3] = {
-        {1,  0,    0   },
-        {0,  cosb, sinb},
-        {0, -sinb, cosb}
-    };
-
-    DenseMatrix A(A_vals);
-    DenseMatrix B(B_vals);
-
-    DenseMatrix Temp(3, 3);
-
-    Mult(Q, A, Temp);
-    Mult(Temp, B, Q_out);
-}
-
+// Cross product of two 3D vectors b and c, store in a.
 static void cross(Vector& a, Vector &b, Vector &c) {
     // a = b x c
     MFEM_ASSERT(a.Size() == 3, "a is of the wrong size, should be 3.");
@@ -61,36 +30,6 @@ static void cross(Vector& a, Vector &b, Vector &c) {
     a(0) = b(1)*c(2) - a(2)*b(1);
     a(1) = b(2)*c(0) - a(0)*b(2);
     a(2) = b(0)*c(1) - a(1)*b(0);
-}
-
-void axis(DenseMatrix& Q, Vector& psi, Vector &phi)
-{
-    MFEM_ASSERT(Q.Size() == 3, "Q is of the wrong size, should be 3x3.");
-    Vector e_0(3), e_1(3), e_2(3);
-
-    // e_1 = psi / ||psi||, i.e., normalize psi
-    e_1 = psi;
-    e_1 /= psi.Norml2();
-
-    // e_2 = phi - (e_0*phi)e_0 / || phi - (e_0*phi)e_0 ||
-    //
-    // Normalize phi as an initial guess for e_0
-    e_2 = phi;
-    e_2 /= phi.Norml2();
-    Vector tmp(3);
-    double t = e_1 * e_2;
-    Vector e_2_t = e_2;
-    e_2_t *= t;
-    tmp = phi - e_2_t;
-    e_2 = tmp;
-    e_2 /= tmp.Norml2();
-
-    // e_0 = e_1 x e_2
-    cross(e_0, e_1, e_2);
-
-    Q.SetCol(0, e_0);
-    Q.SetCol(1, e_1);
-    Q.SetCol(2, e_2);
 }
 
 // Convert the 3x3 rotation matrix Q to a quaternion q, using the algorithm
@@ -148,7 +87,7 @@ static void rot2quat(Vector& q, DenseMatrix& Q)
     q(2) = y;
     q(3) = z;
 }
-//
+
 // Convert the quaternion q to a 3x3 rotation matrix Q, using the algorithm
 // described in Appendix 1 of
 //
@@ -215,7 +154,96 @@ static void slerp(Vector& q, Vector& q1, Vector &q2, double t)
 
 }
 
-// BIdirection SLERP
+// Given two vectors grad_psi and grad_phi, grad_psi being a vector pointing in
+// the apicobasal direction and grad_phi a vector pointing in the transmural
+// direction, return a 3x3 orthogonal matrix representing the coordinate system
+// for assigning fiber orientation within the myocardium.
+//
+// As defined in Function 2 in the supplementary material of Bayer2012.
+void axis(DenseMatrix& Q, Vector& grad_psi, Vector &grad_phi)
+{
+    MFEM_ASSERT(Q.Size() == 3, "Q is of the wrong size, should be 3x3.");
+    Vector e_0(3), e_1(3), e_2(3);
+
+    // e_1 = grad_psi / ||grad_psi||
+    e_1 = grad_psi;
+    e_1 /= grad_psi.Norml2();
+
+    // e_2 = u / || u ||
+    //
+    // where u = grad_phi - (e_0*grad_phi)e_0
+    //
+    // Normalize grad_phi as an initial guess for e_0
+    e_0 = grad_phi;
+    e_0 /= grad_phi.Norml2();
+
+    // Calculate u = grad_phi - t*e_0
+    // where t = (e_0 * grad_phi) is a scalar
+    Vector u;
+    {
+        Vector e_0_t;
+        double t = e_1 * e_2;
+        e_0_t = e_0;
+        e_0_t *= t;
+        u = grad_phi - e_0_t;
+    }
+
+    e_2 = u;
+    e_2 /= u.Norml2();
+
+    // e_0 = e_1 x e_2
+    cross(e_0, e_1, e_2);
+
+    Q.SetCol(0, e_0); // Circumferential direction
+    Q.SetCol(1, e_1); // Apicobasal direction
+    Q.SetCol(2, e_2); // Transmural direction
+}
+
+// Take the coordinate system Q, in the form of a 3x3 matrix, and the fiber
+// orientation angles a(lpha) and b(eta) at a given point in the mesh, and
+// return an orthonormal coordinate system (F S T), in the form of a 3x3
+// matrix, where F is the longitudinal direction, S is the sheet normal, and T
+// is the transverse direction.
+//
+// As defined in Function 3 in the supplementary material of Bayer2012.
+void orient(DenseMatrix& Q_out, DenseMatrix& Q, double a, double b)
+{
+    MFEM_ASSERT(Q_out.Size() == 3, "Q_out is the wrong size, should be 3x3.")
+    MFEM_ASSERT(Q.Size() == 3,     "Q_out is the wrong size, should be 3x3.")
+
+
+    const double sina = sin(a*PI/180);
+    const double sinb = sin(b*PI/180);
+    const double cosa = cos(a*PI/180);
+    const double cosb = cos(b*PI/180);
+
+    const double A_vals[3][3] = {
+        {cosa, -sina, 0},
+        {sina,  cosa, 0},
+        {0,     0,    1}
+    };
+
+    const double B_vals[3][3] = {
+        {1,  0,    0   },
+        {0,  cosb, sinb},
+        {0, -sinb, cosb}
+    };
+
+    DenseMatrix A(A_vals);
+    DenseMatrix B(B_vals);
+
+    DenseMatrix Temp(3, 3);
+
+    Mult(Q, A, Temp);
+    Mult(Temp, B, Q_out);
+}
+
+// BIdirectional SLERP
+// Linearly interpolate two orhtogonal matrices Qa and Qb to produce a new
+// orthogonal matrix Qab, which is determined by the interpolation factor t.
+// When t = 0, Qab = Qa, and when t = 1, Qab = Qb.
+//
+// As defined in Function 4 in the supplementary material of Bayer2012.
 void bislerp(DenseMatrix& Qab, DenseMatrix& Qa, DenseMatrix& Qb, double t)
 {
     double tol = 1e-12;
@@ -227,15 +255,15 @@ void bislerp(DenseMatrix& Qab, DenseMatrix& Qa, DenseMatrix& Qb, double t)
 
     // Find qm in { ±qa, ±i*qa, ±j*qa, ±k*qa} that maximizes ||qm*qb||
 
-    Vector quat_i(4); quat_i = 0.0; quat_i(1) = 1.0;
-    Vector quat_j(4); quat_j = 0.0; quat_j(2) = 1.0;
-    Vector quat_k(4); quat_k = 0.0; quat_k(3) = 1.0;
+    Vector i(4); i = 0.0; i(1) = 1.0;
+    Vector j(4); j = 0.0; j(2) = 1.0;
+    Vector k(4); k = 0.0; k(3) = 1.0;
 
-    Vector i_qa = quat_i; i_qa *= qa;
-    Vector j_qa = quat_j; j_qa *= qa;
-    Vector k_qa = quat_k; k_qa *= qa;
+    Vector i_qa = i; i_qa *= qa;
+    Vector j_qa = j; j_qa *= qa;
+    Vector k_qa = k; k_qa *= qa;
 
-    Vector qa_minus = qa; qa_minus *= -1.0;
+    Vector qa_minus   =   qa;   qa_minus *= -1.0;
     Vector i_qa_minus = i_qa; i_qa_minus *= -1.0;
     Vector j_qa_minus = j_qa; j_qa_minus *= -1.0;
     Vector k_qa_minus = k_qa; k_qa_minus *= -1.0;
@@ -261,7 +289,7 @@ void bislerp(DenseMatrix& Qab, DenseMatrix& Qa, DenseMatrix& Qb, double t)
         }
     }
 
-    // If the angle is very small, i.e. max_dot is very close to one, just use Qb.
+    // If the angle is very small, i.e. max_dot is very close to one, return Qb.
     if (max_dot > 1-tol) {
         Qab = Qb;
         return;
@@ -270,6 +298,4 @@ void bislerp(DenseMatrix& Qab, DenseMatrix& Qa, DenseMatrix& Qb, double t)
     Vector q;
     slerp(q, qm, qb, t);
     quat2rot(Qab, q);
-
 }
-
