@@ -35,7 +35,7 @@ typedef struct {
     const char *output_dir;
     const char *device_config;
     bool paraview;
-    Vector apex;
+    Vector prescribed_apex;
 } Options;
 
 typedef enum {
@@ -319,16 +319,16 @@ int main(int argc, char *argv[])
     opts.output_dir = "./out";
     opts.device_config = "hip";
     opts.verbose = 0;
-    opts.apex = Vector(3);
+    opts.prescribed_apex = Vector(3);
     opts.paraview = false;
 
     OptionsParser args(argc, argv);
-    args.AddOption(&opts.verbose,       "-v", "--verbose", "Be verbose");
-    args.AddOption(&opts.mesh_file,     "-m", "--mesh",    "Mesh file to use", true);
-    args.AddOption(&opts.apex,          "-a", "--apex",    "Coordinate of apex, space separated list: 'x y z'.", true);
-    args.AddOption(&opts.output_dir,    "-o", "--out",     "Directory for output files.");
-    args.AddOption(&opts.device_config, "-d", "--device",  "Device configuration string, see Device::Configure().");
-    args.AddOption(&opts.paraview,      "-p", "--paraview", "-np", "--no-paraview", "Save data files for ParaView (paraview.org) visualization.");
+    args.AddOption(&opts.verbose,         "-v", "--verbose", "Be verbose");
+    args.AddOption(&opts.mesh_file,       "-m", "--mesh",    "Mesh file to use", true);
+    args.AddOption(&opts.prescribed_apex, "-a", "--apex",    "Coordinate of apex, space separated list: 'x y z'.", true);
+    args.AddOption(&opts.output_dir,      "-o", "--out",     "Directory for output files.");
+    args.AddOption(&opts.device_config,   "-d", "--device",  "Device configuration string, see Device::Configure().");
+    args.AddOption(&opts.paraview,        "-p", "--paraview", "-np", "--no-paraview", "Save data files for ParaView (paraview.org) visualization.");
 
     args.Parse();
 
@@ -355,7 +355,6 @@ int main(int argc, char *argv[])
         device.Print();
 
     // Load the mesh
-
     clock_gettime(CLOCK_MONOTONIC, &t0);
     Mesh mesh(opts.mesh_file, 1, 1);
     clock_gettime(CLOCK_MONOTONIC, &t1);
@@ -374,17 +373,21 @@ int main(int argc, char *argv[])
     int apex = 0;
     {
         clock_gettime(CLOCK_MONOTONIC, &t0);
-        apex = find_apex_vertex(&mesh, opts.apex);
+        apex = find_apex_vertex(&mesh, opts.prescribed_apex);
         clock_gettime(CLOCK_MONOTONIC, &t1);
 
         if (opts.verbose > 1) {
             double *closest_vertex = mesh.GetVertex(apex);
             cout << setprecision(2)
                  << "Found closest vertex to prescribed apex "
-                 << "(" << opts.apex[0] << ", " << opts.apex[1] << ", " << opts.apex[2] << ")"
-                 << " at "
-                 << "(" << closest_vertex[0] << ", " << closest_vertex[1] << ", " << closest_vertex[2] << "), "
-                 << "apex index is " << apex << "." << endl;
+                 << "("  << opts.prescribed_apex[0]
+                 << ", " << opts.prescribed_apex[1]
+                 << ", " << opts.prescribed_apex[2]
+                 << ") at "
+                 << "("  << closest_vertex[0]
+                 << ", " << closest_vertex[1]
+                 << ", " << closest_vertex[2]
+                 << ")." << endl;
 
         }
         if (opts.verbose)
