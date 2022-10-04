@@ -290,6 +290,24 @@ void laplace_psi_ab(
 
 }
 
+// Find the vertex closest to the prescribed apex, Euclidean distance.
+int find_apex_vertex(Mesh *mesh, Vector& apex)
+{
+    int apex_vertex = 0;
+    double distance = numeric_limits<double>::max();
+    for (int i = 0; i < mesh->GetNV(); i++) {
+        double *vertices = mesh->GetVertex(i);
+        double this_distance = (vertices[0]-apex[0]) * (vertices[0]-apex[0])
+                             + (vertices[1]-apex[1]) * (vertices[1]-apex[1])
+                             + (vertices[2]-apex[2]) * (vertices[2]-apex[2]);
+        if (this_distance < distance) {
+            apex_vertex = i;
+            distance = this_distance;
+        }
+    }
+    return apex_vertex;
+}
+
 int main(int argc, char *argv[])
 {
 
@@ -355,20 +373,8 @@ int main(int argc, char *argv[])
     // Set the apex node based on the prescribed apex coordinate.
     int apex = 0;
     {
-        // Find the vertex closest to the prescribed apex, Euclidean distance.
         clock_gettime(CLOCK_MONOTONIC, &t0);
-
-        double distance = numeric_limits<double>::max();
-        for (int i = 0; i < mesh.GetNV(); i++) {
-            double *vertices = mesh.GetVertex(i);
-            double this_distance = (vertices[0]-opts.apex[0]) * (vertices[0]-opts.apex[0])
-                                 + (vertices[1]-opts.apex[1]) * (vertices[1]-opts.apex[1])
-                                 + (vertices[2]-opts.apex[2]) * (vertices[2]-opts.apex[2]);
-            if (this_distance < distance) {
-                apex = i;
-                distance = this_distance;
-            }
-        }
+        apex = find_apex_vertex(&mesh, opts.apex);
         clock_gettime(CLOCK_MONOTONIC, &t1);
 
         if (opts.verbose > 1) {
