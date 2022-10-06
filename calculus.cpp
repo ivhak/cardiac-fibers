@@ -22,11 +22,11 @@ using namespace mfem;
 
 // Cross product of two 3D vectors b and c, store in a.
 static void cross(Vector& a, Vector &b, Vector &c) {
-    // a = b x c
     MFEM_ASSERT(a.Size() == 3, "a is of the wrong size, should be 3.");
     MFEM_ASSERT(b.Size() == 3, "a is of the wrong size, should be 3.");
     MFEM_ASSERT(c.Size() == 3, "a is of the wrong size, should be 3.");
 
+    // a = b x c
     a(0) = b(1)*c(2) - a(2)*b(1);
     a(1) = b(2)*c(0) - a(0)*b(2);
     a(2) = b(0)*c(1) - a(1)*b(0);
@@ -143,9 +143,9 @@ static void slerp(Vector& q, Vector& q1, Vector &q2, double t)
 
     // Slerp(q1, q2, t) = ((sin(1-t)*theta)/sin(theta))q1 + ((sin(t)*theta)/sin(theta))q2
     // where theta = acos(q1 dot q2)
-    double angle = acos(dot);
-    double a = sin(angle * (1-t))/sin(angle);
-    double b = sin(angle * t)/sin(angle);
+    const double angle = acos(dot);
+    const double a = sin(angle * (1-t))/sin(angle);
+    const double b = sin(angle * t)/sin(angle);
 
     Vector q1a = q1;
     q1a *= a;
@@ -182,7 +182,7 @@ void axis(DenseMatrix& Q, Vector& grad_psi, Vector &grad_phi)
     Vector u;
     {
         Vector e_0_t;
-        double t = e_1 * e_2;
+        const double t = e_1 * e_2;
         e_0_t = e_0;
         e_0_t *= t;
         u = grad_phi - e_0_t;
@@ -246,7 +246,7 @@ void orient(DenseMatrix& Q_out, DenseMatrix& Q, double a, double b)
 // As defined in Function 4 in the supplementary material of Bayer2012.
 void bislerp(DenseMatrix& Qab, DenseMatrix& Qa, DenseMatrix& Qb, double t)
 {
-    double tol = 1e-12;
+    const double tol = 1e-12;
 
     // Translate the rotation matrices Qa and Qb into quaternions
     Vector qa, qb;
@@ -282,7 +282,7 @@ void bislerp(DenseMatrix& Qab, DenseMatrix& Qa, DenseMatrix& Qb, double t)
     Vector qm(4);
     for (int i = 0; i < 8; i++) {
         Vector v = *quat_array[i];
-        double dot = abs(qb * v);
+        const double dot = abs(qb * v);
         if (dot < max_dot) {
             max_dot = dot;
             qm = v;
