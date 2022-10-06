@@ -25,18 +25,17 @@
 using namespace std;
 using namespace mfem;
 
-// Save a solution (in form of a ParGridFunction) to a file named "<dir>/<prefix><suffix>".
+// Save a solution (in form of a ParGridFunction) to a file named "<dir>/<prefix><suffix><id>".
 void save_solution(
     ParGridFunction *x,
     string const& dir,
-    string const& base_name,
-    string const& suffix)
+    string const& basename,
+    string const& suffix,
+    int rank)
 {
-    string filename(dir);
-    filename += "/";
-    filename += base_name;
-    filename += suffix;
-    ofstream x_ofs(filename.c_str());
+    ostringstream filename;
+    filename << dir << "/" << basename << suffix << setfill('0') << setw(6) << rank;
+    ofstream x_ofs(filename.str().c_str());
     x_ofs.precision(8);
     x->Save(x_ofs);
 }
@@ -429,17 +428,19 @@ int main(int argc, char *argv[])
         mksubdir(mfem_output_dir);
 
         // Save the MFEM mesh
-        string mesh_out(mfem_output_dir);
-        mesh_out += "/" + opts.mesh_basename + ".mesh";
-        ofstream mesh_ofs(mesh_out.c_str());
+        ostringstream mesh_out;
+        mesh_out << mfem_output_dir << "/"
+                 << opts.mesh_basename << ".mesh."
+                 << setfill('0') << setw(6) << rank;
+        ofstream mesh_ofs(mesh_out.str().c_str());
         mesh_ofs.precision(8);
-        mesh.Print(mesh_ofs);
+        pmesh.Print(mesh_ofs);
 
         // Save the solutions
-        save_solution(&x_phi_epi, mfem_output_dir, opts.mesh_basename, "_phi_epi.gf");
-        save_solution(&x_phi_lv,  mfem_output_dir, opts.mesh_basename, "_phi_lv.gf");
-        save_solution(&x_phi_rv,  mfem_output_dir, opts.mesh_basename, "_phi_rv.gf");
-        save_solution(&x_psi_ab,  mfem_output_dir, opts.mesh_basename, "_psi_ab.gf");
+        save_solution(&x_phi_epi, mfem_output_dir, opts.mesh_basename, "_phi_epi.gf.", rank);
+        save_solution(&x_phi_lv,  mfem_output_dir, opts.mesh_basename, "_phi_lv.gf.",  rank);
+        save_solution(&x_phi_rv,  mfem_output_dir, opts.mesh_basename, "_phi_rv.gf.",  rank);
+        save_solution(&x_psi_ab,  mfem_output_dir, opts.mesh_basename, "_psi_ab.gf.",  rank);
 
     }
 }
