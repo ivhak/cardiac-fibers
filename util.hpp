@@ -17,7 +17,12 @@
 
 #ifndef UTIL_HPP
 #define UTIL_HPP
+#include <time.h>
+#include <fstream>
+#include <iomanip>
 
+double timespec_duration(struct timespec t0, struct timespec t1);
+void log_timing(std::ostream& out, const char *log_string, double seconds);
 std::string basename(std::string const& filename);
 std::string remove_extension(std::string const& filename);
 void mksubdir(std::string const& subdir);

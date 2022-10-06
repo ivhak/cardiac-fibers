@@ -15,44 +15,51 @@
 //
 // Authors: Iver Håkonsen <hakonseniver@yahoo.no
 
-#include "mfem.hpp"
 #include <fstream>
+
+#include "mfem.hpp"
+#include "calculus.hpp"
+#include "util.hpp"
+#include "ldrb-gpu.hpp"
 
 using namespace std;
 using namespace mfem;
 
+// Save a solution (in form of a ParGridFunction) to a file named "<dir>/<prefix><suffix>".
+void save_solution(
+    ParGridFunction *x,
+    string const& dir,
+    string const& base_name,
+    string const& suffix)
+{
+    string filename(dir);
+    filename += "/";
+    filename += base_name;
+    filename += suffix;
+    ofstream x_ofs(filename.c_str());
+    x_ofs.precision(8);
+    x->Save(x_ofs);
+}
 
-typedef struct {
-    const char *mesh_file;
-    const char *out;
-    const char *device_config;
-    int order;
-} Options;
-
-typedef enum {
-    BASE   = 1,
-    EPI    = 2,
-    LV_ENDO = 3,
-    RV_ENDO = 4
-} MeshAttributes;
 
 void laplace(
-        ParGridFunction *x,
-        ParMesh *pmesh,
-        Array<int> &essential_boundaries,
-        Array<int> &nonzero_essential_boundaries,
-        Array<int> &zero_essential_boundaries,
-        int dim,
-        Options *opts,
-        int rank)
+    ParGridFunction *x,
+    ParMesh *pmesh,
+    Array<int> &essential_boundaries,
+    Array<int> &nonzero_essential_boundaries,
+    Array<int> &zero_essential_boundaries,
+    int apex,
+    int dim,
+    Options *opts,
+    int rank)
 {
     // Define a finite element space on the mesh.
     FiniteElementCollection *fec;
 
-    fec = new H1_FECollection(opts->order, dim);
+    fec = new H1_FECollection(1, dim);
     ParFiniteElementSpace *fespace = new ParFiniteElementSpace(pmesh, fec);
     HYPRE_BigInt size = fespace->GlobalTrueVSize();
-    if (rank == 0)
+    if (opts->verbose > 1 && rank == 0)
         cout << "Number of finite element unknowns: " << size << endl;
 
     // Determine the list of true (i.e. parallel conforming) essential boundary
@@ -85,6 +92,28 @@ void laplace(
     ConstantCoefficient zero_bdr(0.0);
     x->ProjectBdrCoefficient(zero_bdr, zero_essential_boundaries);
 
+    // For the laplacians involving the apex we need to treat the boundary
+    // conditions a little different, as it is to be enforced on a single node
+    // rather than a whole boundary surface. To do so, we make sure that the
+    // apex is en essential true dof, and then we project the wanted value, in
+    // this case 1.0, to only that node.
+    if (apex >= 0) {
+        // Initialize the internal data needed in the finite element space
+        x->FESpace()->BuildDofToArrays();
+
+        // Make sure the apex is in the list of essential true Dofs
+        ess_tdof_list.Append(apex);
+
+        Array<int> node_disp(1);
+        node_disp[0] = apex;
+        Vector node_disp_value(1);
+        node_disp_value[0] = 1.0;
+
+        VectorConstantCoefficient node_disp_value_coeff(node_disp_value);
+
+        x->ProjectCoefficient(node_disp_value_coeff, node_disp);
+    }
+
     // Set up the parallel bilinear form a(.,.) on the finite element space
     // corresponding to the Laplacian operator -Delta, by adding the
     // Diffusion domain integrator.
@@ -100,13 +129,14 @@ void laplace(
     a.FormLinearSystem(ess_tdof_list, *x, b, A, X, B);
 
     // Solve the linear system A X = B.
-    // * With full assembly, use the BoomerAMG preconditioner from hypre.
-    Solver *prec = NULL;
+    // Use the BoomerAMG preconditioner from hypre.
+    HypreBoomerAMG *prec = NULL;
     prec = new HypreBoomerAMG;
+    prec->SetPrintLevel(opts->verbose > 1 ? 1 : 0);
     CGSolver cg(MPI_COMM_WORLD);
     cg.SetRelTol(1e-12);
     cg.SetMaxIter(2000);
-    cg.SetPrintLevel(1);
+    cg.SetPrintLevel(opts->verbose > 1 ? 1 : 0);
     if (prec) { cg.SetPreconditioner(*prec); }
     cg.SetOperator(*A);
     cg.Mult(B, X);
@@ -117,13 +147,19 @@ void laplace(
     a.RecoverFEMSolution(X, b, *x);
 }
 
-void laplace_phi_epi(ParGridFunction *x, ParMesh *pmesh, int dim, Options *opts, int rank)
+
+void laplace_phi_epi(
+    ParGridFunction *x,
+    ParMesh *mesh,
+    int dim,
+    Options *opts,
+    int rank)
 {
-    // Define the following three arrays to determine (1) which border surfaces
+    // Define the following three arrays to determine (1) which boundary surfaces
     // to include in the Laplace equation, (2) which of said boundaries should be
-    // set to a nonzero value (1.0) and (3) which of said border surfaces
+    // set to a nonzero value (1.0) and (3) which of said boundary surfaces
     // should be set to zero.
-    int nattr = pmesh->bdr_attributes.Max();
+    int nattr = mesh->bdr_attributes.Max();
     Array<int> essential_boundaries(nattr);
     Array<int> nonzero_essential_boundaries(nattr);
     Array<int> zero_essential_boundaries(nattr);
@@ -135,16 +171,21 @@ void laplace_phi_epi(ParGridFunction *x, ParMesh *pmesh, int dim, Options *opts,
     essential_boundaries[RV_ENDO-1] = 1;
 
     nonzero_essential_boundaries = 0;
-    nonzero_essential_boundaries[EPI -1] = 1;
+    nonzero_essential_boundaries[EPI-1] = 1;
 
     zero_essential_boundaries = 0;
     zero_essential_boundaries[LV_ENDO-1] = 1;
     zero_essential_boundaries[RV_ENDO-1] = 1;
 
-    laplace(x, pmesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, dim,opts, rank);
+    laplace(x, mesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, -1, dim, opts, rank);
 }
 
-void laplace_phi_lv(ParGridFunction *x, ParMesh *pmesh, int dim, Options *opts, int rank)
+void laplace_phi_lv(
+    ParGridFunction *x,
+    ParMesh *pmesh,
+    int dim,
+    Options *opts,
+    int rank)
 {
     // Define the following three arrays to determine (1) which border surfaces
     // to include in the Laplace equation, (2) which of said boundaries should be
@@ -168,10 +209,15 @@ void laplace_phi_lv(ParGridFunction *x, ParMesh *pmesh, int dim, Options *opts, 
     zero_essential_boundaries[EPI    -1] = 1;
     zero_essential_boundaries[RV_ENDO-1] = 1;
 
-    laplace(x, pmesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, dim, opts, rank);
+    laplace(x, pmesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, -1, dim, opts, rank);
 }
 
-void laplace_phi_rv(ParGridFunction *x, ParMesh *pmesh, int dim, Options *opts, int rank)
+void laplace_phi_rv(
+    ParGridFunction *x,
+    ParMesh *pmesh,
+    int dim,
+    Options *opts,
+    int rank)
 {
     // Define the following three arrays to determine (1) which border surfaces
     // to include in the Laplace equation, (2) which of said boundaries should be
@@ -195,10 +241,16 @@ void laplace_phi_rv(ParGridFunction *x, ParMesh *pmesh, int dim, Options *opts, 
     zero_essential_boundaries[EPI    -1] = 1;
     zero_essential_boundaries[LV_ENDO-1] = 1;
 
-    laplace(x, pmesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, dim, opts, rank);
+    laplace(x, pmesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, -1, dim, opts, rank);
 }
 
-void apex_to_base(ParGridFunction *x, ParMesh *pmesh, int dim, Options *opts, int rank)
+void laplace_psi_ab(
+    ParGridFunction *x,
+    ParMesh *pmesh,
+    int apex,
+    int dim,
+    Options *opts,
+    int rank)
 {
     // Define the following three arrays to determine (1) which border surfaces
     // to include in the Laplace equation, (2) which of said boundaries should be
@@ -215,7 +267,26 @@ void apex_to_base(ParGridFunction *x, ParMesh *pmesh, int dim, Options *opts, in
     essential_boundaries[BASE-1] = 1;
     nonzero_essential_boundaries = 0;
     zero_essential_boundaries = 0;
-    laplace(x, pmesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, dim, opts, rank);
+    zero_essential_boundaries[BASE-1] = 1;
+    laplace(x, pmesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, apex, dim, opts, rank);
+}
+
+// Find the vertex closest to the prescribed apex, Euclidean distance.
+int find_apex_vertex(Mesh *mesh, Vector& apex)
+{
+    int apex_vertex = 0;
+    double distance = numeric_limits<double>::max();
+    for (int i = 0; i < mesh->GetNV(); i++) {
+        double *vertices = mesh->GetVertex(i);
+        double this_distance = (vertices[0]-apex[0]) * (vertices[0]-apex[0])
+                             + (vertices[1]-apex[1]) * (vertices[1]-apex[1])
+                             + (vertices[2]-apex[2]) * (vertices[2]-apex[2]);
+        if (this_distance < distance) {
+            apex_vertex = i;
+            distance = this_distance;
+        }
+    }
+    return apex_vertex;
 }
 
 int main(int argc, char *argv[])
@@ -226,136 +297,149 @@ int main(int argc, char *argv[])
     Hypre::Init();
 
     Options opts;
-    // 2. Parse command-line options
 
     // Set program defaults
     opts.mesh_file = NULL;
-    opts.out = "./out";
-    opts.device_config = "cpu";
-    opts.order = 1;
+    opts.output_dir = "./out";
+    opts.device_config = "hip";
+    opts.verbose = 0;
+    opts.prescribed_apex = Vector(3);
+    opts.paraview = false;
 
+    // Parse command-line options
     OptionsParser args(argc, argv);
-    args.AddOption(&opts.mesh_file, "-m", "--mesh",
-            "Mesh file to use (required)");
-    args.AddOption(&opts.out, "-o", "--out",
-            "Basename of the ouput files. Outputs will be of the form <basename>_*.gf");
-    args.AddOption(&opts.device_config, "-d", "--device",
-            "Device configuration string, see Device::Configure().");
-    args.AddOption(&opts.order, "-o", "--order",
-            "Finite element order (polynomial degree) or -1 for "
-            "isoparametric space.");
+    args.AddOption(&opts.verbose,         "-v", "--verbose", "Be verbose");
+    args.AddOption(&opts.mesh_file,       "-m", "--mesh",    "Mesh file to use", true);
+    args.AddOption(&opts.prescribed_apex, "-a", "--apex",    "Coordinate of apex, space separated list: 'x y z'.", true);
+    args.AddOption(&opts.output_dir,      "-o", "--out",     "Directory for output files.");
+    args.AddOption(&opts.device_config,   "-d", "--device",  "Device configuration string, see Device::Configure().");
+    args.AddOption(&opts.paraview,        "-p", "--paraview", "-np", "--no-paraview", "Save data files for ParaView (paraview.org) visualization.");
+
     args.Parse();
 
-    if (!args.Good() || opts.mesh_file == NULL) {
+    if (!args.Good()) {
         if (rank == 0)
             args.PrintUsage(cout);
         exit(1);
     }
 
-    if (rank == 0)
+    if (rank == 0 && opts.verbose > 1)
         args.PrintOptions(cout);
+
+    // Set the basename of the mesh
+    opts.mesh_basename = remove_extension(basename(std::string(opts.mesh_file)));
+
+    // Make sure the output direcory exists
+    mksubdir(opts.output_dir);
+
+    struct timespec t0, t1;
 
     // 3. Enable hardware devices such as GPUs, and programming models such as
     //    HIP, CUDA, OCCA, RAJA and OpenMP based on command line options.
     Device device(opts.device_config);
-    if (rank == 0)
+    if (opts.verbose > 1 && rank == 0)
         device.Print();
 
     // 4. Load the mesh
+    clock_gettime(CLOCK_MONOTONIC, &t0);
     Mesh mesh(opts.mesh_file, 1, 1);
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+
+    if (opts.verbose > 1 && rank == 0) {
+        cout << "Loaded meshfile '" << opts.mesh_file << "' "
+             << "consisting of " << mesh.GetNV() << " vertices "
+             << "and " << mesh.GetNE() << " elements" << endl;
+
+    }
+    if (opts.verbose && rank == 0)
+        log_timing(cout, "Mesh load", timespec_duration(t0, t1));
+
     int dim = mesh.Dimension();
 
-#ifdef DEBUG
+    // Set the apex node based on the prescribed apex coordinate.
+    int apex = 0;
     {
-        // Check that the border elements have to proper attributes.
-        //                   Base Epi  Lv   Rv
-        int attributes[4] = {0,   0,   0,   0};
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+        apex = find_apex_vertex(&mesh, opts.prescribed_apex);
+        clock_gettime(CLOCK_MONOTONIC, &t1);
 
-        int num_border_elements = mesh.GetNBE();
-        for (int i = 0; i < num_border_elements; i++) {
-            Element *ele = mesh.GetBdrElement(i);
-            int attr = ele->GetAttribute();
-            MFEM_ASSERT(attr >= BASE && attr <=RV_ENDO,
-                    "The element attributes should be 1 (base), 2 (epicardium), "
-                    "3 (left ventricle endocardium) or 4 (right ventricle endocardium)");
-            attributes[attr-1]++;
-        }
+        if (opts.verbose > 1 && rank == 0) {
+            double *closest_vertex = mesh.GetVertex(apex);
+            cout << setprecision(2)
+                 << "Found closest vertex to prescribed apex "
+                 << "("  << opts.prescribed_apex[0]
+                 << ", " << opts.prescribed_apex[1]
+                 << ", " << opts.prescribed_apex[2]
+                 << ") at "
+                 << "("  << closest_vertex[0]
+                 << ", " << closest_vertex[1]
+                 << ", " << closest_vertex[2]
+                 << ")." << endl;
 
-        if (rank == 0) {
-            cout << "Number of border elements: " << num_border_elements << endl
-                 << "Number of border elements at each surface:" << endl
-                 << "\tBase: " << attributes[0] << " elements" << endl
-                 << "\tEpi:  " << attributes[1] << " elements" << endl
-                 << "\tLv: "   << attributes[2] << " elements" << endl
-                 << "\tRv: "   << attributes[3] << " elements" << endl;
         }
+        if (opts.verbose && rank == 0)
+            log_timing(cout, "Find apex", timespec_duration(t0, t1));
     }
-#endif
 
     // 6. Define a parallel mesh by a partitioning of the serial mesh.
     ParMesh pmesh(MPI_COMM_WORLD, mesh);
     mesh.Clear();
 
-    // Laplace phi_EPI:
     // Solve the Laplace equation from EPI (1.0) to (LV_ENDO union RV_ENDO) (0.0)
+    clock_gettime(CLOCK_MONOTONIC, &t0);
     ParGridFunction x_phi_epi;
     laplace_phi_epi(&x_phi_epi, &pmesh, dim, &opts, rank);
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    if (opts.verbose && rank == 0)
+        log_timing(cout, "phi_epi", timespec_duration(t0, t1));
 
-    {
-        string x_phi_epi_out(opts.out);
-        x_phi_epi_out += "_phi_epi.gf";
-        ofstream x_phi_epi_ofs(x_phi_epi_out.c_str());
-        x_phi_epi_ofs.precision(8);
-        x_phi_epi.Save(x_phi_epi_ofs);
-    }
 
-    // Laplace phi_LV;
     // Solve the Laplace equation from LV_ENDO (1.0) to (RV_ENDO union EPI) (0.0)
+    clock_gettime(CLOCK_MONOTONIC, &t0);
     ParGridFunction x_phi_lv;
     laplace_phi_lv(&x_phi_lv, &pmesh, dim, &opts, rank);
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    if (opts.verbose && rank == 0)
+        log_timing(cout, "phi_lv", timespec_duration(t0, t1));
 
-    {
-        string x_phi_lv_out(opts.out);
-        x_phi_lv_out += "_phi_lv.gf";
-        ofstream x_phi_lv_ofs(x_phi_lv_out.c_str());
-        x_phi_lv_ofs.precision(8);
-        x_phi_lv.Save(x_phi_lv_ofs);
-    }
 
-    // Laplace phi_RV
     // Solve the Laplace equation from RV_ENDO (1.0) to (LV_ENDO union EPI) (0.0)
+    clock_gettime(CLOCK_MONOTONIC, &t0);
     ParGridFunction x_phi_rv;
     laplace_phi_rv(&x_phi_rv, &pmesh, dim, &opts, rank);
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    if (opts.verbose && rank == 0)
+        log_timing(cout, "phi_rv", timespec_duration(t0, t1));
 
-    {
-        string x_phi_rv_out(opts.out);
-        x_phi_rv_out += "_phi_rv.gf";
-        ofstream x_phi_rv_ofs(x_phi_rv_out.c_str());
-        x_phi_rv_ofs.precision(8);
-        x_phi_rv.Save(x_phi_rv_ofs);
-    }
 
-    // TODO: Laplace GAMMA_AB (apex -> base)
-    // TODO: Solve the Laplace equation from BASE (1.0) to APEX (0.0)
-    ParGridFunction x_apex_to_base;
-    apex_to_base(&x_apex_to_base, &pmesh, dim, &opts, rank);
-
-    {
-        string x_apex_to_base_out(opts.out);
-        x_apex_to_base_out += "_apex_to_base.gf";
-        ofstream x_apex_to_base_ofs(x_apex_to_base_out.c_str());
-        x_apex_to_base_ofs.precision(8);
-        x_apex_to_base.Save(x_apex_to_base_ofs);
-    }
+    // Solve the Laplace equation from BASE (1.0) to APEX (0.0)
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    ParGridFunction x_psi_ab;
+    laplace_psi_ab(&x_psi_ab, &pmesh, apex, dim, &opts, rank);
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    if (opts.verbose && rank == 0)
+        log_timing(cout, "psi_ab", timespec_duration(t0, t1));
 
     // Save the mesh
     {
 
-        string mesh_out(opts.out);
-        mesh_out += ".mesh";
+        // Output the normal solutions in the mfem subdirectory
+        string mfem_output_dir(opts.output_dir);
+        mfem_output_dir += "/mfem";
+        mksubdir(mfem_output_dir);
+
+        // Save the MFEM mesh
+        string mesh_out(mfem_output_dir);
+        mesh_out += "/" + opts.mesh_basename + ".mesh";
         ofstream mesh_ofs(mesh_out.c_str());
         mesh_ofs.precision(8);
-        pmesh.Print(mesh_ofs);
+        mesh.Print(mesh_ofs);
+
+        // Save the solutions
+        save_solution(&x_phi_epi, mfem_output_dir, opts.mesh_basename, "_phi_epi.gf");
+        save_solution(&x_phi_lv,  mfem_output_dir, opts.mesh_basename, "_phi_lv.gf");
+        save_solution(&x_phi_rv,  mfem_output_dir, opts.mesh_basename, "_phi_rv.gf");
+        save_solution(&x_psi_ab,  mfem_output_dir, opts.mesh_basename, "_psi_ab.gf");
 
     }
 }

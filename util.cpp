@@ -21,6 +21,23 @@
 
 #include "util.hpp"
 
+double timespec_duration(
+    struct timespec t0,
+    struct timespec t1)
+{
+    return (t1.tv_sec - t0.tv_sec) +
+        (t1.tv_nsec - t0.tv_nsec) * 1e-9;
+}
+
+void log_timing(
+    std::ostream& out,
+    const char *log_string,
+    double seconds)
+{
+    out << "[" << std::left << std::setw(12) << log_string << "]: "
+        << std::right << std::fixed << std::setw(12) << std::setprecision(6)<< seconds << " s" << std::endl;
+}
+
 std::string basename(std::string const& path)
 {
     return path.substr(path.find_last_of("/\\") + 1);

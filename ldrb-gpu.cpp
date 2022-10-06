@@ -17,50 +17,15 @@
 
 #include <fstream>
 #include <limits>
-#include <iomanip>
-#include <time.h>
 
 #include "mfem.hpp"
 #include "calculus.hpp"
 #include "util.hpp"
+#include "ldrb-gpu.hpp"
 
 using namespace std;
 using namespace mfem;
 
-
-typedef struct {
-    int verbose;
-    const char *mesh_file;
-    string mesh_basename;
-    const char *output_dir;
-    const char *device_config;
-    bool paraview;
-    Vector prescribed_apex;
-} Options;
-
-typedef enum {
-    BASE   = 1,
-    EPI    = 2,
-    LV_ENDO = 3,
-    RV_ENDO = 4,
-} MeshAttributes;
-
-double timespec_duration(
-    struct timespec t0,
-    struct timespec t1)
-{
-    return (t1.tv_sec - t0.tv_sec) +
-        (t1.tv_nsec - t0.tv_nsec) * 1e-9;
-}
-
-void log_timing(
-    ostream& out,
-    const char *log_string,
-    double seconds)
-{
-    out << "[" << left << setw(12) << log_string << "]: "
-        << right << fixed << setw(12) << setprecision(6)<< seconds << " s" << endl;
-}
 
 // Save a solution (in form of a GridFunction) to a file named "<prefix><suffix>".
 void save_solution(
@@ -276,8 +241,7 @@ void laplace_psi_ab(
     Array<int> zero_essential_boundaries(nattr);
 
     // Only the base is set as an essential boundary. The boundary condition
-    // enforced in the apex is taken care of in `laplace` by setting `apex` >=
-    // 0.
+    // enforced in the apex is taken care of in `laplace` by setting `apex` >= 0.
     essential_boundaries = 0;
     essential_boundaries[BASE-1] = 1;
 
@@ -312,7 +276,6 @@ int main(int argc, char *argv[])
 {
 
     Options opts;
-    // Parse command-line options
 
     // Set program defaults
     opts.mesh_file = NULL;
@@ -322,6 +285,7 @@ int main(int argc, char *argv[])
     opts.prescribed_apex = Vector(3);
     opts.paraview = false;
 
+    // Parse command-line options
     OptionsParser args(argc, argv);
     args.AddOption(&opts.verbose,         "-v", "--verbose", "Be verbose");
     args.AddOption(&opts.mesh_file,       "-m", "--mesh",    "Mesh file to use", true);

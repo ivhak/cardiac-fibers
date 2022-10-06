@@ -66,8 +66,8 @@ SERIAL_LFLAGS = $(HIP_LFLAGS) $(MFEM_LFLAGS)
 all: ldrb-gpup ldrb-gpu
 
 ldrb-gpup: MFEM_ROOT=$(MFEM_PARALLEL_ROOT)
-ldrb-gpu: IFLAGS=$(PARALLEL_IFLAGS)
-ldrb-gpu: LFLAGS=$(PARALLEL_LFLAGS)
+ldrb-gpup: IFLAGS=$(PARALLEL_IFLAGS)
+ldrb-gpup: LFLAGS=$(PARALLEL_LFLAGS)
 ldrb-gpup: ldrb-gpup.o calculus.o util.o
 	$(CC) $(CFLAGS) $(IFLAGS) -o $@ $^ $(LFLAGS)
 
