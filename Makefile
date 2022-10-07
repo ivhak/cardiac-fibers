@@ -82,4 +82,4 @@ ldrb-gpu: ldrb-gpu.o calculus.o util.o
 
 .PHONY: clean
 clean:
-	$(RM) ldrb-gpu ldrb-gpup calculus.o ldrb-gpu.o
+	$(RM) ldrb-gpu ldrb-gpup calculus.o ldrb-gpu.o util.o
