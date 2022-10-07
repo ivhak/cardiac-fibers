@@ -570,14 +570,6 @@ int main(int argc, char *argv[])
             F, S, T
     );
 
-#ifdef DEBUG
-    cout << " F -----------------------------------" << endl;
-    for (int i = 0; i < mesh.GetNV(); i++) {
-        Vector v = F[i];
-        cout << v[0] << ", " << v[1] << ", " <<  v[2] << endl;
-    }
-    cout << "--------------------------------------" << endl;
-#endif
 
     // Save the mesh and solutions
     {
@@ -586,6 +578,76 @@ int main(int argc, char *argv[])
         mfem_output_dir += "/mfem";
         mksubdir(mfem_output_dir);
 
+#ifdef DEBUG
+        string debug_dir = mfem_output_dir + "/debug";
+        mksubdir(debug_dir);
+
+        // Write gradients and F, S, T
+
+        { // grad_phi_epi
+            string filename = debug_dir + "/grad_phi_epi.txt";
+            ofstream fout(filename.c_str());
+            for (int i = 0; i < mesh.GetNV(); i++) {
+                Vector v = grad_phi_epi[i];
+                fout << v[0] << ", " << v[1] << ", " <<  v[2] << endl;
+            }
+        }
+
+        { // grad_phi_lv
+            string filename = debug_dir + "/grad_phi_lv.txt";
+            ofstream fout(filename.c_str());
+            for (int i = 0; i < mesh.GetNV(); i++) {
+                Vector v = grad_phi_lv[i];
+                fout << v[0] << ", " << v[1] << ", " <<  v[2] << endl;
+            }
+        }
+
+        { // grad_phi_rv
+            string filename = debug_dir + "/grad_phi_rv.txt";
+            ofstream fout(filename.c_str());
+            for (int i = 0; i < mesh.GetNV(); i++) {
+                Vector v = grad_phi_rv[i];
+                fout << v[0] << ", " << v[1] << ", " <<  v[2] << endl;
+            }
+        }
+
+        { // grad_psi_ab
+            string filename = debug_dir + "/grad_psi_ab.txt";
+            ofstream fout(filename.c_str());
+            for (int i = 0; i < mesh.GetNV(); i++) {
+                Vector v = grad_psi_ab[i];
+                fout << v[0] << ", " << v[1] << ", " <<  v[2] << endl;
+            }
+        }
+
+        { // F
+            string filename = debug_dir + "/F.txt";
+            ofstream fout(filename.c_str());
+            for (int i = 0; i < mesh.GetNV(); i++) {
+                Vector v = F[i];
+                fout << v[0] << ", " << v[1] << ", " <<  v[2] << endl;
+            }
+        }
+
+        { // S
+            string filename = debug_dir + "/S.txt";
+            ofstream fout(filename.c_str());
+            for (int i = 0; i < mesh.GetNV(); i++) {
+                Vector v = S[i];
+                fout << v[0] << ", " << v[1] << ", " <<  v[2] << endl;
+            }
+        }
+
+        { // T
+            string filename = debug_dir + "/T.txt";
+            ofstream fout(filename.c_str());
+            for (int i = 0; i < mesh.GetNV(); i++) {
+                Vector v = T[i];
+                fout << v[0] << ", " << v[1] << ", " <<  v[2] << endl;
+            }
+        }
+
+#endif
         // Save the MFEM mesh
         string mesh_out(mfem_output_dir);
         mesh_out += "/" + opts.mesh_basename + ".mesh";
