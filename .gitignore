@@ -1,4 +1,5 @@
 transfer.sh
+copy_back_data.sh
 data/
 out/
 rocprof/
