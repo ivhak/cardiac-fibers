@@ -272,6 +272,115 @@ int find_apex_vertex(Mesh *mesh, Vector& apex)
     return apex_vertex;
 }
 
+// Set the gradient in each vertex to be the average of the gradient in the
+// centers of the surrounding elements
+void get_vertex_gradients(GridFunction& x, Mesh& mesh, Table* v2e, vector<Vector>& grads)
+{
+    MFEM_ASSERT(grads.size() >= mesh.GetNV(), "grads is to small");
+
+    // Get the gradient in the middle of each element.
+    for (int i = 0; i < mesh.GetNV(); i++) {
+
+        const int num_elements = v2e->RowSize(i);
+        const int *elements = v2e->GetRow(i);
+
+        Vector vertex_gradient(3);
+
+        for (int j = 0; j < num_elements; j++) {
+            Vector grad(3);
+            int el_id = elements[j];
+            ElementTransformation *tr = x.FESpace()->GetElementTransformation(el_id);
+            IntegrationPoint ip;
+            ip.Set3(0.5, 0.5, 0.5); // Center of the element
+            tr->SetIntPoint(&ip);
+            x.GetGradient(*tr, grad);
+            vertex_gradient += grad;
+        }
+        vertex_gradient /= num_elements;
+        grads[i] = vertex_gradient;
+    }
+}
+
+void define_fibers(
+    Mesh *mesh,
+    const double *phi_epi,
+    const double *phi_lv,
+    const double *phi_rv,
+    const double *psi_ab,
+    vector<Vector>& grad_phi_epi,
+    vector<Vector>& grad_phi_lv,
+    vector<Vector>& grad_phi_rv,
+    vector<Vector>& grad_psi_ab,
+    double alpha_endo,
+    double alpha_epi,
+    double beta_endo,
+    double beta_epi,
+    vector<Vector>& F,
+    vector<Vector>& S,
+    vector<Vector>& T)
+{
+
+    int num_vertices = mesh->GetNV();
+
+    MFEM_ASSERT(grad_phi_epi.size() == num_vertices, "phi_epi is the wrong size");
+    MFEM_ASSERT(grad_phi_lv.size()  == num_vertices, "phi_lv is the wrong size");
+    MFEM_ASSERT(grad_phi_rv.size()  == num_vertices, "phi_rv is the wrong size");
+    MFEM_ASSERT(grad_psi_ab.size()  == num_vertices, "psi_ab is the wrong size");
+    MFEM_ASSERT(F.size()            == num_vertices, "F is the wrong size");
+    MFEM_ASSERT(S.size()            == num_vertices, "S is the wrong size");
+    MFEM_ASSERT(T.size()            == num_vertices, "T is the wrong size");
+
+#define alpha_s(d) (alpha_endo*(1-(d)) - alpha_endo*(d))
+#define alpha_w(d) (alpha_endo*(1-(d)) - alpha_epi *(d))
+#define beta_s(d)  (beta_endo *(1-(d)) - beta_endo *(d))
+#define beta_w(d)  (beta_endo *(1-(d)) - beta_epi  *(d))
+
+    for (int i = 0; i < num_vertices; i++) {
+        const double phi_epi_i = phi_epi[i];
+        const double phi_lv_i = phi_lv[i];
+        const double phi_rv_i = phi_rv[i];
+
+        Vector grad_phi_epi_i = grad_phi_epi[i];
+        Vector grad_phi_lv_i  = grad_phi_lv[i];
+        Vector grad_phi_rv_i  = grad_phi_rv[i];
+        Vector grad_psi_ab_i  = grad_psi_ab[i];
+
+        const double t = phi_rv_i / (phi_lv_i + phi_rv_i);
+        DenseMatrix Q_lv(3,3);
+        {
+            DenseMatrix T(3,3);
+            Vector grad_phi_lv_i_neg = grad_phi_lv_i;
+            grad_phi_lv_i_neg.Neg();
+            axis(T, grad_psi_ab_i, grad_phi_lv_i_neg);
+            orient(Q_lv, T, alpha_s(t), beta_s(t));
+        }
+
+        DenseMatrix Q_rv(3,3);
+        {
+            DenseMatrix T(3,3);
+            axis(T, grad_psi_ab_i, grad_phi_rv_i);
+            orient(Q_lv, T, alpha_s(t), beta_s(t));
+        }
+
+        DenseMatrix Q_endo(3,3);
+        bislerp(Q_endo, Q_lv, Q_rv, t);
+
+        DenseMatrix Q_epi(3,3);
+        {
+            DenseMatrix T(3,3);
+            axis(T, grad_psi_ab_i, grad_phi_epi_i);
+            orient(Q_epi, T, alpha_w(phi_epi_i), beta_w(phi_epi_i));
+        }
+
+        DenseMatrix FST(3,3);
+        bislerp(FST, Q_endo, Q_epi, phi_epi_i);
+
+        FST.GetColumn(0, F[i]);
+        FST.GetColumn(1, S[i]);
+        FST.GetColumn(2, T[i]);
+    }
+}
+
 int main(int argc, char *argv[])
 {
 
@@ -358,40 +467,117 @@ int main(int argc, char *argv[])
             log_timing(cout, "Find apex", timespec_duration(t0, t1));
     }
 
+    // Set up the vertex to element table
+    Table *vertex_to_element_table = mesh.GetVertexToElementTable();
+
     // Solve the Laplace equation from EPI (1.0) to (LV_ENDO union RV_ENDO) (0.0)
-    clock_gettime(CLOCK_MONOTONIC, &t0);
+    // and calculate the gradients
     GridFunction x_phi_epi;
-    laplace_phi_epi(&x_phi_epi, &mesh, &opts);
-    clock_gettime(CLOCK_MONOTONIC, &t1);
-    if (opts.verbose)
-        log_timing(cout, "phi_epi", timespec_duration(t0, t1));
+    vector<Vector> grad_phi_epi(mesh.GetNV());
+    {
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+        laplace_phi_epi(&x_phi_epi, &mesh, &opts);
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        if (opts.verbose)
+            log_timing(cout, "phi_epi", timespec_duration(t0, t1));
+
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+        get_vertex_gradients(x_phi_epi, mesh, vertex_to_element_table, grad_phi_epi);
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        if (opts.verbose)
+            log_timing(cout, "grad_phi_epi", timespec_duration(t0, t1));
+    }
 
 
     // Solve the Laplace equation from LV_ENDO (1.0) to (RV_ENDO union EPI) (0.0)
-    clock_gettime(CLOCK_MONOTONIC, &t0);
+    // and calculate the gradients
     GridFunction x_phi_lv;
-    laplace_phi_lv(&x_phi_lv, &mesh, &opts);
-    clock_gettime(CLOCK_MONOTONIC, &t1);
-    if (opts.verbose)
-        log_timing(cout, "phi_lv", timespec_duration(t0, t1));
+    vector<Vector> grad_phi_lv(mesh.GetNV());
+    {
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+        laplace_phi_lv(&x_phi_lv, &mesh, &opts);
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        if (opts.verbose)
+            log_timing(cout, "phi_lv", timespec_duration(t0, t1));
+
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+        get_vertex_gradients(x_phi_lv, mesh, vertex_to_element_table, grad_phi_lv);
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        if (opts.verbose)
+            log_timing(cout, "grad_phi_lv", timespec_duration(t0, t1));
+    }
 
 
     // Solve the Laplace equation from RV_ENDO (1.0) to (LV_ENDO union EPI) (0.0)
-    clock_gettime(CLOCK_MONOTONIC, &t0);
+    // and calculate the gradients
     GridFunction x_phi_rv;
-    laplace_phi_rv(&x_phi_rv, &mesh, &opts);
-    clock_gettime(CLOCK_MONOTONIC, &t1);
-    if (opts.verbose)
-        log_timing(cout, "phi_rv", timespec_duration(t0, t1));
+    vector<Vector> grad_phi_rv(mesh.GetNV());
+    {
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+        laplace_phi_rv(&x_phi_rv, &mesh, &opts);
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        if (opts.verbose)
+            log_timing(cout, "phi_rv", timespec_duration(t0, t1));
+
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+        get_vertex_gradients(x_phi_rv, mesh, vertex_to_element_table, grad_phi_rv);
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        if (opts.verbose)
+            log_timing(cout, "grad_phi_rv", timespec_duration(t0, t1));
+    }
 
 
     // Solve the Laplace equation from BASE (1.0) to APEX (0.0)
-    clock_gettime(CLOCK_MONOTONIC, &t0);
+    // and calculate the gradients
     GridFunction x_psi_ab;
-    laplace_psi_ab(&x_psi_ab, &mesh, apex, &opts);
-    clock_gettime(CLOCK_MONOTONIC, &t1);
-    if (opts.verbose)
-        log_timing(cout, "psi_ab", timespec_duration(t0, t1));
+    vector<Vector> grad_psi_ab(mesh.GetNV());
+    {
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+        laplace_psi_ab(&x_psi_ab, &mesh, apex, &opts);
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        if (opts.verbose)
+            log_timing(cout, "psi_ab", timespec_duration(t0, t1));
+
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+        get_vertex_gradients(x_psi_ab, mesh, vertex_to_element_table, grad_psi_ab);
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        if (opts.verbose)
+            log_timing(cout, "grad_psi_ab", timespec_duration(t0, t1));
+    }
+
+    delete vertex_to_element_table;
+
+
+    const double *phi_epi = x_phi_epi.Read();
+    const double *phi_lv  = x_phi_lv.Read();
+    const double *phi_rv  = x_phi_rv.Read();
+    const double *psi_ab  = x_psi_ab.Read();
+
+    vector<Vector> F(mesh.GetNV()); // Longitudinal
+    vector<Vector> S(mesh.GetNV()); // Sheet normal
+    vector<Vector> T(mesh.GetNV()); // Transverse
+
+    double alpha_endo =  40.0;
+    double alpha_epi  = -50.0;
+    double beta_endo  = -65.0;
+    double beta_epi   =  25.0;
+
+    define_fibers(
+            &mesh,
+            phi_epi,      phi_lv,      phi_rv,      psi_ab,
+            grad_phi_epi, grad_phi_lv, grad_phi_rv, grad_psi_ab,
+            alpha_endo, alpha_epi, beta_endo, beta_epi,
+            F, S, T
+    );
+
+#ifdef DEBUG
+    cout << " F -----------------------------------" << endl;
+    for (int i = 0; i < mesh.GetNV(); i++) {
+        Vector v = F[i];
+        cout << v[0] << ", " << v[1] << ", " <<  v[2] << endl;
+    }
+    cout << "--------------------------------------" << endl;
+#endif
 
     // Save the mesh and solutions
     {

@@ -23,8 +23,8 @@ using namespace mfem;
 // Cross product of two 3D vectors b and c, store in a.
 static void cross(Vector& a, Vector &b, Vector &c) {
     MFEM_ASSERT(a.Size() == 3, "a is of the wrong size, should be 3.");
-    MFEM_ASSERT(b.Size() == 3, "a is of the wrong size, should be 3.");
-    MFEM_ASSERT(c.Size() == 3, "a is of the wrong size, should be 3.");
+    MFEM_ASSERT(b.Size() == 3, "b is of the wrong size, should be 3.");
+    MFEM_ASSERT(c.Size() == 3, "c is of the wrong size, should be 3.");
 
     // a = b x c
     a(0) = b(1)*c(2) - a(2)*b(1);
@@ -40,7 +40,7 @@ static void cross(Vector& a, Vector &b, Vector &c) {
 //   interactive techniques (pp. 245-254).
 static void rot2quat(Vector& q, DenseMatrix& Q)
 {
-    MFEM_ASSERT(Q.Size() == 3, "Q is of the wrong size, should be 3x3.");
+    // MFEM_ASSERT(Q.Size() == 3, "Q is of the wrong size, should be 3x3.");
 
     q.SetSize(4); // q = w + x*i + y*j + z*k
 
@@ -162,7 +162,11 @@ static void slerp(Vector& q, Vector& q1, Vector &q2, double t)
 // As defined in Function 2 in the supplementary material of Bayer2012.
 void axis(DenseMatrix& Q, Vector& grad_psi, Vector &grad_phi)
 {
-    MFEM_ASSERT(Q.Size() == 3, "Q is of the wrong size, should be 3x3.");
+
+    MFEM_ASSERT(grad_psi.Size() == 3, "grad_psi is the wrong size");
+    MFEM_ASSERT(grad_phi.Size() == 3, "grad_phi is the wrong size");
+
+    // MFEM_ASSERT(Q.Size() == 3, "Q is of the wrong size, should be 3x3.");
     Vector e_0(3), e_1(3), e_2(3);
 
     // e_1 = grad_psi / ||grad_psi||
@@ -179,7 +183,7 @@ void axis(DenseMatrix& Q, Vector& grad_psi, Vector &grad_phi)
 
     // Calculate u = grad_phi - t*e_0
     // where t = (e_0 * grad_phi) is a scalar
-    Vector u;
+    Vector u(3);;
     {
         Vector e_0_t;
         const double t = e_1 * e_2;
@@ -208,8 +212,8 @@ void axis(DenseMatrix& Q, Vector& grad_psi, Vector &grad_phi)
 // As defined in Function 3 in the supplementary material of Bayer2012.
 void orient(DenseMatrix& Q_out, DenseMatrix& Q, double a, double b)
 {
-    MFEM_ASSERT(Q_out.Size() == 3, "Q_out is the wrong size, should be 3x3.")
-    MFEM_ASSERT(Q.Size() == 3,     "Q_out is the wrong size, should be 3x3.")
+    // MFEM_ASSERT(Q_out.Size() == 3, "Q_out is the wrong size, should be 3x3.")
+    // MFEM_ASSERT(Q.Size() == 3,     "Q_out is the wrong size, should be 3x3.")
 
 
     const double sina = sin(a*PI/180);
@@ -299,3 +303,5 @@ void bislerp(DenseMatrix& Qab, DenseMatrix& Qa, DenseMatrix& Qb, double t)
     slerp(q, qm, qb, t);
     quat2rot(Qab, q);
 }
+
+
