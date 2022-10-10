@@ -20,16 +20,16 @@
 
 using namespace mfem;
 
-// Cross product of two 3D vectors b and c, store in a.
-static void cross(Vector& a, Vector &b, Vector &c) {
+// Cross product of two 3D vectors a and b, store in c.
+static void cross(Vector& c, Vector &a, Vector &b) {
     MFEM_ASSERT(a.Size() == 3, "a is of the wrong size, should be 3.");
     MFEM_ASSERT(b.Size() == 3, "b is of the wrong size, should be 3.");
     MFEM_ASSERT(c.Size() == 3, "c is of the wrong size, should be 3.");
 
     // a = b x c
-    a(0) = b(1)*c(2) - a(2)*b(1);
-    a(1) = b(2)*c(0) - a(0)*b(2);
-    a(2) = b(0)*c(1) - a(1)*b(0);
+    c(0) = a(1)*b(2) - a(2)*b(1);
+    c(1) = a(2)*b(0) - a(0)*b(2);
+    c(2) = a(0)*b(1) - a(1)*b(0);
 }
 
 // Convert the 3x3 rotation matrix Q to a quaternion q, using the algorithm
