@@ -40,9 +40,8 @@ static void cross(Vector& c, Vector &a, Vector &b) {
 //   interactive techniques (pp. 245-254).
 static void rot2quat(Vector& q, DenseMatrix& Q)
 {
-    // MFEM_ASSERT(Q.Size() == 3, "Q is of the wrong size, should be 3x3.");
-
-    q.SetSize(4); // q = w + x*i + y*j + z*k
+    MFEM_ASSERT(Q.Width() == 3 && Q.Height() == 3, "Q is of the wrong size, should be 3x3.");
+    MFEM_ASSERT(q.Size() == 4, "q is the wrong size, should be 4.");
 
     double M11, M21, M31;
     double M12, M22, M32;
@@ -97,8 +96,7 @@ static void rot2quat(Vector& q, DenseMatrix& Q)
 static void quat2rot(DenseMatrix& Q, Vector& q)
 {
     MFEM_ASSERT(q.Size() == 4, "q is of the wrong size, should be 4.");
-
-    Q.SetSize(3, 3);
+    MFEM_ASSERT(Q.Width() == 3 && Q.Height() == 3, "Q is of the wrong size, should be 3x3.");
 
     double w, x, y, z;
     w = q(0); x = q(1); y = q(2); z = q(3);
@@ -166,7 +164,7 @@ void axis(DenseMatrix& Q, Vector& grad_psi, Vector &grad_phi)
     MFEM_ASSERT(grad_psi.Size() == 3, "grad_psi is the wrong size");
     MFEM_ASSERT(grad_phi.Size() == 3, "grad_phi is the wrong size");
 
-    // MFEM_ASSERT(Q.Size() == 3, "Q is of the wrong size, should be 3x3.");
+    MFEM_ASSERT(Q.Width() == 3 && Q.Height() == 3, "Q is of the wrong size, should be 3x3.");
     Vector e_0(3), e_1(3), e_2(3);
 
     // e_1 = grad_psi / ||grad_psi||
@@ -212,8 +210,8 @@ void axis(DenseMatrix& Q, Vector& grad_psi, Vector &grad_phi)
 // As defined in Function 3 in the supplementary material of Bayer2012.
 void orient(DenseMatrix& Q_out, DenseMatrix& Q, double a, double b)
 {
-    // MFEM_ASSERT(Q_out.Size() == 3, "Q_out is the wrong size, should be 3x3.")
-    // MFEM_ASSERT(Q.Size() == 3,     "Q_out is the wrong size, should be 3x3.")
+    MFEM_ASSERT(Q_out.Width() == 3 && Q_out.Height() == 3, "Q_out is the wrong size, should be 3x3.");
+    MFEM_ASSERT(Q.Width() == 3 && Q.Width() == 3,          "Q is the wrong size, should be 3x3.");
 
 
     const double sina = sin(a*PI/180);
@@ -253,7 +251,7 @@ void bislerp(DenseMatrix& Qab, DenseMatrix& Qa, DenseMatrix& Qb, double t)
     const double tol = 1e-12;
 
     // Translate the rotation matrices Qa and Qb into quaternions
-    Vector qa, qb;
+    Vector qa(4), qb(4);
     rot2quat(qa, Qa);
     rot2quat(qb, Qb);
 
