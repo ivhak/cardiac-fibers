@@ -278,7 +278,6 @@ void get_vertex_gradients(GridFunction& x, Mesh& mesh, Table* v2e, vector<Vector
 {
     MFEM_ASSERT(grads.size() >= mesh.GetNV(), "grads is to small");
 
-    // Get the gradient in the middle of each element.
     for (int i = 0; i < mesh.GetNV(); i++) {
 
         const int num_elements = v2e->RowSize(i);
@@ -288,13 +287,35 @@ void get_vertex_gradients(GridFunction& x, Mesh& mesh, Table* v2e, vector<Vector
 
         for (int j = 0; j < num_elements; j++) {
             Vector grad(3);
+            grad= 0.0;
             int el_id = elements[j];
+#if 1
+            // Calculate the gradient of an element to be the gradient in its center.
+
             ElementTransformation *tr = x.FESpace()->GetElementTransformation(el_id);
-            IntegrationPoint ip;
-            ip.Set3(0.5, 0.5, 0.5); // Center of the element
-            tr->SetIntPoint(&ip);
+            Geometry::Type geom = tr->GetGeometryType();
+            const IntegrationPoint& center = Geometries.GetCenter(geom);
+            tr->SetIntPoint(&center);
             x.GetGradient(*tr, grad);
             vertex_gradient += grad;
+#else
+            // Calculate the gradient of an element to be the average of the
+            // gradients in each of its integration points.
+
+            ElementTransformation *tr = x.FESpace()->GetElementTransformation(el_id);
+            const IntegrationRule& ir = x.FESpace()->GetFE(elements[j])->GetNodes();
+            for (int k = 0; k < ir.GetNPoints(); k++) {
+                Vector grad_point(3);
+                grad_point = 0.0;
+                const IntegrationPoint& ip = ir.IntPoint(k);
+                tr->SetIntPoint(&ip);
+                x.GetGradient((*tr), grad_point);
+                grad += grad_point;
+            }
+            grad /= ir.GetNPoints();
+            vertex_gradient += grad;
+
+#endif
         }
         vertex_gradient /= num_elements;
         grads[i] = vertex_gradient;
