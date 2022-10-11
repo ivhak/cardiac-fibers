@@ -629,6 +629,11 @@ int main(int argc, char *argv[])
         vertex_vector_to_grid_function(&mesh, grad_phi_rv,  &grad_phi_rv_gf);
         vertex_vector_to_grid_function(&mesh, grad_psi_ab,  &grad_psi_ab_gf);
 
+        GridFunction F_gf, S_gf, T_gf;
+        vertex_vector_to_grid_function(&mesh, F, &F_gf);
+        vertex_vector_to_grid_function(&mesh, S, &S_gf);
+        vertex_vector_to_grid_function(&mesh, T, &T_gf);
+
 #endif
         // Save the MFEM mesh
         std::string mesh_out(mfem_output_dir);
@@ -665,6 +670,9 @@ int main(int argc, char *argv[])
             pd->RegisterField("grad phi lv",  &grad_phi_lv_gf);
             pd->RegisterField("grad phi rv",  &grad_phi_rv_gf);
             pd->RegisterField("grad psi ab",  &grad_psi_ab_gf);
+            pd->RegisterField("F", &F_gf);
+            pd->RegisterField("S", &S_gf);
+            pd->RegisterField("T", &T_gf);
 #endif
             pd->RegisterField("phi lv",  &x_phi_lv);
             pd->RegisterField("phi rv",  &x_phi_rv);
