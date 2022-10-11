@@ -43,16 +43,12 @@ static void rot2quat(Vector& q, DenseMatrix& Q)
     MFEM_ASSERT(Q.Width() == 3 && Q.Height() == 3, "Q is of the wrong size, should be 3x3.");
     MFEM_ASSERT(q.Size() == 4, "q is the wrong size, should be 4.");
 
-    double M11, M21, M31;
-    double M12, M22, M32;
-    double M13, M23, M33;
+    const double M11=Q(0,0), M21=Q(1,0), M31=Q(2,0);
+    const double M12=Q(0,1), M22=Q(1,1), M32=Q(2,1);
+    const double M13=Q(0,2), M23=Q(1,2), M33=Q(2,2);
 
-    M11=Q(0,0); M21=Q(1,0); M31=Q(2,0);
-    M12=Q(0,1); M22=Q(1,1); M32=Q(2,1);
-    M13=Q(0,2); M23=Q(1,2); M33=Q(2,2);
-
-    double w2 = 0.25 * (1 + M11 + M22 + M33);
-    double err = 1e-6;
+    const double w2 = 0.25 * (1 + M11 + M22 + M33);
+    const double err = 1e-6;
 
     double w, x, y, z;
 
@@ -63,14 +59,14 @@ static void rot2quat(Vector& q, DenseMatrix& Q)
         z = (M12 - M21) / (4.0*w);
     } else {
         w = 0.0;
-        double x2 = -0.5*(M22 + M33);
+        const double x2 = -0.5*(M22 + M33);
         if (x2 > err) {
             x = sqrt(x2);
             y = M12 / (2.0*x);
             z = M13 / (2.0*x);
         } else {
             x = 0.0;
-            double y2 = 0.5*(1-M33);
+            const double y2 = 0.5*(1-M33);
             if (y2 > err) {
                 y = sqrt(y2);
                 z = M23 / (2.0*y);
@@ -98,8 +94,7 @@ static void quat2rot(DenseMatrix& Q, Vector& q)
     MFEM_ASSERT(q.Size() == 4, "q is of the wrong size, should be 4.");
     MFEM_ASSERT(Q.Width() == 3 && Q.Height() == 3, "Q is of the wrong size, should be 3x3.");
 
-    double w, x, y, z;
-    w = q(0); x = q(1); y = q(2); z = q(3);
+    const double w = q(0), x = q(1), y = q(2), z = q(3);
 
     const double x2 = x*x;
     const double y2 = y*y;
@@ -163,8 +158,8 @@ void axis(DenseMatrix& Q, Vector& grad_psi, Vector &grad_phi)
 
     MFEM_ASSERT(grad_psi.Size() == 3, "grad_psi is the wrong size");
     MFEM_ASSERT(grad_phi.Size() == 3, "grad_phi is the wrong size");
-
     MFEM_ASSERT(Q.Width() == 3 && Q.Height() == 3, "Q is of the wrong size, should be 3x3.");
+
     Vector e_0(3), e_1(3), e_2(3);
 
     // e_1 = grad_psi / ||grad_psi||
@@ -172,7 +167,6 @@ void axis(DenseMatrix& Q, Vector& grad_psi, Vector &grad_phi)
     e_1 /= grad_psi.Norml2();
 
     // e_2 = u / || u ||
-    //
     // where u = grad_phi - (e_0*grad_phi)e_0
     //
     // Normalize grad_phi as an initial guess for e_0
