@@ -144,7 +144,11 @@ void laplace_phi_epi(
     zero_essential_boundaries[LV_ENDO-1] = 1;
     zero_essential_boundaries[RV_ENDO-1] = 1;
 
-    laplace(x, mesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, -1, opts);
+    laplace(x, mesh,
+            essential_boundaries,
+            nonzero_essential_boundaries,
+            zero_essential_boundaries,
+            -1, opts);
 }
 
 void laplace_phi_lv(
@@ -174,7 +178,11 @@ void laplace_phi_lv(
     zero_essential_boundaries[EPI    -1] = 1;
     zero_essential_boundaries[RV_ENDO-1] = 1;
 
-    laplace(x, mesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, -1, opts);
+    laplace(x, mesh,
+            essential_boundaries,
+            nonzero_essential_boundaries,
+            zero_essential_boundaries,
+            -1, opts);
 }
 
 void laplace_phi_rv(
@@ -204,7 +212,11 @@ void laplace_phi_rv(
     zero_essential_boundaries[EPI    -1] = 1;
     zero_essential_boundaries[LV_ENDO-1] = 1;
 
-    laplace(x, mesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, -1, opts);
+    laplace(x, mesh,
+            essential_boundaries,
+            nonzero_essential_boundaries,
+            zero_essential_boundaries,
+            -1, opts);
 }
 
 void laplace_psi_ab(
@@ -232,7 +244,11 @@ void laplace_psi_ab(
 
     zero_essential_boundaries = 0;
 
-    laplace(x, mesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, apex, opts);
+    laplace(x, mesh,
+            essential_boundaries,
+            nonzero_essential_boundaries,
+            zero_essential_boundaries,
+            apex, opts);
 
 }
 
@@ -399,13 +415,25 @@ int main(int argc, char *argv[])
 
     // Parse command-line options
     OptionsParser args(argc, argv);
-    args.AddOption(&opts.verbose,         "-v", "--verbose", "Be verbose");
-    args.AddOption(&opts.mesh_file,       "-m", "--mesh",    "Mesh file to use", true);
-    args.AddOption(&opts.prescribed_apex, "-a", "--apex",    "Coordinate of apex, space separated list: 'x y z'.", true);
-    args.AddOption(&opts.output_dir,      "-o", "--out",     "Directory for output files.");
-    args.AddOption(&opts.device_config,   "-d", "--device",  "Device configuration string, see Device::Configure().");
-    args.AddOption(&opts.paraview,        "-p", "--paraview", "-np", "--no-paraview", "Save data files for ParaView (paraview.org) visualization.");
-
+    args.AddOption(&opts.verbose,
+            "-v", "--verbose",
+            "Be verbose");
+    args.AddOption(&opts.mesh_file,
+            "-m", "--mesh",
+            "Mesh file to use", true);
+    args.AddOption(&opts.prescribed_apex,
+            "-a", "--apex",
+            "Coordinate of apex, space separated list: 'x y z'.", true);
+    args.AddOption(&opts.output_dir,
+            "-o", "--out",
+            "Directory for output files.");
+    args.AddOption(&opts.device_config,
+            "-d", "--device",
+            "Device configuration string, see Device::Configure().");
+    args.AddOption(&opts.paraview,
+            "-p",  "--paraview",
+            "-np", "--no-paraview",
+            "Save data files for ParaView (paraview.org) visualization.");
     args.Parse();
 
     if (!args.Good()) {
@@ -439,7 +467,6 @@ int main(int argc, char *argv[])
         std::cout << "Loaded meshfile '" << opts.mesh_file << "' "
              << "consisting of " << mesh.GetNV() << " vertices "
              << "and " << mesh.GetNE() << " elements" << std::endl;
-
     }
 
     if (opts.verbose)
