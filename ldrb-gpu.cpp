@@ -23,7 +23,6 @@
 #include "util.hpp"
 #include "ldrb-gpu.hpp"
 
-using namespace std;
 using namespace mfem;
 
 void laplace(
@@ -41,7 +40,7 @@ void laplace(
     fec = new H1_FECollection(1, mesh->Dimension());
     FiniteElementSpace * fespace = new FiniteElementSpace(mesh, fec);
     if (opts->verbose > 1)
-        cout << "Number of finite element unknowns: " << fespace->GetTrueVSize() << endl;
+        std::cout << "Number of finite element unknowns: " << fespace->GetTrueVSize() << std::endl;
 
     // Determine the list of true (i.e. parallel conforming) essential boundary
     // dofs, defined by the boundary attributes marked as essential (Dirichlet)
@@ -241,7 +240,7 @@ void laplace_psi_ab(
 int find_apex_vertex(Mesh *mesh, Vector& apex)
 {
     int apex_vertex = 0;
-    double distance = numeric_limits<double>::max();
+    double distance = std::numeric_limits<double>::max();
     for (int i = 0; i < mesh->GetNV(); i++) {
         double *vertices = mesh->GetVertex(i);
         double this_distance = (vertices[0]-apex[0]) * (vertices[0]-apex[0])
@@ -257,7 +256,7 @@ int find_apex_vertex(Mesh *mesh, Vector& apex)
 
 // Set the gradient in each vertex to be the average of the gradient in the
 // centers of the surrounding elements
-void get_vertex_gradients(GridFunction& x, Mesh& mesh, Table* v2e, vector<Vector>& grads)
+void get_vertex_gradients(GridFunction& x, Mesh& mesh, Table* v2e, std::vector<Vector>& grads)
 {
     MFEM_ASSERT(grads.size() >= mesh.GetNV(), "grads is to small");
 
@@ -311,17 +310,17 @@ void define_fibers(
     const double *phi_lv,
     const double *phi_rv,
     const double *psi_ab,
-    vector<Vector>& grad_phi_epi,
-    vector<Vector>& grad_phi_lv,
-    vector<Vector>& grad_phi_rv,
-    vector<Vector>& grad_psi_ab,
+    std::vector<Vector>& grad_phi_epi,
+    std::vector<Vector>& grad_phi_lv,
+    std::vector<Vector>& grad_phi_rv,
+    std::vector<Vector>& grad_psi_ab,
     double alpha_endo,
     double alpha_epi,
     double beta_endo,
     double beta_epi,
-    vector<Vector>& F,
-    vector<Vector>& S,
-    vector<Vector>& T)
+    std::vector<Vector>& F,
+    std::vector<Vector>& S,
+    std::vector<Vector>& T)
 {
 
     int num_vertices = mesh->GetNV();
@@ -410,12 +409,12 @@ int main(int argc, char *argv[])
     args.Parse();
 
     if (!args.Good()) {
-        args.PrintUsage(cout);
+        args.PrintUsage(std::cout);
         exit(1);
     }
 
     if (opts.verbose > 1)
-        args.PrintOptions(cout);
+        args.PrintOptions(std::cout);
 
     // Set the basename of the mesh
     opts.mesh_basename = remove_extension(basename(std::string(opts.mesh_file)));
@@ -437,14 +436,14 @@ int main(int argc, char *argv[])
     clock_gettime(CLOCK_MONOTONIC, &t1);
 
     if (opts.verbose > 1) {
-        cout << "Loaded meshfile '" << opts.mesh_file << "' "
+        std::cout << "Loaded meshfile '" << opts.mesh_file << "' "
              << "consisting of " << mesh.GetNV() << " vertices "
-             << "and " << mesh.GetNE() << " elements" << endl;
+             << "and " << mesh.GetNE() << " elements" << std::endl;
 
     }
 
     if (opts.verbose)
-        log_timing(cout, "Mesh load", timespec_duration(t0, t1));
+        log_timing(std::cout, "Mesh load", timespec_duration(t0, t1));
 
     // Set the apex node based on the prescribed apex coordinate.
     int apex = 0;
@@ -455,7 +454,7 @@ int main(int argc, char *argv[])
 
         if (opts.verbose > 1) {
             double *closest_vertex = mesh.GetVertex(apex);
-            cout << setprecision(2)
+            std::cout << std::setprecision(2)
                  << "Found closest vertex to prescribed apex "
                  << "("  << opts.prescribed_apex[0]
                  << ", " << opts.prescribed_apex[1]
@@ -464,11 +463,11 @@ int main(int argc, char *argv[])
                  << "("  << closest_vertex[0]
                  << ", " << closest_vertex[1]
                  << ", " << closest_vertex[2]
-                 << ")." << endl;
+                 << ")." << std::endl;
 
         }
         if (opts.verbose)
-            log_timing(cout, "Find apex", timespec_duration(t0, t1));
+            log_timing(std::cout, "Find apex", timespec_duration(t0, t1));
     }
 
     // Set up the vertex to element table
@@ -477,76 +476,76 @@ int main(int argc, char *argv[])
     // Solve the Laplace equation from EPI (1.0) to (LV_ENDO union RV_ENDO) (0.0)
     // and calculate the gradients
     GridFunction x_phi_epi;
-    vector<Vector> grad_phi_epi(mesh.GetNV());
+    std::vector<Vector> grad_phi_epi(mesh.GetNV());
     {
         clock_gettime(CLOCK_MONOTONIC, &t0);
         laplace_phi_epi(&x_phi_epi, &mesh, &opts);
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose)
-            log_timing(cout, "phi_epi", timespec_duration(t0, t1));
+            log_timing(std::cout, "phi_epi", timespec_duration(t0, t1));
 
         clock_gettime(CLOCK_MONOTONIC, &t0);
         get_vertex_gradients(x_phi_epi, mesh, vertex_to_element_table, grad_phi_epi);
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose)
-            log_timing(cout, "grad_phi_epi", timespec_duration(t0, t1));
+            log_timing(std::cout, "grad_phi_epi", timespec_duration(t0, t1));
     }
 
 
     // Solve the Laplace equation from LV_ENDO (1.0) to (RV_ENDO union EPI) (0.0)
     // and calculate the gradients
     GridFunction x_phi_lv;
-    vector<Vector> grad_phi_lv(mesh.GetNV());
+    std::vector<Vector> grad_phi_lv(mesh.GetNV());
     {
         clock_gettime(CLOCK_MONOTONIC, &t0);
         laplace_phi_lv(&x_phi_lv, &mesh, &opts);
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose)
-            log_timing(cout, "phi_lv", timespec_duration(t0, t1));
+            log_timing(std::cout, "phi_lv", timespec_duration(t0, t1));
 
         clock_gettime(CLOCK_MONOTONIC, &t0);
         get_vertex_gradients(x_phi_lv, mesh, vertex_to_element_table, grad_phi_lv);
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose)
-            log_timing(cout, "grad_phi_lv", timespec_duration(t0, t1));
+            log_timing(std::cout, "grad_phi_lv", timespec_duration(t0, t1));
     }
 
 
     // Solve the Laplace equation from RV_ENDO (1.0) to (LV_ENDO union EPI) (0.0)
     // and calculate the gradients
     GridFunction x_phi_rv;
-    vector<Vector> grad_phi_rv(mesh.GetNV());
+    std::vector<Vector> grad_phi_rv(mesh.GetNV());
     {
         clock_gettime(CLOCK_MONOTONIC, &t0);
         laplace_phi_rv(&x_phi_rv, &mesh, &opts);
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose)
-            log_timing(cout, "phi_rv", timespec_duration(t0, t1));
+            log_timing(std::cout, "phi_rv", timespec_duration(t0, t1));
 
         clock_gettime(CLOCK_MONOTONIC, &t0);
         get_vertex_gradients(x_phi_rv, mesh, vertex_to_element_table, grad_phi_rv);
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose)
-            log_timing(cout, "grad_phi_rv", timespec_duration(t0, t1));
+            log_timing(std::cout, "grad_phi_rv", timespec_duration(t0, t1));
     }
 
 
     // Solve the Laplace equation from BASE (1.0) to APEX (0.0)
     // and calculate the gradients
     GridFunction x_psi_ab;
-    vector<Vector> grad_psi_ab(mesh.GetNV());
+    std::vector<Vector> grad_psi_ab(mesh.GetNV());
     {
         clock_gettime(CLOCK_MONOTONIC, &t0);
         laplace_psi_ab(&x_psi_ab, &mesh, apex, &opts);
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose)
-            log_timing(cout, "psi_ab", timespec_duration(t0, t1));
+            log_timing(std::cout, "psi_ab", timespec_duration(t0, t1));
 
         clock_gettime(CLOCK_MONOTONIC, &t0);
         get_vertex_gradients(x_psi_ab, mesh, vertex_to_element_table, grad_psi_ab);
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose)
-            log_timing(cout, "grad_psi_ab", timespec_duration(t0, t1));
+            log_timing(std::cout, "grad_psi_ab", timespec_duration(t0, t1));
     }
 
     delete vertex_to_element_table;
@@ -557,9 +556,9 @@ int main(int argc, char *argv[])
     const double *phi_rv  = x_phi_rv.Read();
     const double *psi_ab  = x_psi_ab.Read();
 
-    vector<Vector> F(mesh.GetNV()); // Longitudinal
-    vector<Vector> S(mesh.GetNV()); // Sheet normal
-    vector<Vector> T(mesh.GetNV()); // Transverse
+    std::vector<Vector> F(mesh.GetNV()); // Longitudinal
+    std::vector<Vector> S(mesh.GetNV()); // Sheet normal
+    std::vector<Vector> T(mesh.GetNV()); // Transverse
 
     double alpha_endo =  40.0;
     double alpha_epi  = -50.0;
@@ -577,12 +576,12 @@ int main(int argc, char *argv[])
     // Save the mesh and solutions
     {
         // Output the normal solutions in the mfem subdirectory
-        string mfem_output_dir(opts.output_dir);
+        std::string mfem_output_dir(opts.output_dir);
         mfem_output_dir += "/mfem";
         mksubdir(mfem_output_dir);
 
 #ifdef DEBUG
-        string debug_dir = mfem_output_dir + "/debug";
+        std::string debug_dir = mfem_output_dir + "/debug";
         mksubdir(debug_dir);
 
         debug_print_to_file(grad_phi_lv, debug_dir, "/grad_phi_lv.txt");
@@ -594,9 +593,9 @@ int main(int argc, char *argv[])
 
 #endif
         // Save the MFEM mesh
-        string mesh_out(mfem_output_dir);
+        std::string mesh_out(mfem_output_dir);
         mesh_out += "/" + opts.mesh_basename + ".mesh";
-        ofstream mesh_ofs(mesh_out.c_str());
+        std::ofstream mesh_ofs(mesh_out.c_str());
         mesh_ofs.precision(8);
         mesh.Print(mesh_ofs);
 
@@ -609,7 +608,7 @@ int main(int argc, char *argv[])
         // Save in paraview as well
         ParaViewDataCollection *pd = NULL;
         if (opts.paraview) {
-            string paraview_path(opts.output_dir);
+            std::string paraview_path(opts.output_dir);
             paraview_path += "/paraview";
             mksubdir(paraview_path);
 
