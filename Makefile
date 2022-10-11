@@ -77,9 +77,15 @@ ldrb-gpu: LFLAGS=$(SERIAL_LFLAGS)
 ldrb-gpu: ldrb-gpu.o calculus.o util.o
 	$(CC) $(CFLAGS) $(IFLAGS) -o $@ $^ $(LFLAGS)
 
+tests: MFEM_ROOT=$(MFEM_SERIAL_ROOT)
+tests: IFLAGS=$(SERIAL_IFLAGS)
+tests: LFLAGS=$(SERIAL_LFLAGS)
+tests: tests.o calculus.o util.o
+	$(CC) $(CFLAGS) $(IFLAGS) -o $@ $^ $(LFLAGS)
+
 %.o: %.cpp
 	$(CC) -c $(CFLAGS) $(IFLAGS) -o $@ $^
 
 .PHONY: clean
 clean:
-	$(RM) ldrb-gpu ldrb-gpup calculus.o ldrb-gpu.o util.o
+	$(RM) ldrb-gpu ldrb-gpup tests calculus.o ldrb-gpu.o util.o tests.o
