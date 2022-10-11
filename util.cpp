@@ -49,7 +49,8 @@ std::string remove_extension(std::string const& filename)
     return filename.substr(0, index_of_extension);
 }
 
-void mksubdir(std::string const& subdir) {
+void mksubdir(std::string const& subdir)
+{
     const char *cwd = getcwd(NULL, 0);
     std::string path(cwd);
     path += "/";
@@ -57,3 +58,33 @@ void mksubdir(std::string const& subdir) {
     mkdir(path.c_str(), 0777);
 }
 
+// Save a solution (in form of a GridFunction) to a file named "<prefix><suffix>".
+void save_solution(
+    mfem::GridFunction *x,
+    std::string const& dir,
+    std::string const& base_name,
+    std::string const& suffix)
+{
+    std::string filename(dir);
+    filename += "/";
+    filename += base_name;
+    filename += suffix;
+    std::ofstream x_ofs(filename.c_str());
+    x_ofs.precision(8);
+    x->Save(x_ofs);
+}
+
+#ifdef DEBUG
+void debug_print_to_file(
+    std::vector<mfem::Vector>& x,
+    std::string const& dir,
+    std::string const& filename)
+{
+    std::string path = dir + filename;
+    std::ofstream fout(path.c_str());
+    for (int i = 0; i < x.size(); i++) {
+        mfem::Vector v = x[i];
+        fout << v[0] << ", " << v[1] << ", " <<  v[2] << std::endl;
+    }
+}
+#endif

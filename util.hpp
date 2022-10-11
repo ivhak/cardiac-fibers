@@ -20,11 +20,17 @@
 #include <time.h>
 #include <fstream>
 #include <iomanip>
+#include "mfem.hpp"
 
 double timespec_duration(struct timespec t0, struct timespec t1);
 void log_timing(std::ostream& out, const char *log_string, double seconds);
 std::string basename(std::string const& filename);
 std::string remove_extension(std::string const& filename);
 void mksubdir(std::string const& subdir);
+
+void save_solution(mfem::GridFunction *x, std::string const& dir, std::string const& base_name, std::string const& suffix);
+#ifdef DEBUG
+void debug_print_to_file(std::vector<mfem::Vector>& x, std::string const& dir, std::string const& filename);
+#endif
 
 #endif
