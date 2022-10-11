@@ -34,8 +34,9 @@ void log_timing(
     const char *log_string,
     double seconds)
 {
-    out << "[" << std::left << std::setw(12) << log_string << "]: "
-        << std::right << std::fixed << std::setw(12) << std::setprecision(6)<< seconds << " s" << std::endl;
+    out << "[" << std::left << std::setw(15) << log_string << "]: "
+        << std::right << std::fixed << std::setw(12)
+        << std::setprecision(6)<< seconds << " s" << std::endl;
 }
 
 std::string basename(std::string const& path)
@@ -72,6 +73,25 @@ void save_solution(
     std::ofstream x_ofs(filename.c_str());
     x_ofs.precision(8);
     x->Save(x_ofs);
+}
+
+// Convert a vector<Vector> to a 3D GridFunction
+void vertex_vector_to_grid_function(
+    mfem::Mesh *mesh,
+    std::vector<mfem::Vector>& x,
+    mfem::GridFunction *gf)
+{
+    mfem::FiniteElementCollection *fec = new mfem::H1_FECollection(1, mesh->Dimension());
+    mfem::FiniteElementSpace *fespace = new mfem::FiniteElementSpace(mesh, fec, 3, mfem::Ordering::byVDIM);
+    gf->SetSpace(fespace);
+    mfem::Vector vals(3*mesh->GetNV());
+    for (int i = 0; i < mesh->GetNV(); i++) {
+        mfem::Vector v = x[i];
+        vals(3*i+0) = v(0);
+        vals(3*i+1) = v(1);
+        vals(3*i+2) = v(2);
+    }
+    gf->SetFromTrueDofs(vals);
 }
 
 #ifdef DEBUG

@@ -320,6 +320,7 @@ void get_vertex_gradients(GridFunction& x, Mesh& mesh, Table* v2e, std::vector<V
     }
 }
 
+
 void define_fibers(
     Mesh *mesh,
     const double *phi_epi,
@@ -516,8 +517,8 @@ int main(int argc, char *argv[])
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose)
             log_timing(std::cout, "grad_phi_epi", timespec_duration(t0, t1));
-    }
 
+    }
 
     // Solve the Laplace equation from LV_ENDO (1.0) to (RV_ENDO union EPI) (0.0)
     // and calculate the gradients
@@ -592,6 +593,7 @@ int main(int argc, char *argv[])
     double beta_endo  = -65.0;
     double beta_epi   =  25.0;
 
+    clock_gettime(CLOCK_MONOTONIC, &t0);
     define_fibers(
             &mesh,
             phi_epi,      phi_lv,      phi_rv,      psi_ab,
@@ -599,6 +601,9 @@ int main(int argc, char *argv[])
             alpha_endo, alpha_epi, beta_endo, beta_epi,
             F, S, T
     );
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    if (opts.verbose)
+        log_timing(std::cout, "define_fibers", timespec_duration(t0, t1));
 
     // Save the mesh and solutions
     {
@@ -618,6 +623,12 @@ int main(int argc, char *argv[])
         debug_print_to_file(S,           debug_dir, "/S.txt");
         debug_print_to_file(T,           debug_dir, "/T.txt");
 
+        GridFunction grad_phi_epi_gf, grad_phi_lv_gf, grad_phi_rv_gf, grad_psi_ab_gf;
+        vertex_vector_to_grid_function(&mesh, grad_phi_epi, &grad_phi_epi_gf);
+        vertex_vector_to_grid_function(&mesh, grad_phi_lv,  &grad_phi_lv_gf);
+        vertex_vector_to_grid_function(&mesh, grad_phi_rv,  &grad_phi_rv_gf);
+        vertex_vector_to_grid_function(&mesh, grad_psi_ab,  &grad_psi_ab_gf);
+
 #endif
         // Save the MFEM mesh
         std::string mesh_out(mfem_output_dir);
@@ -632,6 +643,13 @@ int main(int argc, char *argv[])
         save_solution(&x_phi_rv,  mfem_output_dir, opts.mesh_basename, "_phi_rv.gf");
         save_solution(&x_psi_ab,  mfem_output_dir, opts.mesh_basename, "_psi_ab.gf");
 
+#ifdef DEBUG
+        save_solution(&grad_phi_epi_gf, mfem_output_dir, opts.mesh_basename, "_grad_phi_epi.gf");
+        save_solution(&grad_phi_lv_gf,  mfem_output_dir, opts.mesh_basename, "_grad_phi_lv.gf");
+        save_solution(&grad_phi_rv_gf,  mfem_output_dir, opts.mesh_basename, "_grad_phi_rv.gf");
+        save_solution(&grad_psi_ab_gf,  mfem_output_dir, opts.mesh_basename, "_grad_psi_ab.gf");
+#endif
+
         // Save in paraview as well
         ParaViewDataCollection *pd = NULL;
         if (opts.paraview) {
@@ -642,14 +660,18 @@ int main(int argc, char *argv[])
             pd = new ParaViewDataCollection(opts.mesh_basename, &mesh);
             pd->SetPrefixPath(paraview_path);
             pd->RegisterField("phi epi", &x_phi_epi);
+#ifdef DEBUG
+            pd->RegisterField("grad phi epi", &grad_phi_epi_gf);
+            pd->RegisterField("grad phi lv",  &grad_phi_lv_gf);
+            pd->RegisterField("grad phi rv",  &grad_phi_rv_gf);
+            pd->RegisterField("grad psi ab",  &grad_psi_ab_gf);
+#endif
             pd->RegisterField("phi lv",  &x_phi_lv);
             pd->RegisterField("phi rv",  &x_phi_rv);
             pd->RegisterField("psi ab",  &x_psi_ab);
             pd->SetLevelsOfDetail(1);
             pd->SetDataFormat(VTKFormat::BINARY);
-            pd->SetHighOrderOutput(true);
-            pd->SetCycle(0);
-            pd->SetTime(0.0);
+            pd->SetHighOrderOutput(false);
             pd->Save();
         }
 
