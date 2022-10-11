@@ -94,7 +94,7 @@ void laplace(
     // conditions a little different, as it is to be enforced on a single node
     // rather than a whole boundary surface. To do so, we make sure that the
     // apex is en essential true dof, and then we project the wanted value, in
-    // this case 1.0, to only that node.
+    // this case 0.0, to only that node.
     if (apex >= 0) {
         // Initialize the internal data needed in the finite element space
         x->FESpace()->BuildDofToArrays();
@@ -105,7 +105,7 @@ void laplace(
         Array<int> node_disp(1);
         node_disp[0] = apex;
         Vector node_disp_value(1);
-        node_disp_value[0] = 1.0;
+        node_disp_value[0] = 0.0;
 
         VectorConstantCoefficient node_disp_value_coeff(node_disp_value);
 
@@ -246,9 +246,9 @@ void laplace_psi_ab(
     essential_boundaries[BASE-1] = 1;
 
     nonzero_essential_boundaries = 0;
+    nonzero_essential_boundaries[BASE-1] = 1;
 
     zero_essential_boundaries = 0;
-    zero_essential_boundaries[BASE-1] = 1;
 
     laplace(x, mesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, apex, opts);
 
