@@ -38,14 +38,14 @@ static void cross(Vector& c, Vector &a, Vector &b) {
 //   Shoemake, K. (1985, July). Animating rotation with quaternion curves. In
 //   Proceedings of the 12th annual conference on Computer graphics and
 //   interactive techniques (pp. 245-254).
-static void rot2quat(Vector& q, DenseMatrix& Q)
+void rot2quat(Vector& q, DenseMatrix& Q)
 {
     MFEM_ASSERT(Q.Width() == 3 && Q.Height() == 3, "Q is of the wrong size, should be 3x3.");
     MFEM_ASSERT(q.Size() == 4, "q is the wrong size, should be 4.");
 
-    const double M11=Q(0,0), M21=Q(1,0), M31=Q(2,0);
-    const double M12=Q(0,1), M22=Q(1,1), M32=Q(2,1);
-    const double M13=Q(0,2), M23=Q(1,2), M33=Q(2,2);
+    const double M11=Q(0,0), M12=Q(1,0), M13=Q(2,0);
+    const double M21=Q(0,1), M22=Q(1,1), M23=Q(2,1);
+    const double M31=Q(0,2), M32=Q(1,2), M33=Q(2,2);
 
     const double w2 = 0.25 * (1 + M11 + M22 + M33);
     const double err = 1e-6;
@@ -89,12 +89,13 @@ static void rot2quat(Vector& q, DenseMatrix& Q)
 //   Shoemake, K. (1985, July). Animating rotation with quaternion curves. In
 //   Proceedings of the 12th annual conference on Computer graphics and
 //   interactive techniques (pp. 245-254).
-static void quat2rot(DenseMatrix& Q, Vector& q)
+void quat2rot(DenseMatrix& Q, Vector& q)
 {
     MFEM_ASSERT(q.Size() == 4, "q is of the wrong size, should be 4.");
     MFEM_ASSERT(Q.Width() == 3 && Q.Height() == 3, "Q is of the wrong size, should be 3x3.");
 
     const double w = q(0), x = q(1), y = q(2), z = q(3);
+    MFEM_ASSERT(w*w + x*x + y*y + z*z == 1.0, "Quaternion not normalized");
 
     const double x2 = x*x;
     const double y2 = y*y;
@@ -114,7 +115,7 @@ static void quat2rot(DenseMatrix& Q, Vector& q)
     Q(2,0) =       2.0*xz - 2.0*wy;
 
     Q(0,1) =       2.0*xy - 2.0*wz;
-    Q(1,1) = 1.0 - 2.0*x2 - 2.0*y2;
+    Q(1,1) = 1.0 - 2.0*x2 - 2.0*z2;
     Q(2,1) =       2.0*yz + 2.0*wx;
 
     Q(0,2) =       2.0*xz + 2.0*wy;
@@ -147,48 +148,46 @@ static void slerp(Vector& q, Vector& q1, Vector &q2, double t)
 
 }
 
-// Given two vectors grad_psi and grad_phi, grad_psi being a vector pointing in
-// the apicobasal direction and grad_phi a vector pointing in the transmural
+// Given two vectors u and v, u being a vector pointing in
+// the apicobasal direction and v a vector pointing in the transmural
 // direction, return a 3x3 orthogonal matrix representing the coordinate system
 // for assigning fiber orientation within the myocardium.
 //
 // As defined in Function 2 in the supplementary material of Bayer2012.
-void axis(DenseMatrix& Q, Vector& grad_psi, Vector &grad_phi)
+void axis(DenseMatrix& Q, Vector& u, Vector &v)
 {
 
-    MFEM_ASSERT(grad_psi.Size() == 3, "grad_psi is the wrong size");
-    MFEM_ASSERT(grad_phi.Size() == 3, "grad_phi is the wrong size");
+    MFEM_ASSERT(u.Size() == 3, "u is the wrong size");
+    MFEM_ASSERT(v.Size() == 3, "v is the wrong size");
     MFEM_ASSERT(Q.Width() == 3 && Q.Height() == 3, "Q is of the wrong size, should be 3x3.");
 
     Vector e_0(3), e_1(3), e_2(3);
 
-    // e_1 = grad_psi / ||grad_psi||
-    e_1 = grad_psi;
-    e_1 /= grad_psi.Norml2();
+    // e_1 = u / ||u||
+    e_1 = u;
+    e_1 /= u.Norml2();
 
     // e_2 = u / || u ||
-    // where u = grad_phi - (e_0*grad_phi)e_0
+    // where u = v - (e_0*v)e_0
     //
-    // Normalize grad_phi as an initial guess for e_0
-    e_0 = grad_phi;
-    e_0 /= grad_phi.Norml2();
+    // Normalize v as an initial guess for e_0
+    e_2 = v;
+    e_2 /= v.Norml2();
 
-    // Calculate u = grad_phi - t*e_0
-    // where t = (e_0 * grad_phi) is a scalar
-    Vector u(3);;
+    Vector e1_dot_e2_e1(3);
     {
-        Vector e_0_t;
-        const double t = e_1 * e_2;
-        e_0_t = e_0;
-        e_0_t *= t;
-        u = grad_phi - e_0_t;
+        const double e1_dot_e2 = e_1 * e_2;
+        e1_dot_e2_e1 = e_1;
+        e1_dot_e2_e1 *= e1_dot_e2;
     }
+    e_2 -= e1_dot_e2_e1;
+    e_2 /= e_2.Norml2();
 
-    e_2 = u;
-    e_2 /= u.Norml2();
 
     // e_0 = e_1 x e_2
     cross(e_0, e_1, e_2);
+
+    e_0 /= e_0.Norml2();
 
     Q.SetCol(0, e_0); // Circumferential direction
     Q.SetCol(1, e_1); // Apicobasal direction

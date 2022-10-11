@@ -21,6 +21,8 @@
 
 const double PI=3.14159265;
 
+void quat2rot(mfem::DenseMatrix& Q, mfem::Vector& q);
+void rot2quat(mfem::Vector& q, mfem::DenseMatrix& Q);
 void orient(mfem::DenseMatrix& Q_out, mfem::DenseMatrix& Q, double a, double b);
 void axis(mfem::DenseMatrix& Q, mfem::Vector& psi, mfem::Vector &phi);
 void bislerp(mfem::DenseMatrix& Qab, mfem::DenseMatrix& Qa, mfem::DenseMatrix& Qb, double t);
