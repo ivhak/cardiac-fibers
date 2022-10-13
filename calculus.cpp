@@ -81,6 +81,9 @@ void rot2quat(Vector& q, DenseMatrix& Q)
     q(1) = x;
     q(2) = y;
     q(3) = z;
+
+    // Make sure the quaternion is normalized
+    q /= q.Norml2();
 }
 
 // Convert the quaternion q to a 3x3 rotation matrix Q, using the algorithm
@@ -95,7 +98,12 @@ void quat2rot(DenseMatrix& Q, Vector& q)
     MFEM_ASSERT(Q.Width() == 3 && Q.Height() == 3, "Q is of the wrong size, should be 3x3.");
 
     const double w = q(0), x = q(1), y = q(2), z = q(3);
-    MFEM_ASSERT(w*w + x*x + y*y + z*z == 1.0, "Quaternion not normalized");
+
+    {
+        const double dot = w*w + x*x + y*y + z*z;
+        MFEM_ASSERT(dot - 1.0 <= 1e-12, "Quaternion not normalized");
+    }
+
 
     const double x2 = x*x;
     const double y2 = y*y;
