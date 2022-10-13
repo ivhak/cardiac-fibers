@@ -422,6 +422,11 @@ int main(int argc, char *argv[])
     opts.prescribed_apex = Vector(3);
     opts.paraview = false;
 
+    opts.alpha_endo =  40.0;
+    opts.alpha_epi  = -50.0;
+    opts.beta_endo  = -65.0;
+    opts.beta_epi   =  25.0;
+
     // Parse command-line options
     OptionsParser args(argc, argv);
     args.AddOption(&opts.verbose,
@@ -443,6 +448,18 @@ int main(int argc, char *argv[])
             "-p",  "--paraview",
             "-np", "--no-paraview",
             "Save data files for ParaView (paraview.org) visualization.");
+    args.AddOption(&opts.alpha_endo,
+            "-ao", "--alpha-endo",
+            "Alpha angle in endocardium.");
+    args.AddOption(&opts.alpha_epi,
+            "-ai", "--alpha-epi",
+            "Alpha angle in epicardium.");
+    args.AddOption(&opts.beta_endo,
+            "-bo", "--beta-endo",
+            "Beta angle in endocardium.");
+    args.AddOption(&opts.beta_epi,
+            "-bi", "--beta-epi",
+            "Beta angle in epicardium.");
     args.Parse();
 
     if (!args.Good()) {
@@ -596,17 +613,13 @@ int main(int argc, char *argv[])
     std::vector<Vector> S(mesh.GetNV()); // Sheet normal
     std::vector<Vector> T(mesh.GetNV()); // Transverse
 
-    double alpha_endo =  40.0;
-    double alpha_epi  = -50.0;
-    double beta_endo  = -65.0;
-    double beta_epi   =  25.0;
 
     clock_gettime(CLOCK_MONOTONIC, &t0);
     define_fibers(
             &mesh,
             phi_epi,      phi_lv,      phi_rv,      psi_ab,
             grad_phi_epi, grad_phi_lv, grad_phi_rv, grad_psi_ab,
-            alpha_endo, alpha_epi, beta_endo, beta_epi,
+            opts.alpha_endo, opts.alpha_epi, opts.beta_endo, opts.beta_epi,
             F, S, T
     );
     clock_gettime(CLOCK_MONOTONIC, &t1);

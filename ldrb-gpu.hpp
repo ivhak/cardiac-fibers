@@ -27,6 +27,10 @@ typedef struct {
     const char *device_config;
     bool paraview;
     mfem::Vector prescribed_apex;
+    double alpha_endo;
+    double alpha_epi;
+    double beta_endo;
+    double beta_epi;
 } Options;
 
 typedef enum {
