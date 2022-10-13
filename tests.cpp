@@ -132,7 +132,7 @@ bool test_quaternions(void)
     rot2quat(q, A);
     quat2rot(B, q);
 
-    std::cout << " Test1: A == quat2rot(rot2quat(A)): ";
+    std::cout << " Test 1: A == quat2rot(rot2quat(A)): ";
     if (!Matrix3D_equal(A, B, 1e-12)) {
         std::cout << "[FAILED]" << std::endl;
         std::cout << " A = " << std::endl;
