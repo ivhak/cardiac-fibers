@@ -23,6 +23,8 @@
 #include "util.hpp"
 #include "ldrb-gpu.hpp"
 
+#define CLAMP(x, low, high)  (((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
+
 using namespace mfem;
 
 void laplace(
@@ -350,36 +352,42 @@ void define_fibers(
     MFEM_ASSERT(S.size()            == num_vertices, "S is the wrong size");
     MFEM_ASSERT(T.size()            == num_vertices, "T is the wrong size");
 
-#define alpha_s(d) (alpha_endo*(1-(d)) - alpha_endo*(d))
-#define alpha_w(d) (alpha_endo*(1-(d)) - alpha_epi *(d))
-#define beta_s(d)  (beta_endo *(1-(d)) - beta_endo *(d))
-#define beta_w(d)  (beta_endo *(1-(d)) - beta_epi  *(d))
+#define alpha_s(d) (alpha_endo*(1.0-(d)) - alpha_endo*(d))
+#define alpha_w(d) (alpha_endo*(1.0-(d)) + alpha_epi *(d))
+#define beta_s(d)  (beta_endo *(1.0-(d)) - beta_endo *(d))
+#define beta_w(d)  (beta_endo *(1.0-(d)) + beta_epi  *(d))
 
     for (int i = 0; i < num_vertices; i++) {
-        const double phi_epi_i = phi_epi[i];
-        const double phi_lv_i = phi_lv[i];
-        const double phi_rv_i = phi_rv[i];
 
-        Vector grad_phi_epi_i = grad_phi_epi[i];
-        Vector grad_phi_lv_i  = grad_phi_lv[i];
-        Vector grad_phi_rv_i  = grad_phi_rv[i];
-        Vector grad_psi_ab_i  = grad_psi_ab[i];
+        const double phi_epi_i = CLAMP(phi_epi[i], 0.0, 1.0);
+        const double phi_lv_i  = CLAMP(phi_lv[i],  0.0, 1.0);
+        const double phi_rv_i  = CLAMP(phi_rv[i],  0.0, 1.0);
 
-        const double t = phi_rv_i / (phi_lv_i + phi_rv_i);
+        // TODO: What to do here?
+        double t;
+        if (phi_lv_i + phi_rv_i == 0.0) {
+            t = 0.0;
+        } else {
+            t = phi_rv_i / (phi_lv_i + phi_rv_i);
+        }
+
         DenseMatrix Q_lv(3,3);
         {
             DenseMatrix T(3,3);
-            Vector grad_phi_lv_i_neg = grad_phi_lv_i;
-            grad_phi_lv_i_neg.Neg();
-            axis(T, grad_psi_ab_i, grad_phi_lv_i_neg);
+            Vector grad_phi_lv_i_neg(3);
+            {
+                grad_phi_lv_i_neg = grad_phi_lv[i];
+                grad_phi_lv_i_neg.Neg();
+            }
+            axis(T, grad_psi_ab[i], grad_phi_lv_i_neg);
             orient(Q_lv, T, alpha_s(t), beta_s(t));
         }
 
         DenseMatrix Q_rv(3,3);
         {
             DenseMatrix T(3,3);
-            axis(T, grad_psi_ab_i, grad_phi_rv_i);
-            orient(Q_lv, T, alpha_s(t), beta_s(t));
+            axis(T, grad_psi_ab[i], grad_phi_rv[i]);
+            orient(Q_rv, T, alpha_s(t), beta_s(t));
         }
 
         DenseMatrix Q_endo(3,3);
@@ -388,7 +396,7 @@ void define_fibers(
         DenseMatrix Q_epi(3,3);
         {
             DenseMatrix T(3,3);
-            axis(T, grad_psi_ab_i, grad_phi_epi_i);
+            axis(T, grad_psi_ab[i], grad_phi_epi[i]);
             orient(Q_epi, T, alpha_w(phi_epi_i), beta_w(phi_epi_i));
         }
 
