@@ -251,6 +251,8 @@ void bislerp(DenseMatrix& Qab, DenseMatrix& Qa, DenseMatrix& Qb, double t)
 {
     const double tol = 1e-12;
 
+    MFEM_ASSERT(t >= 0.0 && t <= 1.0, "t is not in [0, 1].");
+
     // Translate the rotation matrices Qa and Qb into quaternions
     Vector qa(4), qb(4);
     rot2quat(qa, Qa);
@@ -286,7 +288,7 @@ void bislerp(DenseMatrix& Qab, DenseMatrix& Qa, DenseMatrix& Qb, double t)
     for (int i = 0; i < 8; i++) {
         Vector v = *quat_array[i];
         const double dot = abs(qb * v);
-        if (dot < max_dot) {
+        if (dot > max_dot) {
             max_dot = dot;
             qm = v;
         }
@@ -298,7 +300,7 @@ void bislerp(DenseMatrix& Qab, DenseMatrix& Qa, DenseMatrix& Qb, double t)
         return;
     }
 
-    Vector q;
+    Vector q(4);
     slerp(q, qm, qb, t);
     quat2rot(Qab, q);
 }
