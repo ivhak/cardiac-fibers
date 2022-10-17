@@ -48,7 +48,7 @@ void rot2quat(Vector& q, DenseMatrix& Q)
     const double M31=Q(0,2), M32=Q(1,2), M33=Q(2,2);
 
     const double w2 = 0.25 * (1 + M11 + M22 + M33);
-    const double err = 1e-6;
+    const double err = 1e-15;
 
     double w, x, y, z;
 
@@ -143,16 +143,29 @@ static void slerp(Vector& q, Vector& q1, Vector &q2, double t)
         q.Neg();
     }
 
-    // Slerp(q1, q2, t) = ((sin(1-t)*theta)/sin(theta))q1 + ((sin(t)*theta)/sin(theta))q2
-    // where theta = acos(q1 dot q2)
-    const double angle = acos(dot);
-    const double a = sin(angle * (1-t))/sin(angle);
-    const double b = sin(angle * t)/sin(angle);
+    // XXX: The LLNL/cardiod implementation does this. Verify why!
+    if (dot < 1.0 - 1e-4) {
+        // Slerp(q1, q2, t) = ((sin(1-t)*theta)/sin(theta))q1 + ((sin(t)*theta)/sin(theta))q2
+        // where theta = acos(q1 dot q2)
+        const double angle = acos(dot);
+        const double a = sin(angle * (1-t))/sin(angle);
+        const double b = sin(angle * t)/sin(angle);
 
-    Vector q1a = q1;
-    q1a *= a;
-    q *= b;
-    q += q1a;
+        Vector q1a = q1;
+        q1a *= a;
+        q *= b;
+        q += q1a;
+    } else {
+        // Use linear interpolation
+        Vector a = q1;
+        q1 *= (1-t);
+
+        Vector b = q2;
+        q2 *= t;
+
+        q1 += q2;
+        q = q1;
+    }
 
 }
 
@@ -253,6 +266,16 @@ void bislerp(DenseMatrix& Qab, DenseMatrix& Qa, DenseMatrix& Qb, double t)
 
     MFEM_ASSERT(t >= 0.0 && t <= 1.0, "t is not in [0, 1].");
 
+    if (t <= tol) {
+        Qab = Qa;
+        return;
+    }
+
+    if (t >= 1.0 - tol) {
+        Qab = Qb;
+        return;
+    }
+
     // Translate the rotation matrices Qa and Qb into quaternions
     Vector qa(4), qb(4);
     rot2quat(qa, Qa);
@@ -283,25 +306,28 @@ void bislerp(DenseMatrix& Qab, DenseMatrix& Qa, DenseMatrix& Qb, double t)
     quat_array[6] = &k_qa;
     quat_array[7] = &k_qa_minus;
 
-    double max_dot = 0.0;
+    double max_abs_dot  = 0.0;
     Vector qm(4);
     for (int i = 0; i < 8; i++) {
         Vector v = *quat_array[i];
-        const double dot = abs(qb * v);
-        if (dot > max_dot) {
-            max_dot = dot;
+        const double abs_dot = abs(qb * v);
+        if (abs_dot > max_abs_dot) {
+            max_abs_dot = abs_dot;
             qm = v;
         }
     }
 
+#if 1
     // If the angle is very small, i.e. max_dot is very close to one, return Qb.
-    if (max_dot > 1-tol) {
+    if (max_abs_dot > 1-tol) {
         Qab = Qb;
         return;
     }
+#endif
 
     Vector q(4);
     slerp(q, qm, qb, t);
+    q /= q.Norml2();
     quat2rot(Qab, q);
 }
 

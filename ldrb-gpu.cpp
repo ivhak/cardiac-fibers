@@ -352,27 +352,31 @@ void define_fibers(
     MFEM_ASSERT(S.size()            == num_vertices, "S is the wrong size");
     MFEM_ASSERT(T.size()            == num_vertices, "T is the wrong size");
 
-#define alpha_s(d) (alpha_endo*(1.0-(d)) - alpha_endo*(d))
-#define alpha_w(d) (alpha_endo*(1.0-(d)) + alpha_epi *(d))
-#define beta_s(d)  (beta_endo *(1.0-(d)) - beta_endo *(d))
-#define beta_w(d)  (beta_endo *(1.0-(d)) + beta_epi  *(d))
-
+    const double tol = 1e-12;
     for (int i = 0; i < num_vertices; i++) {
 
         const double phi_epi_i = CLAMP(phi_epi[i], 0.0, 1.0);
         const double phi_lv_i  = CLAMP(phi_lv[i],  0.0, 1.0);
         const double phi_rv_i  = CLAMP(phi_rv[i],  0.0, 1.0);
 
-        // TODO: What to do here?
-        double t;
-        if (phi_lv_i + phi_rv_i == 0.0) {
-            t = 0.0;
+        // TODO: What to do here? TOLERANCE
+        double depth;
+        if (phi_lv_i + phi_rv_i < tol) {
+            depth = 0.5;
         } else {
-            t = phi_rv_i / (phi_lv_i + phi_rv_i);
+            depth = phi_rv_i / (phi_lv_i + phi_rv_i);
         }
 
+        const double alpha_s_d = alpha_endo*(1.0-depth) - alpha_endo*depth;
+        const double beta_s_d  = beta_endo *(1.0-depth) - beta_endo *depth;
+
+        const double alpha_w_epi = alpha_endo*(1.0-phi_epi_i) + alpha_epi * phi_epi_i;
+        const double beta_w_epi  = beta_endo *(1.0-phi_epi_i) + beta_epi  * phi_epi_i;
+
+
         DenseMatrix Q_lv(3,3);
-        {
+        Q_lv = 0.0;
+        if (phi_lv_i > tol) {
             DenseMatrix T(3,3);
             Vector grad_phi_lv_i_neg(3);
             {
@@ -380,24 +384,26 @@ void define_fibers(
                 grad_phi_lv_i_neg.Neg();
             }
             axis(T, grad_psi_ab[i], grad_phi_lv_i_neg);
-            orient(Q_lv, T, alpha_s(t), beta_s(t));
+            orient(Q_lv, T, alpha_s_d, beta_s_d);
         }
 
         DenseMatrix Q_rv(3,3);
-        {
+        Q_rv = 0.0;
+        if (phi_rv_i > tol) {
             DenseMatrix T(3,3);
             axis(T, grad_psi_ab[i], grad_phi_rv[i]);
-            orient(Q_rv, T, alpha_s(t), beta_s(t));
+            orient(Q_rv, T, alpha_s_d, beta_s_d);
         }
 
         DenseMatrix Q_endo(3,3);
-        bislerp(Q_endo, Q_lv, Q_rv, t);
+        bislerp(Q_endo, Q_lv, Q_rv, depth);
 
         DenseMatrix Q_epi(3,3);
-        {
+        Q_epi = 0.0;
+        if (phi_epi_i > tol) {
             DenseMatrix T(3,3);
             axis(T, grad_psi_ab[i], grad_phi_epi[i]);
-            orient(Q_epi, T, alpha_w(phi_epi_i), beta_w(phi_epi_i));
+            orient(Q_epi, T, alpha_w_epi, beta_w_epi);
         }
 
         DenseMatrix FST(3,3);

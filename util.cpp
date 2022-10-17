@@ -104,7 +104,9 @@ void debug_print_to_file(
     std::ofstream fout(path.c_str());
     for (int i = 0; i < x.size(); i++) {
         mfem::Vector v = x[i];
-        fout << v[0] << ", " << v[1] << ", " <<  v[2] << std::endl;
+        fout << v[0] << std::endl
+             << v[1] << std::endl
+             << v[2] << std::endl;
     }
 }
 #endif
