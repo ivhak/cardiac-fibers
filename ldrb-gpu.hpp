@@ -31,6 +31,10 @@ typedef struct {
     double alpha_epi;
     double beta_endo;
     double beta_epi;
+    int base_attr;
+    int epi_attr;
+    int lv_attr;
+    int rv_attr;
 } Options;
 
 typedef enum {

@@ -18,6 +18,8 @@
 #include "mfem.hpp"
 #include "calculus.hpp"
 
+#define CLAMP(x, low, high)  (((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
+
 using namespace mfem;
 
 // Cross product of two 3D vectors a and b, store in c.
@@ -26,7 +28,7 @@ static void cross(Vector& c, Vector &a, Vector &b) {
     MFEM_ASSERT(b.Size() == 3, "b is of the wrong size, should be 3.");
     MFEM_ASSERT(c.Size() == 3, "c is of the wrong size, should be 3.");
 
-    // a = b x c
+    // c = a x b
     c(0) = a(1)*b(2) - a(2)*b(1);
     c(1) = a(2)*b(0) - a(0)*b(2);
     c(2) = a(0)*b(1) - a(1)*b(0);
@@ -331,4 +333,251 @@ void bislerp(DenseMatrix& Qab, DenseMatrix& Qa, DenseMatrix& Qb, double t)
     quat2rot(Qab, q);
 }
 
+void laplace(
+    GridFunction *x,
+    Mesh& mesh,
+    Array<int> &ess_bdr,
+    Array<int> &nonzero_ess_bdr,
+    Array<int> &zero_ess_bdr,
+    int apex,
+    int verbose)
+{
+    // Define a finite element space on the mesh.
+    FiniteElementCollection *fec;
 
+    fec = new H1_FECollection(1, mesh.Dimension());
+    FiniteElementSpace * fespace = new FiniteElementSpace(&mesh, fec);
+    if (verbose > 1)
+        std::cout << "Number of finite element unknowns: " << fespace->GetTrueVSize() << std::endl;
+
+    // Determine the list of true (i.e. parallel conforming) essential boundary
+    // dofs, defined by the boundary attributes marked as essential (Dirichlet)
+    // and converting to a list of true dofs..
+    Array<int> ess_tdof_list;
+    MFEM_ASSERT(mesh.bdr_attributes.Size() != 0, "Boundary size cannot be zero.");
+
+    fespace->GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
+
+    // Set up the linear form b(.) which corresponds to the right-hand
+    // side of the FEM linear system, which in this case is (0,phi_i) where
+    // phi_i are the basis functions in fespace.
+    LinearForm b(fespace);
+    ConstantCoefficient zero(0.0);
+    b.AddDomainIntegrator(new DomainLFIntegrator(zero));
+    b.Assemble();
+
+    // Define the solution vector x as a finite element grid function
+    // corresponding to fespace. Initialize x with initial guess of zero, which
+    // satisfies the boundary conditions.
+    x->SetSpace(fespace);
+    *x = 0.0;
+
+    // Project the constant value 1.0 to all the essential boundaries marked as nonzero.
+    ConstantCoefficient nonzero_bdr(1.0);
+    x->ProjectBdrCoefficient(nonzero_bdr, nonzero_ess_bdr);
+
+    // Project the constant value 0.0 to all the essential boundaries marked as zero.
+    ConstantCoefficient zero_bdr(0.0);
+    x->ProjectBdrCoefficient(zero_bdr, zero_ess_bdr);
+
+    // For the laplacians involving the apex we need to treat the boundary
+    // conditions a little different, as it is to be enforced on a single node
+    // rather than a whole boundary surface. To do so, we make sure that the
+    // apex is en essential true dof, and then we project the wanted value, in
+    // this case 0.0, to only that node.
+    if (apex >= 0) {
+        // Initialize the internal data needed in the finite element space
+        x->FESpace()->BuildDofToArrays();
+
+        // Make sure the apex is in the list of essential true Dofs
+        ess_tdof_list.Append(apex);
+
+        Array<int> node_disp(1);
+        node_disp[0] = apex;
+        Vector node_disp_value(1);
+        node_disp_value[0] = 0.0;
+
+        VectorConstantCoefficient node_disp_value_coeff(node_disp_value);
+
+        x->ProjectCoefficient(node_disp_value_coeff, node_disp);
+    }
+
+    // Set up the parallel bilinear form a(.,.) on the finite element space
+    // corresponding to the Laplacian operator -Delta, by adding the
+    // Diffusion domain integrator.
+    BilinearForm a(fespace);
+    ConstantCoefficient one(1.0);
+    a.AddDomainIntegrator(new DiffusionIntegrator(one));
+
+    // Assemble the parallel bilinear form and the corresponding linear system.
+    a.Assemble();
+
+    OperatorPtr A;
+    Vector B, X;
+    a.FormLinearSystem(ess_tdof_list, *x, b, A, X, B);
+
+    // Solve the linear system A X = B.
+    // Use a simple symmetric Gauss-Seidel preconditioner with PCG.
+    GSSmoother M((SparseMatrix&)(*A));
+    PCG(*A, M, B, X, verbose > 1 ? 1 : 0, 200, 1e-12, 0.0);
+
+    // Recover the grid function corresponding to X.
+    a.RecoverFEMSolution(X, b, *x);
+}
+
+// Set the gradient in each vertex to be the average of the gradient in the
+// centers of the surrounding elements
+void calculate_gradients(double* grads, GridFunction& x, Mesh& mesh, Table* v2e)
+{
+
+    for (int i = 0; i < mesh.GetNV(); i++) {
+
+        const int num_elements = v2e->RowSize(i);
+        const int *elements = v2e->GetRow(i);
+
+        Vector vertex_gradient(3);
+
+        for (int j = 0; j < num_elements; j++) {
+            Vector grad(3);
+            grad= 0.0;
+            int el_id = elements[j];
+#if 1
+            // Calculate the gradient of an element to be the gradient in its center.
+
+            ElementTransformation *tr = x.FESpace()->GetElementTransformation(el_id);
+            Geometry::Type geom = tr->GetGeometryType();
+            const IntegrationPoint& center = Geometries.GetCenter(geom);
+            tr->SetIntPoint(&center);
+            x.GetGradient(*tr, grad);
+            vertex_gradient += grad;
+#else
+            // Calculate the gradient of an element to be the average of the
+            // gradients in each of its integration points.
+
+            ElementTransformation *tr = x.FESpace()->GetElementTransformation(el_id);
+            const IntegrationRule& ir = x.FESpace()->GetFE(elements[j])->GetNodes();
+            for (int k = 0; k < ir.GetNPoints(); k++) {
+                Vector grad_point(3);
+                grad_point = 0.0;
+                const IntegrationPoint& ip = ir.IntPoint(k);
+                tr->SetIntPoint(&ip);
+                x.GetGradient((*tr), grad_point);
+                grad += grad_point;
+            }
+            grad /= ir.GetNPoints();
+            vertex_gradient += grad;
+
+#endif
+        }
+        vertex_gradient /= num_elements;
+        grads[3*i + 0] = vertex_gradient(0);
+        grads[3*i + 1] = vertex_gradient(1);
+        grads[3*i + 2] = vertex_gradient(2);
+    }
+}
+
+void define_fibers(
+    Mesh& mesh,
+    const double *phi_epi,
+    const double *phi_lv,
+    const double *phi_rv,
+    const double *psi_ab,
+    double *grad_phi_epi,
+    double *grad_phi_lv,
+    double *grad_phi_rv,
+    double *grad_psi_ab,
+    double alpha_endo,
+    double alpha_epi,
+    double beta_endo,
+    double beta_epi,
+    double *F,
+    double *S,
+    double *T)
+{
+
+    int num_vertices = mesh.GetNV();
+
+    const double tol = 1e-12;
+    for (int i = 0; i < num_vertices; i++) {
+
+        const double phi_epi_i = CLAMP(phi_epi[i], 0.0, 1.0);
+        const double phi_lv_i  = CLAMP(phi_lv[i],  0.0, 1.0);
+        const double phi_rv_i  = CLAMP(phi_rv[i],  0.0, 1.0);
+
+        Vector grad_phi_epi_i(&grad_phi_epi[3*i], 3);
+        Vector grad_phi_lv_i(&grad_phi_lv[3*i], 3);
+        Vector grad_phi_rv_i(&grad_phi_rv[3*i], 3);
+        Vector grad_psi_ab_i(&grad_psi_ab[3*i], 3);
+
+        // TODO: What to do here? TOLERANCE
+        double depth;
+        if (phi_lv_i + phi_rv_i < tol) {
+            depth = 0.5;
+        } else {
+            depth = phi_rv_i / (phi_lv_i + phi_rv_i);
+        }
+
+        const double alpha_s_d = alpha_endo*(1.0-depth) - alpha_endo*depth;
+        const double beta_s_d  = beta_endo *(1.0-depth) - beta_endo *depth;
+
+        const double alpha_w_epi = alpha_endo*(1.0-phi_epi_i) + alpha_epi * phi_epi_i;
+        const double beta_w_epi  = beta_endo *(1.0-phi_epi_i) + beta_epi  * phi_epi_i;
+
+
+#if 1
+        DenseMatrix Q_lv(3,3);
+        Q_lv = 0.0;
+        if (phi_lv_i > tol) {
+            DenseMatrix T(3,3);
+            Vector grad_phi_lv_i_neg(3);
+            {
+                grad_phi_lv_i_neg = grad_phi_lv_i;
+                grad_phi_lv_i_neg.Neg();
+            }
+            axis(T, grad_psi_ab_i, grad_phi_lv_i_neg);
+            orient(Q_lv, T, alpha_s_d, beta_s_d);
+        }
+
+        DenseMatrix Q_rv(3,3);
+        Q_rv = 0.0;
+        if (phi_rv_i > tol) {
+            DenseMatrix T(3,3);
+            axis(T, grad_psi_ab_i, grad_phi_rv_i);
+            orient(Q_rv, T, alpha_s_d, beta_s_d);
+        }
+
+        DenseMatrix Q_endo(3,3);
+        bislerp(Q_endo, Q_lv, Q_rv, depth);
+#else
+        DenseMatrix Q_endo(3,3);
+        Q_endo = Q_lv;
+#endif
+
+        DenseMatrix Q_epi(3,3);
+        Q_epi = 0.0;
+        if (phi_epi_i > tol) {
+            DenseMatrix T(3,3);
+            axis(T, grad_psi_ab_i, grad_phi_epi_i);
+            orient(Q_epi, T, alpha_w_epi, beta_w_epi);
+        }
+
+        DenseMatrix FST(3,3);
+        bislerp(FST, Q_endo, Q_epi, phi_epi_i);
+
+        // FST.GetColumn(0, F[i]);
+        // FST.GetColumn(1, S[i]);
+        // FST.GetColumn(2, T[i]);
+
+        F[3*i+0] = FST(0,0);
+        F[3*i+1] = FST(1,0);
+        F[3*i+2] = FST(2,0);
+
+        S[3*i+0] = FST(0,1);
+        S[3*i+1] = FST(1,1);
+        S[3*i+2] = FST(2,1);
+
+        T[3*i+0] = FST(0,2);
+        T[3*i+1] = FST(1,2);
+        T[3*i+2] = FST(2,2);
+    }
+}

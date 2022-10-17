@@ -28,10 +28,11 @@ std::string basename(std::string const& filename);
 std::string remove_extension(std::string const& filename);
 void mksubdir(std::string const& subdir);
 
-void vertex_vector_to_grid_function(mfem::Mesh *mesh, std::vector<mfem::Vector>& x, mfem::GridFunction *gf);
+int find_apex_vertex(mfem::Mesh& mesh, mfem::Vector& apex);
+void vertex_vector_to_grid_function(mfem::Mesh& mesh, double* x, mfem::GridFunction *gf);
 void save_solution(mfem::GridFunction *x, std::string const& dir, std::string const& base_name, std::string const& suffix);
 #ifdef DEBUG
-void debug_print_to_file(std::vector<mfem::Vector>& x, std::string const& dir, std::string const& filename);
+void debug_print_to_file(double* x, int n, std::string const& dir, std::string const& filename);
 #endif
 
 #endif

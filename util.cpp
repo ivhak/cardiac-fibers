@@ -75,38 +75,48 @@ void save_solution(
     x->Save(x_ofs);
 }
 
-// Convert a vector<Vector> to a 3D GridFunction
+// Find the vertex closest to the prescribed apex, Euclidean distance.
+int find_apex_vertex(mfem::Mesh& mesh, mfem::Vector& apex)
+{
+    int apex_vertex = 0;
+    double distance = std::numeric_limits<double>::max();
+    for (int i = 0; i < mesh.GetNV(); i++) {
+        double *vertices = mesh.GetVertex(i);
+        double this_distance = (vertices[0]-apex[0]) * (vertices[0]-apex[0])
+                             + (vertices[1]-apex[1]) * (vertices[1]-apex[1])
+                             + (vertices[2]-apex[2]) * (vertices[2]-apex[2]);
+        if (this_distance < distance) {
+            apex_vertex = i;
+            distance = this_distance;
+        }
+    }
+    return apex_vertex;
+}
+
+// Convert an array of the form xyzxyz...xyz to a 3D GridFunction
 void vertex_vector_to_grid_function(
-    mfem::Mesh *mesh,
-    std::vector<mfem::Vector>& x,
+    mfem::Mesh& mesh,
+    double* x,
     mfem::GridFunction *gf)
 {
-    mfem::FiniteElementCollection *fec = new mfem::H1_FECollection(1, mesh->Dimension());
-    mfem::FiniteElementSpace *fespace = new mfem::FiniteElementSpace(mesh, fec, 3, mfem::Ordering::byVDIM);
+    mfem::FiniteElementCollection *fec = new mfem::H1_FECollection(1, mesh.Dimension());
+    mfem::FiniteElementSpace *fespace = new mfem::FiniteElementSpace(&mesh, fec, 3, mfem::Ordering::byVDIM);
     gf->SetSpace(fespace);
-    mfem::Vector vals(3*mesh->GetNV());
-    for (int i = 0; i < mesh->GetNV(); i++) {
-        mfem::Vector v = x[i];
-        vals(3*i+0) = v(0);
-        vals(3*i+1) = v(1);
-        vals(3*i+2) = v(2);
-    }
+    mfem::Vector vals(x, 3*mesh.GetNV());
     gf->SetFromTrueDofs(vals);
 }
 
 #ifdef DEBUG
 void debug_print_to_file(
-    std::vector<mfem::Vector>& x,
+    double *x,
+    int n,
     std::string const& dir,
     std::string const& filename)
 {
     std::string path = dir + filename;
     std::ofstream fout(path.c_str());
-    for (int i = 0; i < x.size(); i++) {
-        mfem::Vector v = x[i];
-        fout << v[0] << std::endl
-             << v[1] << std::endl
-             << v[2] << std::endl;
+    for (int i = 0; i < n; i++) {
+        fout << x[i] << std::endl;
     }
 }
 #endif

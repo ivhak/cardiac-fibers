@@ -19,6 +19,7 @@
 #define CACLULUS_HPP
 #include "mfem.hpp"
 
+
 const double PI=3.14159265;
 
 void quat2rot(mfem::DenseMatrix& Q, mfem::Vector& q);
@@ -26,4 +27,34 @@ void rot2quat(mfem::Vector& q, mfem::DenseMatrix& Q);
 void orient(mfem::DenseMatrix& Q_out, mfem::DenseMatrix& Q, double a, double b);
 void axis(mfem::DenseMatrix& Q, mfem::Vector& psi, mfem::Vector &phi);
 void bislerp(mfem::DenseMatrix& Qab, mfem::DenseMatrix& Qa, mfem::DenseMatrix& Qb, double t);
+
+
+void laplace(
+    mfem::GridFunction *x,
+    mfem::Mesh& mesh,
+    mfem::Array<int> &ess_bdr,
+    mfem::Array<int> &nonzero_ess_bdr,
+    mfem::Array<int> &zero_ess_bdr,
+    int apex,
+    int verbose);
+
+void calculate_gradients(double* grads, mfem::GridFunction& x, mfem::Mesh& mesh, mfem::Table* v2e);
+
+void define_fibers(
+    mfem::Mesh& mesh,
+    const double *phi_epi,
+    const double *phi_lv,
+    const double *phi_rv,
+    const double *psi_ab,
+    double *grad_phi_epi,
+    double *grad_phi_lv,
+    double *grad_phi_rv,
+    double *grad_psi_ab,
+    double alpha_endo,
+    double alpha_epi,
+    double beta_endo,
+    double beta_epi,
+    double *F,
+    double *S,
+    double *T);
 #endif
