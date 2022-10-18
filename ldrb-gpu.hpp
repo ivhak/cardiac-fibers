@@ -35,6 +35,7 @@ typedef struct {
     int epi_attr;
     int lv_attr;
     int rv_attr;
+    bool geom_has_rv;
 } Options;
 
 typedef enum {

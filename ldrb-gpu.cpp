@@ -49,6 +49,8 @@ int main(int argc, char *argv[])
     opts.lv_attr   = LV_ENDO;
     opts.rv_attr   = RV_ENDO;
 
+    opts.geom_has_rv = true;
+
     // Parse command-line options
     OptionsParser args(argc, argv);
     args.AddOption(&opts.verbose,
@@ -93,7 +95,9 @@ int main(int argc, char *argv[])
             "Left ventricle endocardium attribute");
     args.AddOption(&opts.rv_attr,
             "-rv", "--rv-attribute",
-            "Right ventricle endocardium attribute");
+            "Right ventricle endocardium attribute. "
+            "Set to -1 if there is no right ventricle in the geometry, "
+            "e.g. for a single ventricle geometry.");
     args.Parse();
 
     if (!args.Good()) {
@@ -103,6 +107,10 @@ int main(int argc, char *argv[])
 
     if (opts.verbose > 1)
         args.PrintOptions(std::cout);
+
+    if (opts.rv_attr == -1) {
+        opts.geom_has_rv = false;
+    }
 
     // Set the basename of the mesh
     opts.mesh_basename = remove_extension(basename(std::string(opts.mesh_file)));
@@ -173,16 +181,18 @@ int main(int argc, char *argv[])
         clock_gettime(CLOCK_MONOTONIC, &t0);
 
         ess_bdr = 0;
-        ess_bdr[opts.epi_attr    -1] = 1;
-        ess_bdr[opts.rv_attr-1] = 1;
-        ess_bdr[opts.rv_attr-1] = 1;
+        ess_bdr[opts.epi_attr-1] = 1;
+        ess_bdr[opts.lv_attr -1] = 1;
+        if (opts.geom_has_rv)
+            ess_bdr[opts.rv_attr-1] = 1;
 
         nonzero_ess_bdr = 0;
         nonzero_ess_bdr[opts.epi_attr-1] = 1;
 
         zero_ess_bdr = 0;
-        zero_ess_bdr[opts.rv_attr-1] = 1;
-        zero_ess_bdr[opts.rv_attr-1] = 1;
+        zero_ess_bdr[opts.lv_attr-1] = 1;
+        if (opts.geom_has_rv)
+            zero_ess_bdr[opts.rv_attr-1] = 1;
 
         laplace(&x_phi_epi, mesh, ess_bdr, nonzero_ess_bdr, zero_ess_bdr, -1, opts.verbose);
 
@@ -206,16 +216,18 @@ int main(int argc, char *argv[])
         clock_gettime(CLOCK_MONOTONIC, &t0);
 
         ess_bdr = 0;
-        ess_bdr[opts.epi_attr    -1] = 1;
-        ess_bdr[opts.rv_attr-1] = 1;
-        ess_bdr[opts.rv_attr-1] = 1;
+        ess_bdr[opts.epi_attr-1] = 1;
+        ess_bdr[opts.lv_attr -1] = 1;
+        if (opts.geom_has_rv)
+            ess_bdr[opts.rv_attr-1] = 1;
 
         nonzero_ess_bdr = 0;
-        nonzero_ess_bdr[opts.rv_attr-1] = 1;
+        nonzero_ess_bdr[opts.lv_attr-1] = 1;
 
         zero_ess_bdr = 0;
-        zero_ess_bdr[opts.epi_attr    -1] = 1;
-        zero_ess_bdr[opts.rv_attr-1] = 1;
+        zero_ess_bdr[opts.epi_attr-1] = 1;
+        if (opts.geom_has_rv)
+            zero_ess_bdr[opts.rv_attr-1] = 1;
 
         laplace(&x_phi_lv, mesh, ess_bdr, nonzero_ess_bdr, zero_ess_bdr, -1, opts.verbose);
 
@@ -235,20 +247,20 @@ int main(int argc, char *argv[])
     // and calculate the gradients
     GridFunction x_phi_rv;
     double *grad_phi_rv = (double *)malloc(3*mesh.GetNV()*sizeof(double));
-    {
+    if (opts.geom_has_rv) {
         clock_gettime(CLOCK_MONOTONIC, &t0);
 
         ess_bdr = 0;
         ess_bdr[opts.epi_attr    -1] = 1;
-        ess_bdr[opts.rv_attr-1] = 1;
+        ess_bdr[opts.lv_attr-1] = 1;
         ess_bdr[opts.rv_attr-1] = 1;
 
         nonzero_ess_bdr = 0;
         nonzero_ess_bdr[opts.rv_attr-1] = 1;
 
         zero_ess_bdr = 0;
-        zero_ess_bdr[opts.epi_attr    -1] = 1;
-        zero_ess_bdr[opts.rv_attr-1] = 1;
+        zero_ess_bdr[opts.epi_attr-1] = 1;
+        zero_ess_bdr[opts.rv_attr -1] = 1;
 
         laplace(&x_phi_rv, mesh, ess_bdr, nonzero_ess_bdr, zero_ess_bdr, -1, opts.verbose);
 
@@ -261,6 +273,14 @@ int main(int argc, char *argv[])
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose)
             log_timing(std::cout, "grad_phi_rv", timespec_duration(t0, t1));
+    } else {
+        // If the goemetry does not have a right ventricle, just make a dummy,
+        // zero filled GridFunction. The rest of the algorithm _should_ be
+        // implementeded in such a way that it still produces the right result.
+        H1_FECollection *fec = new H1_FECollection(1, mesh.Dimension());
+        FiniteElementSpace *fespace = new FiniteElementSpace(&mesh, fec);
+        x_phi_rv.SetSpace(fespace);
+        x_phi_rv = 0.0;
     }
 
     // Solve the Laplace equation from opts.base_attr (1.0) to APEX (0.0)
