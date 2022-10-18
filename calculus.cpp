@@ -524,7 +524,6 @@ void define_fibers(
         const double beta_w_epi  = beta_endo *(1.0-phi_epi_i) + beta_epi  * phi_epi_i;
 
 
-#if 1
         DenseMatrix Q_lv(3,3);
         Q_lv = 0.0;
         if (phi_lv_i > tol) {
@@ -548,10 +547,6 @@ void define_fibers(
 
         DenseMatrix Q_endo(3,3);
         bislerp(Q_endo, Q_lv, Q_rv, depth);
-#else
-        DenseMatrix Q_endo(3,3);
-        Q_endo = Q_lv;
-#endif
 
         DenseMatrix Q_epi(3,3);
         Q_epi = 0.0;
@@ -563,10 +558,6 @@ void define_fibers(
 
         DenseMatrix FST(3,3);
         bislerp(FST, Q_endo, Q_epi, phi_epi_i);
-
-        // FST.GetColumn(0, F[i]);
-        // FST.GetColumn(1, S[i]);
-        // FST.GetColumn(2, T[i]);
 
         F[3*i+0] = FST(0,0);
         F[3*i+1] = FST(1,0);
