@@ -260,7 +260,7 @@ int main(int argc, char *argv[])
 
         zero_ess_bdr = 0;
         zero_ess_bdr[opts.epi_attr-1] = 1;
-        zero_ess_bdr[opts.rv_attr -1] = 1;
+        zero_ess_bdr[opts.lv_attr -1] = 1;
 
         laplace(&x_phi_rv, mesh, ess_bdr, nonzero_ess_bdr, zero_ess_bdr, -1, opts.verbose);
 
