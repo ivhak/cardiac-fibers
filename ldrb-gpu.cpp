@@ -165,6 +165,12 @@ int main(int argc, char *argv[])
             log_timing(std::cout, "Find apex", timespec_duration(t0, t1));
     }
 
+    H1_FECollection fec(1, mesh.Dimension());
+
+    // Set up two finite element spaces: one for scalar values (1D) , and one for 3d vectors
+    FiniteElementSpace fespace1d(&mesh, &fec);
+    FiniteElementSpace fespace3d(&mesh, &fec, 3, mfem::Ordering::byVDIM);
+
     // Set up the vertex to element table
     Table *vertex_to_element_table = mesh.GetVertexToElementTable();
 
@@ -175,8 +181,8 @@ int main(int argc, char *argv[])
 
     // Solve the Laplace equation from EPI (1.0) to (opts.rv_attr union opts.rv_attr) (0.0)
     // and calculate the gradients
-    GridFunction x_phi_epi;
-    double *grad_phi_epi = (double *)malloc(3*mesh.GetNV()*sizeof(double));
+    GridFunction x_phi_epi(&fespace1d);
+    GridFunction grad_phi_epi(&fespace3d);
     {
         clock_gettime(CLOCK_MONOTONIC, &t0);
 
@@ -201,7 +207,8 @@ int main(int argc, char *argv[])
             log_timing(std::cout, "phi_epi", timespec_duration(t0, t1));
 
         clock_gettime(CLOCK_MONOTONIC, &t0);
-        calculate_gradients(grad_phi_epi, x_phi_epi, mesh, vertex_to_element_table);
+        double *grad_phi_epi_vals = grad_phi_epi.Write();
+        calculate_gradients(grad_phi_epi_vals, x_phi_epi, mesh, vertex_to_element_table);
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose)
             log_timing(std::cout, "grad_phi_epi", timespec_duration(t0, t1));
@@ -210,8 +217,8 @@ int main(int argc, char *argv[])
 
     // Solve the Laplace equation from opts.rv_attr (1.0) to (opts.rv_attr union EPI) (0.0)
     // and calculate the gradients
-    GridFunction x_phi_lv;
-    double *grad_phi_lv = (double *)malloc(3*mesh.GetNV()*sizeof(double));
+    GridFunction x_phi_lv(&fespace1d);
+    GridFunction grad_phi_lv(&fespace3d);
     {
         clock_gettime(CLOCK_MONOTONIC, &t0);
 
@@ -236,7 +243,8 @@ int main(int argc, char *argv[])
             log_timing(std::cout, "phi_lv", timespec_duration(t0, t1));
 
         clock_gettime(CLOCK_MONOTONIC, &t0);
-        calculate_gradients(grad_phi_lv, x_phi_lv, mesh, vertex_to_element_table);
+        double *grad_phi_lv_vals = grad_phi_lv.Write();
+        calculate_gradients(grad_phi_lv_vals, x_phi_lv, mesh, vertex_to_element_table);
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose)
             log_timing(std::cout, "grad_phi_lv", timespec_duration(t0, t1));
@@ -245,8 +253,8 @@ int main(int argc, char *argv[])
 
     // Solve the Laplace equation from opts.rv_attr (1.0) to (opts.rv_attr union EPI) (0.0)
     // and calculate the gradients
-    GridFunction x_phi_rv;
-    double *grad_phi_rv = (double *)malloc(3*mesh.GetNV()*sizeof(double));
+    GridFunction x_phi_rv(&fespace1d);
+    GridFunction grad_phi_rv(&fespace3d);
     if (opts.geom_has_rv) {
         clock_gettime(CLOCK_MONOTONIC, &t0);
 
@@ -269,7 +277,8 @@ int main(int argc, char *argv[])
             log_timing(std::cout, "phi_rv", timespec_duration(t0, t1));
 
         clock_gettime(CLOCK_MONOTONIC, &t0);
-        calculate_gradients(grad_phi_rv, x_phi_rv, mesh, vertex_to_element_table);
+        double *grad_phi_rv_vals = grad_phi_rv.Write();
+        calculate_gradients(grad_phi_rv_vals, x_phi_rv, mesh, vertex_to_element_table);
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose)
             log_timing(std::cout, "grad_phi_rv", timespec_duration(t0, t1));
@@ -277,16 +286,14 @@ int main(int argc, char *argv[])
         // If the goemetry does not have a right ventricle, just make a dummy,
         // zero filled GridFunction. The rest of the algorithm _should_ be
         // implementeded in such a way that it still produces the right result.
-        H1_FECollection *fec = new H1_FECollection(1, mesh.Dimension());
-        FiniteElementSpace *fespace = new FiniteElementSpace(&mesh, fec);
-        x_phi_rv.SetSpace(fespace);
         x_phi_rv = 0.0;
+        grad_phi_rv = 0.0;
     }
 
     // Solve the Laplace equation from opts.base_attr (1.0) to APEX (0.0)
     // and calculate the gradients
-    GridFunction x_psi_ab;
-    double *grad_psi_ab = (double *)malloc(3*mesh.GetNV()*sizeof(double));
+    GridFunction x_psi_ab(&fespace1d);
+    GridFunction grad_psi_ab(&fespace3d);
     {
         clock_gettime(CLOCK_MONOTONIC, &t0);
         ess_bdr = 0;
@@ -303,7 +310,8 @@ int main(int argc, char *argv[])
             log_timing(std::cout, "psi_ab", timespec_duration(t0, t1));
 
         clock_gettime(CLOCK_MONOTONIC, &t0);
-        calculate_gradients(grad_psi_ab, x_psi_ab, mesh, vertex_to_element_table);
+        double *grad_psi_ab_vals = grad_psi_ab.Write();
+        calculate_gradients(grad_psi_ab_vals, x_psi_ab, mesh, vertex_to_element_table);
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose)
             log_timing(std::cout, "grad_psi_ab", timespec_duration(t0, t1));
@@ -312,42 +320,41 @@ int main(int argc, char *argv[])
     delete vertex_to_element_table;
 
 
-    // Calculate the fiber orientation
 
+    // Get read-only pointers to the internal arrays of the laplacian solutions
     const double *phi_epi = x_phi_epi.Read();
     const double *phi_lv  = x_phi_lv.Read();
     const double *phi_rv  = x_phi_rv.Read();
     const double *psi_ab  = x_psi_ab.Read();
 
-    double *F = (double *)malloc(3 * mesh.GetNV() * sizeof(double));
-    double *S = (double *)malloc(3 * mesh.GetNV() * sizeof(double));
-    double *T = (double *)malloc(3 * mesh.GetNV() * sizeof(double));
+    // Get read-only pointers to the internal arrays of the gradients
+    const double *grad_phi_epi_vals = grad_phi_epi.Read();
+    const double *grad_phi_lv_vals  = grad_phi_lv.Read();
+    const double *grad_phi_rv_vals  = grad_phi_rv.Read();
+    const double *grad_psi_ab_vals  = grad_psi_ab.Read();
 
+    // Setup GridFunctions to store the fibre directions in
+    GridFunction F(&fespace3d);
+    GridFunction S(&fespace3d);
+    GridFunction T(&fespace3d);
+
+    double *F_vals = F.Write();
+    double *S_vals = S.Write();
+    double *T_vals = T.Write();
+
+
+    // Calculate the fiber orientation
     clock_gettime(CLOCK_MONOTONIC, &t0);
     define_fibers(
             mesh,
             phi_epi,      phi_lv,      phi_rv,      psi_ab,
-            grad_phi_epi, grad_phi_lv, grad_phi_rv, grad_psi_ab,
+            grad_phi_epi_vals, grad_phi_lv_vals, grad_phi_rv_vals, grad_psi_ab_vals,
             opts.alpha_endo, opts.alpha_epi, opts.beta_endo, opts.beta_epi,
-            F, S, T
+            F_vals, S_vals, T_vals
     );
     clock_gettime(CLOCK_MONOTONIC, &t1);
     if (opts.verbose)
         log_timing(std::cout, "define_fibers", timespec_duration(t0, t1));
-
-
-#ifdef DEBUG
-    GridFunction grad_phi_epi_gf, grad_phi_lv_gf, grad_phi_rv_gf, grad_psi_ab_gf;
-    vertex_vector_to_grid_function(mesh, grad_phi_epi, &grad_phi_epi_gf);
-    vertex_vector_to_grid_function(mesh, grad_phi_lv,  &grad_phi_lv_gf);
-    vertex_vector_to_grid_function(mesh, grad_phi_rv,  &grad_phi_rv_gf);
-    vertex_vector_to_grid_function(mesh, grad_psi_ab,  &grad_psi_ab_gf);
-#endif
-
-    GridFunction F_gf, S_gf, T_gf;
-    vertex_vector_to_grid_function(mesh, F, &F_gf);
-    vertex_vector_to_grid_function(mesh, S, &S_gf);
-    vertex_vector_to_grid_function(mesh, T, &T_gf);
 
     // Save the mesh and solutions
     {
@@ -361,12 +368,13 @@ int main(int argc, char *argv[])
         std::string debug_dir = mfem_output_dir + "/debug";
         mksubdir(debug_dir);
 
-        debug_print_to_file(grad_phi_lv, 3*mesh.GetNV(), debug_dir, "/grad_phi_lv.txt");
-        debug_print_to_file(grad_phi_rv, 3*mesh.GetNV(), debug_dir, "/grad_phi_rv.txt");
-        debug_print_to_file(grad_psi_ab, 3*mesh.GetNV(), debug_dir, "/grad_psi_ab.txt");
-        debug_print_to_file(F,           3*mesh.GetNV(), debug_dir, "/F.txt");
-        debug_print_to_file(S,           3*mesh.GetNV(), debug_dir, "/S.txt");
-        debug_print_to_file(T,           3*mesh.GetNV(), debug_dir, "/T.txt");
+        debug_print_to_file(grad_phi_epi_vals, 3*mesh.GetNV(), debug_dir, "/grad_phi_epi.txt");
+        debug_print_to_file(grad_phi_lv_vals,  3*mesh.GetNV(), debug_dir, "/grad_phi_lv.txt");
+        debug_print_to_file(grad_phi_rv_vals,  3*mesh.GetNV(), debug_dir, "/grad_phi_rv.txt");
+        debug_print_to_file(grad_psi_ab_vals,  3*mesh.GetNV(), debug_dir, "/grad_psi_ab.txt");
+        debug_print_to_file(F,                 3*mesh.GetNV(), debug_dir, "/F.txt");
+        debug_print_to_file(S,                 3*mesh.GetNV(), debug_dir, "/S.txt");
+        debug_print_to_file(T,                 3*mesh.GetNV(), debug_dir, "/T.txt");
 
 #endif
 
@@ -384,15 +392,15 @@ int main(int argc, char *argv[])
         save_solution(&x_phi_rv,  debug_dir, opts.mesh_basename, "_phi_rv.gf");
         save_solution(&x_psi_ab,  debug_dir, opts.mesh_basename, "_psi_ab.gf");
 
-        save_solution(&grad_phi_epi_gf, debug_dir, opts.mesh_basename, "_grad_phi_epi.gf");
-        save_solution(&grad_phi_lv_gf,  debug_dir, opts.mesh_basename, "_grad_phi_lv.gf");
-        save_solution(&grad_phi_rv_gf,  debug_dir, opts.mesh_basename, "_grad_phi_rv.gf");
-        save_solution(&grad_psi_ab_gf,  debug_dir, opts.mesh_basename, "_grad_psi_ab.gf");
+        save_solution(&grad_phi_epi, debug_dir, opts.mesh_basename, "_grad_phi_epi.gf");
+        save_solution(&grad_phi_lv,  debug_dir, opts.mesh_basename, "_grad_phi_lv.gf");
+        save_solution(&grad_phi_rv,  debug_dir, opts.mesh_basename, "_grad_phi_rv.gf");
+        save_solution(&grad_psi_ab,  debug_dir, opts.mesh_basename, "_grad_psi_ab.gf");
 #endif
 
-        save_solution(&F_gf,  mfem_output_dir, opts.mesh_basename, "_F.gf");
-        save_solution(&S_gf,  mfem_output_dir, opts.mesh_basename, "_S.gf");
-        save_solution(&T_gf,  mfem_output_dir, opts.mesh_basename, "_T.gf");
+        save_solution(&F,  mfem_output_dir, opts.mesh_basename, "_F.gf");
+        save_solution(&S,  mfem_output_dir, opts.mesh_basename, "_S.gf");
+        save_solution(&T,  mfem_output_dir, opts.mesh_basename, "_T.gf");
 
         // Save in paraview as well
         ParaViewDataCollection *pd = NULL;
@@ -404,18 +412,18 @@ int main(int argc, char *argv[])
             pd = new ParaViewDataCollection(opts.mesh_basename, &mesh);
             pd->SetPrefixPath(paraview_path);
 #ifdef DEBUG
-            pd->RegisterField("grad phi epi", &grad_phi_epi_gf);
-            pd->RegisterField("grad phi lv",  &grad_phi_lv_gf);
-            pd->RegisterField("grad phi rv",  &grad_phi_rv_gf);
-            pd->RegisterField("grad psi ab",  &grad_psi_ab_gf);
+            pd->RegisterField("grad phi epi", &grad_phi_epi);
+            pd->RegisterField("grad phi lv",  &grad_phi_lv);
+            pd->RegisterField("grad phi rv",  &grad_phi_rv);
+            pd->RegisterField("grad psi ab",  &grad_psi_ab);
             pd->RegisterField("phi epi", &x_phi_epi);
             pd->RegisterField("phi lv",  &x_phi_lv);
             pd->RegisterField("phi rv",  &x_phi_rv);
             pd->RegisterField("psi ab",  &x_psi_ab);
 #endif
-            pd->RegisterField("F", &F_gf);
-            pd->RegisterField("S", &S_gf);
-            pd->RegisterField("T", &T_gf);
+            pd->RegisterField("F", &F);
+            pd->RegisterField("S", &S);
+            pd->RegisterField("T", &T);
             pd->SetLevelsOfDetail(1);
             pd->SetDataFormat(VTKFormat::BINARY);
             pd->SetHighOrderOutput(false);

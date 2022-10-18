@@ -19,7 +19,6 @@
 #define CACLULUS_HPP
 #include "mfem.hpp"
 
-
 const double PI=3.14159265;
 
 void quat2rot(mfem::DenseMatrix& Q, mfem::Vector& q);
@@ -46,10 +45,10 @@ void define_fibers(
     const double *phi_lv,
     const double *phi_rv,
     const double *psi_ab,
-    double *grad_phi_epi,
-    double *grad_phi_lv,
-    double *grad_phi_rv,
-    double *grad_psi_ab,
+    const double *grad_phi_epi,
+    const double *grad_phi_lv,
+    const double *grad_phi_rv,
+    const double *grad_psi_ab,
     double alpha_endo,
     double alpha_epi,
     double beta_endo,

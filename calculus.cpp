@@ -342,19 +342,14 @@ void laplace(
     int apex,
     int verbose)
 {
-    // Define a finite element space on the mesh.
-    FiniteElementCollection *fec;
-
-    fec = new H1_FECollection(1, mesh.Dimension());
-    FiniteElementSpace * fespace = new FiniteElementSpace(&mesh, fec);
-    if (verbose > 1)
-        std::cout << "Number of finite element unknowns: " << fespace->GetTrueVSize() << std::endl;
 
     // Determine the list of true (i.e. parallel conforming) essential boundary
     // dofs, defined by the boundary attributes marked as essential (Dirichlet)
     // and converting to a list of true dofs..
     Array<int> ess_tdof_list;
     MFEM_ASSERT(mesh.bdr_attributes.Size() != 0, "Boundary size cannot be zero.");
+
+    FiniteElementSpace *fespace = x->FESpace();
 
     fespace->GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
 
@@ -366,10 +361,8 @@ void laplace(
     b.AddDomainIntegrator(new DomainLFIntegrator(zero));
     b.Assemble();
 
-    // Define the solution vector x as a finite element grid function
-    // corresponding to fespace. Initialize x with initial guess of zero, which
+    // Initialize x with initial guess of zero, which
     // satisfies the boundary conditions.
-    x->SetSpace(fespace);
     *x = 0.0;
 
     // Project the constant value 1.0 to all the essential boundaries marked as nonzero.
@@ -387,7 +380,7 @@ void laplace(
     // this case 0.0, to only that node.
     if (apex >= 0) {
         // Initialize the internal data needed in the finite element space
-        x->FESpace()->BuildDofToArrays();
+        fespace->BuildDofToArrays();
 
         // Make sure the apex is in the list of essential true Dofs
         ess_tdof_list.Append(apex);
@@ -482,10 +475,10 @@ void define_fibers(
     const double *phi_lv,
     const double *phi_rv,
     const double *psi_ab,
-    double *grad_phi_epi,
-    double *grad_phi_lv,
-    double *grad_phi_rv,
-    double *grad_psi_ab,
+    const double *grad_phi_epi,
+    const double *grad_phi_lv,
+    const double *grad_phi_rv,
+    const double *grad_psi_ab,
     double alpha_endo,
     double alpha_epi,
     double beta_endo,
@@ -504,10 +497,10 @@ void define_fibers(
         const double phi_lv_i  = CLAMP(phi_lv[i],  0.0, 1.0);
         const double phi_rv_i  = CLAMP(phi_rv[i],  0.0, 1.0);
 
-        Vector grad_phi_epi_i(&grad_phi_epi[3*i], 3);
-        Vector grad_phi_lv_i(&grad_phi_lv[3*i], 3);
-        Vector grad_phi_rv_i(&grad_phi_rv[3*i], 3);
-        Vector grad_psi_ab_i(&grad_psi_ab[3*i], 3);
+        Vector grad_phi_epi_i((double *)&grad_phi_epi[3*i], 3);
+        Vector grad_phi_lv_i((double *)&grad_phi_lv[3*i], 3);
+        Vector grad_phi_rv_i((double *)&grad_phi_rv[3*i], 3);
+        Vector grad_psi_ab_i((double *)&grad_psi_ab[3*i], 3);
 
         // TODO: What to do here? TOLERANCE
         double depth;

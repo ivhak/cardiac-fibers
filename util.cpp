@@ -108,7 +108,7 @@ void vertex_vector_to_grid_function(
 
 #ifdef DEBUG
 void debug_print_to_file(
-    double *x,
+    const double *x,
     int n,
     std::string const& dir,
     std::string const& filename)
