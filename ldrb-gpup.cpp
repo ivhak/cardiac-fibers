@@ -25,47 +25,25 @@
 using namespace std;
 using namespace mfem;
 
-// Save a solution (in form of a ParGridFunction) to a file named "<dir>/<prefix><suffix><id>".
-void save_solution(
-    ParGridFunction *x,
-    string const& dir,
-    string const& basename,
-    string const& suffix,
-    int rank)
-{
-    ostringstream filename;
-    filename << dir << "/" << basename << suffix << setfill('0') << setw(6) << rank;
-    ofstream x_ofs(filename.str().c_str());
-    x_ofs.precision(8);
-    x->Save(x_ofs);
-}
-
 
 void laplace(
-    ParGridFunction *x,
-    ParMesh *pmesh,
+    ParGridFunction* x,
+    ParMesh& pmesh,
     Array<int> &essential_boundaries,
     Array<int> &nonzero_essential_boundaries,
     Array<int> &zero_essential_boundaries,
     int apex,
     int dim,
-    Options *opts,
+    int verbose,
     int rank)
 {
-    // Define a finite element space on the mesh.
-    FiniteElementCollection *fec;
-
-    fec = new H1_FECollection(1, dim);
-    ParFiniteElementSpace *fespace = new ParFiniteElementSpace(pmesh, fec);
-    HYPRE_BigInt size = fespace->GlobalTrueVSize();
-    if (opts->verbose > 1 && rank == 0)
-        cout << "Number of finite element unknowns: " << size << endl;
-
     // Determine the list of true (i.e. parallel conforming) essential boundary
     // dofs, defined by the boundary attributes marked as essential (Dirichlet)
     // and converting to a list of true dofs..
     Array<int> ess_tdof_list;
-    MFEM_ASSERT(pmesh->bdr_attributes.Size() != 0, "Boundary size cannot be zero.");
+    MFEM_ASSERT(pmesh.bdr_attributes.Size() != 0, "Boundary size cannot be zero.");
+
+    ParFiniteElementSpace *fespace = x->ParFESpace();
 
     fespace->GetEssentialTrueDofs(essential_boundaries, ess_tdof_list);
 
@@ -77,10 +55,8 @@ void laplace(
     b.AddDomainIntegrator(new DomainLFIntegrator(zero));
     b.Assemble();
 
-    // Define the solution vector x as a parallel finite element grid function
-    // corresponding to fespace. Initialize x with initial guess of zero, which
-    // satisfies the boundary conditions.
-    x->SetSpace(fespace);
+    // Initialize x with initial guess of zero, which satisfies the boundary
+    // conditions.
     *x = 0.0;
 
     // Project the constant value 1.0 to all the essential boundaries marked as nonzero.
@@ -98,19 +74,28 @@ void laplace(
     // this case 1.0, to only that node.
     if (apex >= 0) {
         // Initialize the internal data needed in the finite element space
-        x->FESpace()->BuildDofToArrays();
 
-        // Make sure the apex is in the list of essential true Dofs
-        ess_tdof_list.Append(apex);
+        Array<int> vertex_dofs;
+        fespace->GetVertexDofs(apex, vertex_dofs);
+        int apex_dof = vertex_dofs[0];
 
-        Array<int> node_disp(1);
-        node_disp[0] = apex;
-        Vector node_disp_value(1);
-        node_disp_value[0] = 1.0;
+        int local_apex_idx = fespace->GetLocalTDofNumber(apex_dof);
+        if (local_apex_idx >= 0) {
 
-        VectorConstantCoefficient node_disp_value_coeff(node_disp_value);
+            std::cout << "[" << rank << "]: LOCAL APEX IDX: " << local_apex_idx;
+            fespace->BuildDofToArrays();
+            // Make sure the apex is in the list of essential true Dofs
+            ess_tdof_list.Append(apex);
 
-        x->ProjectCoefficient(node_disp_value_coeff, node_disp);
+            Array<int> node_disp(1);
+            node_disp[0] = apex;
+            Vector node_disp_value(1);
+            node_disp_value[0] = 0.0;
+
+            VectorConstantCoefficient node_disp_value_coeff(node_disp_value);
+
+            x->ProjectCoefficient(node_disp_value_coeff, node_disp);
+        }
     }
 
     // Set up the parallel bilinear form a(.,.) on the finite element space
@@ -131,11 +116,11 @@ void laplace(
     // Use the BoomerAMG preconditioner from hypre.
     HypreBoomerAMG *prec = NULL;
     prec = new HypreBoomerAMG;
-    prec->SetPrintLevel(opts->verbose > 1 ? 1 : 0);
+    prec->SetPrintLevel(verbose > 1 ? 1 : 0);
     CGSolver cg(MPI_COMM_WORLD);
     cg.SetRelTol(1e-12);
     cg.SetMaxIter(2000);
-    cg.SetPrintLevel(opts->verbose > 1 ? 1 : 0);
+    cg.SetPrintLevel(verbose > 1 ? 1 : 0);
     if (prec) { cg.SetPreconditioner(*prec); }
     cg.SetOperator(*A);
     cg.Mult(B, X);
@@ -144,148 +129,6 @@ void laplace(
     // Recover the parallel grid function corresponding to X. This is the local
     // finite element solution on each processor.
     a.RecoverFEMSolution(X, b, *x);
-}
-
-
-void laplace_phi_epi(
-    ParGridFunction *x,
-    ParMesh *mesh,
-    int dim,
-    Options *opts,
-    int rank)
-{
-    // Define the following three arrays to determine (1) which boundary surfaces
-    // to include in the Laplace equation, (2) which of said boundaries should be
-    // set to a nonzero value (1.0) and (3) which of said boundary surfaces
-    // should be set to zero.
-    int nattr = mesh->bdr_attributes.Max();
-    Array<int> essential_boundaries(nattr);
-    Array<int> nonzero_essential_boundaries(nattr);
-    Array<int> zero_essential_boundaries(nattr);
-
-    // Solve the Laplace equation from EPI (1.0) to (LV_ENDO union RV_ENDO) (0.0)
-    essential_boundaries = 0;
-    essential_boundaries[EPI    -1] = 1;
-    essential_boundaries[LV_ENDO-1] = 1;
-    essential_boundaries[RV_ENDO-1] = 1;
-
-    nonzero_essential_boundaries = 0;
-    nonzero_essential_boundaries[EPI-1] = 1;
-
-    zero_essential_boundaries = 0;
-    zero_essential_boundaries[LV_ENDO-1] = 1;
-    zero_essential_boundaries[RV_ENDO-1] = 1;
-
-    laplace(x, mesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, -1, dim, opts, rank);
-}
-
-void laplace_phi_lv(
-    ParGridFunction *x,
-    ParMesh *pmesh,
-    int dim,
-    Options *opts,
-    int rank)
-{
-    // Define the following three arrays to determine (1) which border surfaces
-    // to include in the Laplace equation, (2) which of said boundaries should be
-    // set to a nonzero value (1.0) and (3) which of said border surfaces
-    // should be set to zero.
-    int nattr = pmesh->bdr_attributes.Max();
-    Array<int> essential_boundaries(nattr);
-    Array<int> nonzero_essential_boundaries(nattr);
-    Array<int> zero_essential_boundaries(nattr);
-
-    // Solve the Laplace equation from LV_ENDO (1.0) to (RV_ENDO union EPI) (0.0)
-    essential_boundaries = 0;
-    essential_boundaries[EPI    -1] = 1;
-    essential_boundaries[LV_ENDO-1] = 1;
-    essential_boundaries[RV_ENDO-1] = 1;
-
-    nonzero_essential_boundaries = 0;
-    nonzero_essential_boundaries[LV_ENDO-1] = 1;
-
-    zero_essential_boundaries = 0;
-    zero_essential_boundaries[EPI    -1] = 1;
-    zero_essential_boundaries[RV_ENDO-1] = 1;
-
-    laplace(x, pmesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, -1, dim, opts, rank);
-}
-
-void laplace_phi_rv(
-    ParGridFunction *x,
-    ParMesh *pmesh,
-    int dim,
-    Options *opts,
-    int rank)
-{
-    // Define the following three arrays to determine (1) which border surfaces
-    // to include in the Laplace equation, (2) which of said boundaries should be
-    // set to a nonzero value (1.0) and (3) which of said border surfaces
-    // should be set to zero.
-    int nattr = pmesh->bdr_attributes.Max();
-    Array<int> essential_boundaries(nattr);
-    Array<int> nonzero_essential_boundaries(nattr);
-    Array<int> zero_essential_boundaries(nattr);
-
-    // Solve the Laplace equation from RV_ENDO (1.0) to (LV_ENDO union EPI) (0.0)
-    essential_boundaries = 0;
-    essential_boundaries[EPI    -1] = 1;
-    essential_boundaries[LV_ENDO-1] = 1;
-    essential_boundaries[RV_ENDO-1] = 1;
-
-    nonzero_essential_boundaries = 0;
-    nonzero_essential_boundaries[RV_ENDO-1] = 1;
-
-    zero_essential_boundaries = 0;
-    zero_essential_boundaries[EPI    -1] = 1;
-    zero_essential_boundaries[LV_ENDO-1] = 1;
-
-    laplace(x, pmesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, -1, dim, opts, rank);
-}
-
-void laplace_psi_ab(
-    ParGridFunction *x,
-    ParMesh *pmesh,
-    int apex,
-    int dim,
-    Options *opts,
-    int rank)
-{
-    // Define the following three arrays to determine (1) which border surfaces
-    // to include in the Laplace equation, (2) which of said boundaries should be
-    // set to a nonzero value (1.0) and (3) which of said border surfaces
-    // should be set to zero.
-    int nattr = pmesh->bdr_attributes.Max();
-    Array<int> essential_boundaries(nattr);
-    Array<int> nonzero_essential_boundaries(nattr);
-    Array<int> zero_essential_boundaries(nattr);
-
-    // Find the apex by solving a laplacian with base solution = 0. The apex
-    // will be at he maximum of the solution.
-    essential_boundaries = 0;
-    essential_boundaries[BASE-1] = 1;
-    nonzero_essential_boundaries = 0;
-    zero_essential_boundaries = 0;
-    zero_essential_boundaries[BASE-1] = 1;
-    laplace(x, pmesh, essential_boundaries, nonzero_essential_boundaries, zero_essential_boundaries, apex, dim, opts, rank);
-}
-
-// Find the vertex closest to the prescribed apex, Euclidean distance.
-int find_apex_vertex(Mesh *mesh, Vector& apex)
-{
-    int apex_vertex = 0;
-    double distance = numeric_limits<double>::max();
-    for (int i = 0; i < mesh->GetNV(); i++) {
-        double *vertices = mesh->GetVertex(i);
-        double this_distance = (vertices[0]-apex[0]) * (vertices[0]-apex[0])
-                             + (vertices[1]-apex[1]) * (vertices[1]-apex[1])
-                             + (vertices[2]-apex[2]) * (vertices[2]-apex[2]);
-        if (this_distance < distance) {
-            apex_vertex = i;
-            distance = this_distance;
-        }
-    }
-    return apex_vertex;
 }
 
 int main(int argc, char *argv[])
@@ -305,15 +148,65 @@ int main(int argc, char *argv[])
     opts.prescribed_apex = Vector(3);
     opts.paraview = false;
 
+    opts.alpha_endo =  40.0;
+    opts.alpha_epi  = -50.0;
+    opts.beta_endo  = -65.0;
+    opts.beta_epi   =  25.0;
+
+    opts.base_attr = BASE;
+    opts.epi_attr  = EPI;
+    opts.lv_attr   = LV_ENDO;
+    opts.rv_attr   = RV_ENDO;
+
+    opts.geom_has_rv = true;
+
     // Parse command-line options
     OptionsParser args(argc, argv);
-    args.AddOption(&opts.verbose,         "-v", "--verbose", "Be verbose");
-    args.AddOption(&opts.mesh_file,       "-m", "--mesh",    "Mesh file to use", true);
-    args.AddOption(&opts.prescribed_apex, "-a", "--apex",    "Coordinate of apex, space separated list: 'x y z'.", true);
-    args.AddOption(&opts.output_dir,      "-o", "--out",     "Directory for output files.");
-    args.AddOption(&opts.device_config,   "-d", "--device",  "Device configuration string, see Device::Configure().");
-    args.AddOption(&opts.paraview,        "-p", "--paraview", "-np", "--no-paraview", "Save data files for ParaView (paraview.org) visualization.");
-
+    args.AddOption(&opts.verbose,
+            "-v", "--verbose",
+            "Be verbose");
+    args.AddOption(&opts.mesh_file,
+            "-m", "--mesh",
+            "Mesh file to use", true);
+    args.AddOption(&opts.prescribed_apex,
+            "-a", "--apex",
+            "Coordinate of apex, space separated list: 'x y z'.", true);
+    args.AddOption(&opts.output_dir,
+            "-o", "--out",
+            "Directory for output files.");
+    args.AddOption(&opts.device_config,
+            "-d", "--device",
+            "Device configuration string, see Device::Configure().");
+    args.AddOption(&opts.paraview,
+            "-p",  "--paraview",
+            "-np", "--no-paraview",
+            "Save data files for ParaView (paraview.org) visualization.");
+    args.AddOption(&opts.alpha_endo,
+            "-ao", "--alpha-endo",
+            "Alpha angle in endocardium.");
+    args.AddOption(&opts.alpha_epi,
+            "-ai", "--alpha-epi",
+            "Alpha angle in epicardium.");
+    args.AddOption(&opts.beta_endo,
+            "-bo", "--beta-endo",
+            "Beta angle in endocardium.");
+    args.AddOption(&opts.beta_epi,
+            "-bi", "--beta-epi",
+            "Beta angle in epicardium.");
+    args.AddOption(&opts.base_attr,
+            "-base", "--base-attribute",
+            "Base attribute");
+    args.AddOption(&opts.epi_attr,
+            "-epi", "--epi-attribute",
+            "Epicaridum attribute");
+    args.AddOption(&opts.lv_attr,
+            "-lv", "--lv-attribute",
+            "Left ventricle endocardium attribute");
+    args.AddOption(&opts.rv_attr,
+            "-rv", "--rv-attribute",
+            "Right ventricle endocardium attribute. "
+            "Set to -1 if there is no right ventricle in the geometry, "
+            "e.g. for a single ventricle geometry.");
     args.Parse();
 
     if (!args.Good()) {
@@ -359,7 +252,7 @@ int main(int argc, char *argv[])
     int apex = 0;
     {
         clock_gettime(CLOCK_MONOTONIC, &t0);
-        apex = find_apex_vertex(&mesh, opts.prescribed_apex);
+        apex = find_apex_vertex(mesh, opts.prescribed_apex);
         clock_gettime(CLOCK_MONOTONIC, &t1);
 
         if (opts.verbose > 1 && rank == 0) {
@@ -384,48 +277,241 @@ int main(int argc, char *argv[])
     ParMesh pmesh(MPI_COMM_WORLD, mesh);
     mesh.Clear();
 
+    struct timespec start, end;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
+    H1_FECollection fec(1, pmesh.Dimension());
+
+    // Set up two finite element spaces: one for scalar values (1D) , and one for 3d vectors
+    ParFiniteElementSpace fespace1d(&pmesh, &fec);
+    ParFiniteElementSpace fespace3d(&pmesh, &fec, 3, mfem::Ordering::byVDIM);
+
+    Table *v2e = pmesh.GetVertexToElementTable();
+
+    int nattr = pmesh.bdr_attributes.Max();
+    Array<int> ess_bdr(nattr);          // Essential boundaries
+    Array<int> nonzero_ess_bdr(nattr);  // Essential boundaries with nonzero value
+    Array<int> zero_ess_bdr(nattr);     // Essential boudnaries with zero value
+
     // Solve the Laplace equation from EPI (1.0) to (LV_ENDO union RV_ENDO) (0.0)
-    clock_gettime(CLOCK_MONOTONIC, &t0);
-    ParGridFunction x_phi_epi;
-    laplace_phi_epi(&x_phi_epi, &pmesh, dim, &opts, rank);
-    clock_gettime(CLOCK_MONOTONIC, &t1);
-    if (opts.verbose && rank == 0)
-        log_timing(cout, "phi_epi", timespec_duration(t0, t1));
+    ParGridFunction x_phi_epi(&fespace1d);
+    ParGridFunction grad_phi_epi(&fespace3d);
+    x_phi_epi.UseDevice(true);
+    grad_phi_epi.UseDevice(true);
+    {
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+
+        ess_bdr = 0;
+        ess_bdr[opts.epi_attr-1] = 1;
+        ess_bdr[opts.lv_attr -1] = 1;
+        if (opts.geom_has_rv)
+            ess_bdr[opts.rv_attr-1] = 1;
+
+        nonzero_ess_bdr = 0;
+        nonzero_ess_bdr[opts.epi_attr-1] = 1;
+
+        zero_ess_bdr = 0;
+        zero_ess_bdr[opts.lv_attr-1] = 1;
+        if (opts.geom_has_rv)
+            zero_ess_bdr[opts.rv_attr-1] = 1;
+
+        laplace(&x_phi_epi, pmesh, ess_bdr, nonzero_ess_bdr, zero_ess_bdr, -1, dim, opts.verbose, rank);
+
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        if (opts.verbose && rank == 0)
+            log_timing(cout, "phi_epi", timespec_duration(t0, t1));
+
+
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+        double *grad_phi_epi_vals = grad_phi_epi.Write();
+        par_calculate_gradients(grad_phi_epi_vals, x_phi_epi, pmesh, v2e);
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        if (opts.verbose && rank == 0)
+            log_timing(cout, "grad_phi_epi", timespec_duration(t0, t1));
+    }
 
 
     // Solve the Laplace equation from LV_ENDO (1.0) to (RV_ENDO union EPI) (0.0)
-    clock_gettime(CLOCK_MONOTONIC, &t0);
-    ParGridFunction x_phi_lv;
-    laplace_phi_lv(&x_phi_lv, &pmesh, dim, &opts, rank);
-    clock_gettime(CLOCK_MONOTONIC, &t1);
-    if (opts.verbose && rank == 0)
-        log_timing(cout, "phi_lv", timespec_duration(t0, t1));
+    ParGridFunction x_phi_lv(&fespace1d);
+    ParGridFunction grad_phi_lv(&fespace3d);
+    x_phi_lv.UseDevice(true);
+    grad_phi_lv.UseDevice(true);
+    {
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+
+        ess_bdr = 0;
+        ess_bdr[opts.epi_attr-1] = 1;
+        ess_bdr[opts.lv_attr -1] = 1;
+        if (opts.geom_has_rv)
+            ess_bdr[opts.rv_attr-1] = 1;
+
+        nonzero_ess_bdr = 0;
+        nonzero_ess_bdr[opts.lv_attr-1] = 1;
+
+        zero_ess_bdr = 0;
+        zero_ess_bdr[opts.epi_attr-1] = 1;
+        if (opts.geom_has_rv)
+            zero_ess_bdr[opts.rv_attr-1] = 1;
+
+        laplace(&x_phi_lv, pmesh, ess_bdr, nonzero_ess_bdr, zero_ess_bdr, -1, dim, opts.verbose, rank);
+
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        if (opts.verbose && rank == 0)
+            log_timing(std::cout, "phi_lv", timespec_duration(t0, t1));
+
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+        double *grad_phi_lv_vals = grad_phi_lv.Write();
+        par_calculate_gradients(grad_phi_lv_vals, x_phi_lv, pmesh, v2e);
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        if (opts.verbose && rank == 0)
+            log_timing(cout, "grad_phi_lv", timespec_duration(t0, t1));
+
+    }
 
 
     // Solve the Laplace equation from RV_ENDO (1.0) to (LV_ENDO union EPI) (0.0)
-    clock_gettime(CLOCK_MONOTONIC, &t0);
-    ParGridFunction x_phi_rv;
-    laplace_phi_rv(&x_phi_rv, &pmesh, dim, &opts, rank);
-    clock_gettime(CLOCK_MONOTONIC, &t1);
-    if (opts.verbose && rank == 0)
-        log_timing(cout, "phi_rv", timespec_duration(t0, t1));
+    ParGridFunction x_phi_rv(&fespace1d);
+    ParGridFunction grad_phi_rv(&fespace3d);
+    x_phi_rv.UseDevice(true);
+    grad_phi_rv.UseDevice(true);
+    if (opts.geom_has_rv) {
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+
+        ess_bdr = 0;
+        ess_bdr[opts.epi_attr    -1] = 1;
+        ess_bdr[opts.lv_attr-1] = 1;
+        ess_bdr[opts.rv_attr-1] = 1;
+
+        nonzero_ess_bdr = 0;
+        nonzero_ess_bdr[opts.rv_attr-1] = 1;
+
+        zero_ess_bdr = 0;
+        zero_ess_bdr[opts.epi_attr-1] = 1;
+        zero_ess_bdr[opts.lv_attr -1] = 1;
+
+        laplace(&x_phi_rv, pmesh, ess_bdr, nonzero_ess_bdr, zero_ess_bdr, -1, dim, opts.verbose, rank);
+
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        if (opts.verbose && rank == 0)
+            log_timing(std::cout, "phi_rv", timespec_duration(t0, t1));
+
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+        double *grad_phi_rv_vals = grad_phi_rv.Write();
+        par_calculate_gradients(grad_phi_rv_vals, x_phi_rv, pmesh, v2e);
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        if (opts.verbose && rank == 0)
+            log_timing(cout, "grad_phi_rv", timespec_duration(t0, t1));
+
+    }
 
 
     // Solve the Laplace equation from BASE (1.0) to APEX (0.0)
+    ParGridFunction x_psi_ab(&fespace1d);
+    ParGridFunction grad_psi_ab(&fespace3d);
+    x_psi_ab.UseDevice(true);
+    grad_psi_ab.UseDevice(true);
+    {
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+
+        ess_bdr = 0;
+        ess_bdr[opts.base_attr-1] = 1;
+
+        nonzero_ess_bdr = 0;
+        nonzero_ess_bdr[opts.base_attr-1] = 1;
+
+        zero_ess_bdr = 0;
+
+        laplace(&x_psi_ab, pmesh, ess_bdr, nonzero_ess_bdr, zero_ess_bdr, apex, dim, opts.verbose, rank);
+
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        if (opts.verbose && rank == 0)
+            log_timing(std::cout, "phi_rv", timespec_duration(t0, t1));
+
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+        double *grad_psi_ab_vals = grad_psi_ab.Write();
+        par_calculate_gradients(grad_psi_ab_vals, x_psi_ab, pmesh, v2e);
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        if (opts.verbose && rank == 0)
+            log_timing(cout, "grad_psi_ab", timespec_duration(t0, t1));
+
+    }
+
+    delete v2e;
+
+    x_phi_epi.UseDevice(false);
+    x_phi_lv.UseDevice(false);
+    x_phi_rv.UseDevice(false);
+    x_psi_ab.UseDevice(false);
+
+    grad_phi_epi.UseDevice(false);
+    grad_phi_lv.UseDevice(false);
+    grad_phi_rv.UseDevice(false);
+    grad_psi_ab.UseDevice(false);
+    // Get read-only pointers to the internal arrays of the laplacian solutions
+    const double *phi_epi = x_phi_epi.Read();
+    const double *phi_lv  = x_phi_lv.Read();
+    const double *phi_rv  = x_phi_rv.Read();
+    const double *psi_ab  = x_psi_ab.Read();
+
+    // Get read-only pointers to the internal arrays of the gradients
+    const double *grad_phi_epi_vals = grad_phi_epi.Read();
+    const double *grad_phi_lv_vals  = grad_phi_lv.Read();
+    const double *grad_phi_rv_vals  = grad_phi_rv.Read();
+    const double *grad_psi_ab_vals  = grad_psi_ab.Read();
+
+    // Setup GridFunctions to store the fibre directions in
+    ParGridFunction F(&fespace3d);
+    ParGridFunction S(&fespace3d);
+    ParGridFunction T(&fespace3d);
+    F.UseDevice(false);
+    S.UseDevice(false);
+    T.UseDevice(false);
+
+    // Get write-only pointers to the internal arrays
+    double *F_vals = F.Write();
+    double *S_vals = S.Write();
+    double *T_vals = T.Write();
+
+
+    // Calculate the fiber orientation
     clock_gettime(CLOCK_MONOTONIC, &t0);
-    ParGridFunction x_psi_ab;
-    laplace_psi_ab(&x_psi_ab, &pmesh, apex, dim, &opts, rank);
+    define_fibers(
+            pmesh,
+            phi_epi,      phi_lv,      phi_rv,      psi_ab,
+            grad_phi_epi_vals, grad_phi_lv_vals, grad_phi_rv_vals, grad_psi_ab_vals,
+            opts.alpha_endo, opts.alpha_epi, opts.beta_endo, opts.beta_epi,
+            F_vals, S_vals, T_vals
+    );
+
     clock_gettime(CLOCK_MONOTONIC, &t1);
     if (opts.verbose && rank == 0)
-        log_timing(cout, "psi_ab", timespec_duration(t0, t1));
+        log_timing(std::cout, "define_fibers", timespec_duration(t0, t1));
 
-    // Save the mesh
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    if (opts.verbose && rank == 0)
+        log_timing(std::cout, "total", timespec_duration(start, end));
+
+    // Save the mesh and solutions
     {
 
         // Output the normal solutions in the mfem subdirectory
-        string mfem_output_dir(opts.output_dir);
+        std::string mfem_output_dir(opts.output_dir);
         mfem_output_dir += "/mfem";
         mksubdir(mfem_output_dir);
+
+#if 0
+        std::string debug_dir = mfem_output_dir + "/debug";
+        mksubdir(debug_dir);
+
+        debug_print_to_file(grad_phi_epi_vals, 3*mesh.GetNV(), debug_dir, "/grad_phi_epi.txt");
+        debug_print_to_file(grad_phi_lv_vals,  3*mesh.GetNV(), debug_dir, "/grad_phi_lv.txt");
+        debug_print_to_file(grad_phi_rv_vals,  3*mesh.GetNV(), debug_dir, "/grad_phi_rv.txt");
+        debug_print_to_file(grad_psi_ab_vals,  3*mesh.GetNV(), debug_dir, "/grad_psi_ab.txt");
+        debug_print_to_file(F,                 3*mesh.GetNV(), debug_dir, "/F.txt");
+        debug_print_to_file(S,                 3*mesh.GetNV(), debug_dir, "/S.txt");
+        debug_print_to_file(T,                 3*mesh.GetNV(), debug_dir, "/T.txt");
+
+#endif
 
         // Save the MFEM mesh
         ostringstream mesh_out;
@@ -436,11 +522,50 @@ int main(int argc, char *argv[])
         mesh_ofs.precision(8);
         pmesh.Print(mesh_ofs);
 
+#if 0
         // Save the solutions
-        save_solution(&x_phi_epi, mfem_output_dir, opts.mesh_basename, "_phi_epi.gf.", rank);
-        save_solution(&x_phi_lv,  mfem_output_dir, opts.mesh_basename, "_phi_lv.gf.",  rank);
-        save_solution(&x_phi_rv,  mfem_output_dir, opts.mesh_basename, "_phi_rv.gf.",  rank);
-        save_solution(&x_psi_ab,  mfem_output_dir, opts.mesh_basename, "_psi_ab.gf.",  rank);
+        save_solution(&x_phi_epi, debug_dir, opts.mesh_basename, "_phi_epi.gf");
+        save_solution(&x_phi_lv,  debug_dir, opts.mesh_basename, "_phi_lv.gf");
+        save_solution(&x_phi_rv,  debug_dir, opts.mesh_basename, "_phi_rv.gf");
+        save_solution(&x_psi_ab,  debug_dir, opts.mesh_basename, "_psi_ab.gf");
+
+        save_solution(&grad_phi_epi, debug_dir, opts.mesh_basename, "_grad_phi_epi.gf");
+        save_solution(&grad_phi_lv,  debug_dir, opts.mesh_basename, "_grad_phi_lv.gf");
+        save_solution(&grad_phi_rv,  debug_dir, opts.mesh_basename, "_grad_phi_rv.gf");
+        save_solution(&grad_psi_ab,  debug_dir, opts.mesh_basename, "_grad_psi_ab.gf");
+#endif
+
+        save_solution(&F,  mfem_output_dir, opts.mesh_basename, "_F.gf", rank);
+        save_solution(&S,  mfem_output_dir, opts.mesh_basename, "_S.gf", rank);
+        save_solution(&T,  mfem_output_dir, opts.mesh_basename, "_T.gf", rank);
+
+        // Save in paraview as well
+        ParaViewDataCollection *pd = NULL;
+        if (opts.paraview) {
+            std::string paraview_path(opts.output_dir);
+            paraview_path += "/paraview";
+            mksubdir(paraview_path);
+
+            pd = new ParaViewDataCollection(opts.mesh_basename, &pmesh);
+            pd->SetPrefixPath(paraview_path);
+#ifdef DEBUG
+            pd->RegisterField("grad phi epi", &grad_phi_epi);
+            pd->RegisterField("grad phi lv",  &grad_phi_lv);
+            pd->RegisterField("grad phi rv",  &grad_phi_rv);
+            pd->RegisterField("grad psi ab",  &grad_psi_ab);
+            pd->RegisterField("phi epi", &x_phi_epi);
+            pd->RegisterField("phi lv",  &x_phi_lv);
+            pd->RegisterField("phi rv",  &x_phi_rv);
+            pd->RegisterField("psi ab",  &x_psi_ab);
+#endif
+            pd->RegisterField("F", &F);
+            pd->RegisterField("S", &S);
+            pd->RegisterField("T", &T);
+            pd->SetLevelsOfDetail(1);
+            pd->SetDataFormat(VTKFormat::BINARY);
+            pd->SetHighOrderOutput(false);
+            pd->Save();
+        }
 
     }
 }

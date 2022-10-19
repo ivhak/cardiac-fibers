@@ -28,6 +28,7 @@ void axis(mfem::DenseMatrix& Q, mfem::Vector& psi, mfem::Vector &phi);
 void bislerp(mfem::DenseMatrix& Qab, mfem::DenseMatrix& Qa, mfem::DenseMatrix& Qb, double t);
 
 void calculate_gradients(double* grads, mfem::GridFunction& x, mfem::Mesh& mesh, mfem::Table* v2e);
+void par_calculate_gradients(double* grads, mfem::ParGridFunction& x, mfem::ParMesh& mesh, mfem::Table* v2e);
 
 void define_fibers(
     mfem::Mesh& mesh,

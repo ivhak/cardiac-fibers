@@ -385,6 +385,56 @@ void calculate_gradients(double* grads, GridFunction& x, Mesh& mesh, Table* v2e)
     }
 }
 
+// Set the gradient in each vertex to be the average of the gradient in the
+// centers of the surrounding elements
+void par_calculate_gradients(double* grads, ParGridFunction& x, ParMesh& mesh, Table* v2e)
+{
+
+    for (int i = 0; i < mesh.GetNV(); i++) {
+        const int num_elements = v2e->RowSize(i);
+        const int *elements = v2e->GetRow(i);
+
+        Vector vertex_gradient(3);
+
+        for (int j = 0; j < num_elements; j++) {
+            Vector grad(3);
+            grad= 0.0;
+            int el_id = elements[j];
+#if 1
+            // Calculate the gradient of an element to be the gradient in its center.
+
+            ElementTransformation *tr = x.ParFESpace()->GetElementTransformation(el_id);
+            Geometry::Type geom = tr->GetGeometryType();
+            const IntegrationPoint& center = Geometries.GetCenter(geom);
+            tr->SetIntPoint(&center);
+            x.GetGradient(*tr, grad);
+            vertex_gradient += grad;
+#else
+            // Calculate the gradient of an element to be the average of the
+            // gradients in each of its integration points.
+
+            ElementTransformation *tr = x.FESpace()->GetElementTransformation(el_id);
+            const IntegrationRule& ir = x.FESpace()->GetFE(elements[j])->GetNodes();
+            for (int k = 0; k < ir.GetNPoints(); k++) {
+                Vector grad_point(3);
+                grad_point = 0.0;
+                const IntegrationPoint& ip = ir.IntPoint(k);
+                tr->SetIntPoint(&ip);
+                x.GetGradient((*tr), grad_point);
+                grad += grad_point;
+            }
+            grad /= ir.GetNPoints();
+            vertex_gradient += grad;
+
+#endif
+        }
+        vertex_gradient /= num_elements;
+        grads[3*i + 0] = vertex_gradient(0);
+        grads[3*i + 1] = vertex_gradient(1);
+        grads[3*i + 2] = vertex_gradient(2);
+    }
+}
+
 void define_fibers(
     Mesh& mesh,
     const double *phi_epi,
@@ -413,10 +463,18 @@ void define_fibers(
         const double phi_lv_i  = CLAMP(phi_lv[i],  0.0, 1.0);
         const double phi_rv_i  = CLAMP(phi_rv[i],  0.0, 1.0);
 
+        MFEM_ASSERT(abs(phi_epi_i + phi_lv_i + phi_rv_i - 1.0) < 1e-3,
+                    "The laplacians epi, lv and rv do not add up to 1.");
+
         Vector grad_phi_epi_i((double *)&grad_phi_epi[3*i], 3);
         Vector grad_phi_lv_i((double *)&grad_phi_lv[3*i], 3);
         Vector grad_phi_rv_i((double *)&grad_phi_rv[3*i], 3);
         Vector grad_psi_ab_i((double *)&grad_psi_ab[3*i], 3);
+
+        MFEM_ASSERT(abs(grad_phi_epi_i(0) + grad_phi_lv_i(0) + grad_phi_rv_i(0)) < 1e-3
+                 && abs(grad_phi_epi_i(1) + grad_phi_lv_i(1) + grad_phi_rv_i(1)) < 1e-3
+                 && abs(grad_phi_epi_i(2) + grad_phi_lv_i(2) + grad_phi_rv_i(2)) < 1e-3,
+                    "The gradients do not add up to zero");
 
         // TODO: What to do here? TOLERANCE
         double depth;

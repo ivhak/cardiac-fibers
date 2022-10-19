@@ -31,6 +31,7 @@ void mksubdir(std::string const& subdir);
 int find_apex_vertex(mfem::Mesh& mesh, mfem::Vector& apex);
 void vertex_vector_to_grid_function(mfem::Mesh& mesh, double* x, mfem::GridFunction *gf);
 void save_solution(mfem::GridFunction *x, std::string const& dir, std::string const& base_name, std::string const& suffix);
+void save_solution(mfem::ParGridFunction *x, std::string const& dir, std::string const& base_name, std::string const& suffix, int rank);
 #ifdef DEBUG
 void debug_print_to_file(const double* x, int n, std::string const& dir, std::string const& filename);
 #endif

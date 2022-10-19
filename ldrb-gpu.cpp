@@ -249,6 +249,9 @@ int main(int argc, char *argv[])
             log_timing(std::cout, "Find apex", timespec_duration(t0, t1));
     }
 
+    struct timespec start, end;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
     H1_FECollection fec(1, mesh.Dimension());
 
     // Set up two finite element spaces: one for scalar values (1D) , and one for 3d vectors
@@ -389,13 +392,16 @@ int main(int argc, char *argv[])
         zero_ess_bdr = 0;
 
         laplace(&x_psi_ab, mesh, ess_bdr, nonzero_ess_bdr, zero_ess_bdr, apex, opts.verbose);
+
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose)
             log_timing(std::cout, "psi_ab", timespec_duration(t0, t1));
 
         clock_gettime(CLOCK_MONOTONIC, &t0);
+
         double *grad_psi_ab_vals = grad_psi_ab.Write();
         calculate_gradients(grad_psi_ab_vals, x_psi_ab, mesh, vertex_to_element_table);
+
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose)
             log_timing(std::cout, "grad_psi_ab", timespec_duration(t0, t1));
@@ -422,6 +428,7 @@ int main(int argc, char *argv[])
     GridFunction S(&fespace3d);
     GridFunction T(&fespace3d);
 
+    // Get write-only pointers to the internal arrays
     double *F_vals = F.Write();
     double *S_vals = S.Write();
     double *T_vals = T.Write();
@@ -439,6 +446,19 @@ int main(int argc, char *argv[])
     clock_gettime(CLOCK_MONOTONIC, &t1);
     if (opts.verbose)
         log_timing(std::cout, "define_fibers", timespec_duration(t0, t1));
+
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    if (opts.verbose)
+        log_timing(std::cout, "total", timespec_duration(start, end));
+
+
+    // Angle
+    GridFunction F_angle(&fespace1d);
+    double * F_angle_vals = F_angle.Write();
+    const double * F_read_vals = F.Read();
+    for (int i = 0; i < mesh.GetNV(); i++) {
+        F_angle_vals[i] = asin(-F_read_vals[3*i]) * 180 / PI;
+    }
 
     // Save the mesh and solutions
     {
@@ -508,6 +528,7 @@ int main(int argc, char *argv[])
             pd->RegisterField("F", &F);
             pd->RegisterField("S", &S);
             pd->RegisterField("T", &T);
+            pd->RegisterField("angle", &F_angle);
             pd->SetLevelsOfDetail(1);
             pd->SetDataFormat(VTKFormat::BINARY);
             pd->SetHighOrderOutput(false);

@@ -44,7 +44,7 @@ MFEM_LFLAGS = -L$(MFEM_LIBDIR) -lmfem
 
 # MPI
 MPI_IFLAGS = -I${MPI_HOME}/include
-MPI_LFLAGS = -L${MPI_HOME}/lib -lmpi
+MPI_LFLAGS = -L${MPI_HOME}/lib -lmpi -lmpi_cxx
 
 # HYPRE
 HYPRE_IFLAGS = -I${HYPRE_INCDIR}

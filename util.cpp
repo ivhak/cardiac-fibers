@@ -75,6 +75,24 @@ void save_solution(
     x->Save(x_ofs);
 }
 
+// Save a solution (in form of a GridFunction) to a file named "<prefix><suffix>".
+void save_solution(
+    mfem::ParGridFunction *x,
+    std::string const& dir,
+    std::string const& base_name,
+    std::string const& suffix,
+    int rank)
+{
+    std::ostringstream filename;
+    filename << dir << "/"
+             << base_name
+             << suffix << "."
+             << std::setfill('0') << std::setw(6) << rank;
+    std::ofstream x_ofs(filename.str().c_str());
+    x_ofs.precision(8);
+    x->Save(x_ofs);
+}
+
 // Find the vertex closest to the prescribed apex, Euclidean distance.
 int find_apex_vertex(mfem::Mesh& mesh, mfem::Vector& apex)
 {
