@@ -25,6 +25,90 @@
 
 using namespace mfem;
 
+void laplace(
+    GridFunction *x,
+    Mesh& mesh,
+    Array<int> &ess_bdr,
+    Array<int> &nonzero_ess_bdr,
+    Array<int> &zero_ess_bdr,
+    int apex,
+    int verbose)
+{
+
+    // Determine the list of true (i.e. parallel conforming) essential boundary
+    // dofs, defined by the boundary attributes marked as essential (Dirichlet)
+    // and converting to a list of true dofs..
+    Array<int> ess_tdof_list;
+    MFEM_ASSERT(mesh.bdr_attributes.Size() != 0, "Boundary size cannot be zero.");
+
+    FiniteElementSpace *fespace = x->FESpace();
+
+    fespace->GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
+
+    // Set up the linear form b(.) which corresponds to the right-hand
+    // side of the FEM linear system, which in this case is (0,phi_i) where
+    // phi_i are the basis functions in fespace.
+    LinearForm b(fespace);
+    ConstantCoefficient zero(0.0);
+    b.AddDomainIntegrator(new DomainLFIntegrator(zero));
+    b.Assemble();
+
+    // Initialize x with initial guess of zero, which
+    // satisfies the boundary conditions.
+    *x = 0.0;
+
+    // Project the constant value 1.0 to all the essential boundaries marked as nonzero.
+    ConstantCoefficient nonzero_bdr(1.0);
+    x->ProjectBdrCoefficient(nonzero_bdr, nonzero_ess_bdr);
+
+    // Project the constant value 0.0 to all the essential boundaries marked as zero.
+    ConstantCoefficient zero_bdr(0.0);
+    x->ProjectBdrCoefficient(zero_bdr, zero_ess_bdr);
+
+    // For the laplacians involving the apex we need to treat the boundary
+    // conditions a little different, as it is to be enforced on a single node
+    // rather than a whole boundary surface. To do so, we make sure that the
+    // apex is en essential true dof, and then we project the wanted value, in
+    // this case 0.0, to only that node.
+    if (apex >= 0) {
+        // Initialize the internal data needed in the finite element space
+        fespace->BuildDofToArrays();
+
+        // Make sure the apex is in the list of essential true Dofs
+        ess_tdof_list.Append(apex);
+
+        Array<int> node_disp(1);
+        node_disp[0] = apex;
+        Vector node_disp_value(1);
+        node_disp_value[0] = 0.0;
+
+        VectorConstantCoefficient node_disp_value_coeff(node_disp_value);
+
+        x->ProjectCoefficient(node_disp_value_coeff, node_disp);
+    }
+
+    // Set up the parallel bilinear form a(.,.) on the finite element space
+    // corresponding to the Laplacian operator -Delta, by adding the
+    // Diffusion domain integrator.
+    BilinearForm a(fespace);
+    ConstantCoefficient one(1.0);
+    a.AddDomainIntegrator(new DiffusionIntegrator(one));
+
+    // Assemble the parallel bilinear form and the corresponding linear system.
+    a.Assemble();
+
+    OperatorPtr A;
+    Vector B, X;
+    a.FormLinearSystem(ess_tdof_list, *x, b, A, X, B);
+
+    // Solve the linear system A X = B.
+    // Use a simple symmetric Gauss-Seidel preconditioner with PCG.
+    GSSmoother M((SparseMatrix&)(*A));
+    PCG(*A, M, B, X, verbose > 1 ? 1 : 0, 1000, 1e-15, 0.0);
+
+    // Recover the grid function corresponding to X.
+    a.RecoverFEMSolution(X, b, *x);
+}
 
 int main(int argc, char *argv[])
 {

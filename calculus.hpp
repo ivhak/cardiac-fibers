@@ -27,16 +27,6 @@ void orient(mfem::DenseMatrix& Q_out, mfem::DenseMatrix& Q, double a, double b);
 void axis(mfem::DenseMatrix& Q, mfem::Vector& psi, mfem::Vector &phi);
 void bislerp(mfem::DenseMatrix& Qab, mfem::DenseMatrix& Qa, mfem::DenseMatrix& Qb, double t);
 
-
-void laplace(
-    mfem::GridFunction *x,
-    mfem::Mesh& mesh,
-    mfem::Array<int> &ess_bdr,
-    mfem::Array<int> &nonzero_ess_bdr,
-    mfem::Array<int> &zero_ess_bdr,
-    int apex,
-    int verbose);
-
 void calculate_gradients(double* grads, mfem::GridFunction& x, mfem::Mesh& mesh, mfem::Table* v2e);
 
 void define_fibers(
