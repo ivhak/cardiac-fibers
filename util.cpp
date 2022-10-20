@@ -34,9 +34,16 @@ void log_timing(
     const char *log_string,
     double seconds)
 {
-    out << "[" << std::left << std::setw(15) << log_string << "]: "
+    out << "[" << std::left << std::setw(25) << log_string << "]: "
         << std::right << std::fixed << std::setw(12)
         << std::setprecision(6)<< seconds << " s" << std::endl;
+}
+
+void log_marker(
+    std::ostream& out,
+    const char *log_string)
+{
+    out << "[" << std::left << std::setw(25) << log_string << "]" << std::endl;
 }
 
 std::string basename(std::string const& path)

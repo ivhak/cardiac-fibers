@@ -18,7 +18,7 @@
 #include <fstream>
 
 #include "mfem.hpp"
-#include "calculus.hpp"
+#include "calculus_gpu.hpp"
 #include "util.hpp"
 #include "ldrb-gpu.hpp"
 
@@ -71,31 +71,29 @@ void laplace(
     // conditions a little different, as it is to be enforced on a single node
     // rather than a whole boundary surface. To do so, we make sure that the
     // apex is en essential true dof, and then we project the wanted value, in
-    // this case 1.0, to only that node.
+    // this case 0.0, to only that node.
     if (apex >= 0) {
         // Initialize the internal data needed in the finite element space
+        fespace->BuildDofToArrays();
 
-        Array<int> vertex_dofs;
-        fespace->GetVertexDofs(apex, vertex_dofs);
-        int apex_dof = vertex_dofs[0];
+        // Find the dof at the local apex vertex
+        int apex_dof = fespace->GetLocalTDofNumber(apex);
 
-        int local_apex_idx = fespace->GetLocalTDofNumber(apex_dof);
-        if (local_apex_idx >= 0) {
+        // This assertion should never fail, as we should have made sure that
+        // the apex is in the form of a local vertex number.
+        MFEM_ASSERT(apex_dof != -1, "No local DoF for the given local apex vertex");
 
-            std::cout << "[" << rank << "]: LOCAL APEX IDX: " << local_apex_idx;
-            fespace->BuildDofToArrays();
-            // Make sure the apex is in the list of essential true Dofs
-            ess_tdof_list.Append(apex);
+        // Make sure the apex is in the list of essential true Dofs
+        ess_tdof_list.Append(apex_dof);
 
-            Array<int> node_disp(1);
-            node_disp[0] = apex;
-            Vector node_disp_value(1);
-            node_disp_value[0] = 0.0;
+        Array<int> node_disp(1);
+        node_disp[0] = apex_dof;
+        Vector node_disp_value(1);
+        node_disp_value[0] = 0.0;
 
-            VectorConstantCoefficient node_disp_value_coeff(node_disp_value);
+        VectorConstantCoefficient node_disp_value_coeff(node_disp_value);
 
-            x->ProjectCoefficient(node_disp_value_coeff, node_disp);
-        }
+        x->ProjectCoefficient(node_disp_value_coeff, node_disp);
     }
 
     // Set up the parallel bilinear form a(.,.) on the finite element space
@@ -136,6 +134,7 @@ int main(int argc, char *argv[])
     // 1. Initialize MPI and HYPRE
     Mpi::Init();
     int rank = Mpi::WorldRank();
+    int nranks = Mpi::WorldSize();
     Hypre::Init();
 
     Options opts;
@@ -218,21 +217,21 @@ int main(int argc, char *argv[])
     if (rank == 0 && opts.verbose > 1)
         args.PrintOptions(cout);
 
-    // Set the basename of the mesh
-    opts.mesh_basename = remove_extension(basename(std::string(opts.mesh_file)));
+    if (opts.rv_attr == -1)
+        opts.geom_has_rv = false;
 
-    // Make sure the output direcory exists
-    mksubdir(opts.output_dir);
 
     struct timespec t0, t1;
+    struct timespec start, end;
+    clock_gettime(CLOCK_MONOTONIC, &start);
 
-    // 3. Enable hardware devices such as GPUs, and programming models such as
-    //    HIP, CUDA, OCCA, RAJA and OpenMP based on command line options.
+    // Enable hardware devices such as GPUs, and programming models such as
+    // HIP, CUDA, OCCA, RAJA and OpenMP based on command line options.
     Device device(opts.device_config);
     if (opts.verbose > 1 && rank == 0)
         device.Print();
 
-    // 4. Load the mesh
+    // Load the mesh
     clock_gettime(CLOCK_MONOTONIC, &t0);
     Mesh mesh(opts.mesh_file, 1, 1);
     clock_gettime(CLOCK_MONOTONIC, &t1);
@@ -248,37 +247,54 @@ int main(int argc, char *argv[])
 
     int dim = mesh.Dimension();
 
-    // Set the apex node based on the prescribed apex coordinate.
-    int apex = 0;
+
+    // Define a parallel mesh by a partitioning of the serial mesh.
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    ParMesh pmesh(MPI_COMM_WORLD, mesh);
+    mesh.Clear();
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    if (opts.verbose && rank == 0)
+        log_timing(cout, "Partition mesh", timespec_duration(t0, t1));
+
+
+    // Each rank finds the vertex in its submesh that is closest to the
+    // prescribed apex. The rank with the closest one sets up the boundary
+    // conditions in that vertex.
+    int apex = -1;
     {
         clock_gettime(CLOCK_MONOTONIC, &t0);
-        apex = find_apex_vertex(mesh, opts.prescribed_apex);
-        clock_gettime(CLOCK_MONOTONIC, &t1);
-
-        if (opts.verbose > 1 && rank == 0) {
-            double *closest_vertex = mesh.GetVertex(apex);
-            cout << setprecision(2)
-                 << "Found closest vertex to prescribed apex "
-                 << "("  << opts.prescribed_apex[0]
-                 << ", " << opts.prescribed_apex[1]
-                 << ", " << opts.prescribed_apex[2]
-                 << ") at "
-                 << "("  << closest_vertex[0]
-                 << ", " << closest_vertex[1]
-                 << ", " << closest_vertex[2]
-                 << ")." << endl;
-
+        std::vector<double> min_buffer(nranks, -1);
+        double min_distance = std::numeric_limits<double>::max();
+        for (int i = 0; i < pmesh.GetNV(); i++) {
+            double *vertices = pmesh.GetVertex(i);
+            double this_distance =
+                (vertices[0]-opts.prescribed_apex[0]) * (vertices[0]-opts.prescribed_apex[0])
+              + (vertices[1]-opts.prescribed_apex[1]) * (vertices[1]-opts.prescribed_apex[1])
+              + (vertices[2]-opts.prescribed_apex[2]) * (vertices[2]-opts.prescribed_apex[2]);
+            if (this_distance < min_distance) {
+                apex = i;
+                min_distance = this_distance;
+            }
         }
+
+        MPI_Allgather(&min_distance,     1, MPI_DOUBLE,
+                      min_buffer.data(), 1, MPI_DOUBLE, MPI_COMM_WORLD);
+        auto result = std::min_element(min_buffer.begin(), min_buffer.end());
+        auto target_rank = result - min_buffer.begin();
+        if (target_rank != rank) {
+            apex = -1;
+        }
+
+        clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose && rank == 0)
             log_timing(cout, "Find apex", timespec_duration(t0, t1));
     }
 
-    // 6. Define a parallel mesh by a partitioning of the serial mesh.
-    ParMesh pmesh(MPI_COMM_WORLD, mesh);
-    mesh.Clear();
+    struct timespec start_fiber, end_fiber;
+    clock_gettime(CLOCK_MONOTONIC, &start_fiber);
 
-    struct timespec start, end;
-    clock_gettime(CLOCK_MONOTONIC, &start);
+    if (opts.verbose && rank == 0)
+        log_marker(std::cout, "Begin fiber computation");
 
     H1_FECollection fec(1, pmesh.Dimension());
 
@@ -319,7 +335,7 @@ int main(int argc, char *argv[])
 
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose && rank == 0)
-            log_timing(cout, "phi_epi", timespec_duration(t0, t1));
+            log_timing(cout, "Compute phi_epi", timespec_duration(t0, t1));
 
 
         clock_gettime(CLOCK_MONOTONIC, &t0);
@@ -327,7 +343,7 @@ int main(int argc, char *argv[])
         par_calculate_gradients(grad_phi_epi_vals, x_phi_epi, pmesh, v2e);
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose && rank == 0)
-            log_timing(cout, "grad_phi_epi", timespec_duration(t0, t1));
+            log_timing(cout, "Compute grad_phi_epi", timespec_duration(t0, t1));
     }
 
 
@@ -357,14 +373,14 @@ int main(int argc, char *argv[])
 
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose && rank == 0)
-            log_timing(std::cout, "phi_lv", timespec_duration(t0, t1));
+            log_timing(std::cout, "Compute phi_lv", timespec_duration(t0, t1));
 
         clock_gettime(CLOCK_MONOTONIC, &t0);
         double *grad_phi_lv_vals = grad_phi_lv.Write();
         par_calculate_gradients(grad_phi_lv_vals, x_phi_lv, pmesh, v2e);
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose && rank == 0)
-            log_timing(cout, "grad_phi_lv", timespec_duration(t0, t1));
+            log_timing(cout, "Compute grad_phi_lv", timespec_duration(t0, t1));
 
     }
 
@@ -393,15 +409,18 @@ int main(int argc, char *argv[])
 
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose && rank == 0)
-            log_timing(std::cout, "phi_rv", timespec_duration(t0, t1));
+            log_timing(std::cout, "Compute phi_rv", timespec_duration(t0, t1));
 
         clock_gettime(CLOCK_MONOTONIC, &t0);
         double *grad_phi_rv_vals = grad_phi_rv.Write();
         par_calculate_gradients(grad_phi_rv_vals, x_phi_rv, pmesh, v2e);
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose && rank == 0)
-            log_timing(cout, "grad_phi_rv", timespec_duration(t0, t1));
+            log_timing(cout, "Compute grad_phi_rv", timespec_duration(t0, t1));
 
+    } else {
+        x_phi_rv = 0.0;
+        grad_phi_rv = 0.0;
     }
 
 
@@ -425,19 +444,20 @@ int main(int argc, char *argv[])
 
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose && rank == 0)
-            log_timing(std::cout, "phi_rv", timespec_duration(t0, t1));
+            log_timing(std::cout, "Compute psi_ab", timespec_duration(t0, t1));
 
         clock_gettime(CLOCK_MONOTONIC, &t0);
         double *grad_psi_ab_vals = grad_psi_ab.Write();
         par_calculate_gradients(grad_psi_ab_vals, x_psi_ab, pmesh, v2e);
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose && rank == 0)
-            log_timing(cout, "grad_psi_ab", timespec_duration(t0, t1));
+            log_timing(cout, "Compute grad_psi_ab", timespec_duration(t0, t1));
 
     }
 
     delete v2e;
 
+#if 0
     x_phi_epi.UseDevice(false);
     x_phi_lv.UseDevice(false);
     x_phi_rv.UseDevice(false);
@@ -447,6 +467,7 @@ int main(int argc, char *argv[])
     grad_phi_lv.UseDevice(false);
     grad_phi_rv.UseDevice(false);
     grad_psi_ab.UseDevice(false);
+#endif
     // Get read-only pointers to the internal arrays of the laplacian solutions
     const double *phi_epi = x_phi_epi.Read();
     const double *phi_lv  = x_phi_lv.Read();
@@ -463,9 +484,11 @@ int main(int argc, char *argv[])
     ParGridFunction F(&fespace3d);
     ParGridFunction S(&fespace3d);
     ParGridFunction T(&fespace3d);
+#if 0
     F.UseDevice(false);
     S.UseDevice(false);
     T.UseDevice(false);
+#endif
 
     // Get write-only pointers to the internal arrays
     double *F_vals = F.Write();
@@ -476,7 +499,7 @@ int main(int argc, char *argv[])
     // Calculate the fiber orientation
     clock_gettime(CLOCK_MONOTONIC, &t0);
     define_fibers(
-            pmesh,
+            pmesh.GetNV(),
             phi_epi,      phi_lv,      phi_rv,      psi_ab,
             grad_phi_epi_vals, grad_phi_lv_vals, grad_phi_rv_vals, grad_psi_ab_vals,
             opts.alpha_endo, opts.alpha_epi, opts.beta_endo, opts.beta_epi,
@@ -485,33 +508,32 @@ int main(int argc, char *argv[])
 
     clock_gettime(CLOCK_MONOTONIC, &t1);
     if (opts.verbose && rank == 0)
-        log_timing(std::cout, "define_fibers", timespec_duration(t0, t1));
+        log_timing(std::cout, "Compute fiber orientation", timespec_duration(t0, t1));
 
+    clock_gettime(CLOCK_MONOTONIC, &end_fiber);
     clock_gettime(CLOCK_MONOTONIC, &end);
-    if (opts.verbose && rank == 0)
-        log_timing(std::cout, "total", timespec_duration(start, end));
+    if (opts.verbose && rank == 0) {
+        log_marker(std::cout, "End fiber computation");
+        log_timing(std::cout, "Fiber comp. time", timespec_duration(start_fiber, end_fiber));
+        log_timing(std::cout, "Total time", timespec_duration(start, end));
+    }
+
+    F.HostRead();
+    S.HostRead();
+    T.HostRead();
 
     // Save the mesh and solutions
     {
+        // Set the basename of the mesh
+        opts.mesh_basename = remove_extension(basename(std::string(opts.mesh_file)));
+
+        // Make sure the output direcory exists
+        mksubdir(opts.output_dir);
 
         // Output the normal solutions in the mfem subdirectory
         std::string mfem_output_dir(opts.output_dir);
         mfem_output_dir += "/mfem";
         mksubdir(mfem_output_dir);
-
-#if 0
-        std::string debug_dir = mfem_output_dir + "/debug";
-        mksubdir(debug_dir);
-
-        debug_print_to_file(grad_phi_epi_vals, 3*mesh.GetNV(), debug_dir, "/grad_phi_epi.txt");
-        debug_print_to_file(grad_phi_lv_vals,  3*mesh.GetNV(), debug_dir, "/grad_phi_lv.txt");
-        debug_print_to_file(grad_phi_rv_vals,  3*mesh.GetNV(), debug_dir, "/grad_phi_rv.txt");
-        debug_print_to_file(grad_psi_ab_vals,  3*mesh.GetNV(), debug_dir, "/grad_psi_ab.txt");
-        debug_print_to_file(F,                 3*mesh.GetNV(), debug_dir, "/F.txt");
-        debug_print_to_file(S,                 3*mesh.GetNV(), debug_dir, "/S.txt");
-        debug_print_to_file(T,                 3*mesh.GetNV(), debug_dir, "/T.txt");
-
-#endif
 
         // Save the MFEM mesh
         ostringstream mesh_out;
@@ -522,19 +544,19 @@ int main(int argc, char *argv[])
         mesh_ofs.precision(8);
         pmesh.Print(mesh_ofs);
 
-#if 0
-        // Save the solutions
-        save_solution(&x_phi_epi, debug_dir, opts.mesh_basename, "_phi_epi.gf");
-        save_solution(&x_phi_lv,  debug_dir, opts.mesh_basename, "_phi_lv.gf");
-        save_solution(&x_phi_rv,  debug_dir, opts.mesh_basename, "_phi_rv.gf");
-        save_solution(&x_psi_ab,  debug_dir, opts.mesh_basename, "_psi_ab.gf");
+#ifdef DEBUG
+        std::string debug_dir = mfem_output_dir + "/debug";
+        save_solution(&x_phi_epi, debug_dir, opts.mesh_basename, "_phi_epi.gf", rank);
+        save_solution(&x_phi_lv,  debug_dir, opts.mesh_basename, "_phi_lv.gf", rank);
+        save_solution(&x_phi_rv,  debug_dir, opts.mesh_basename, "_phi_rv.gf", rank);
+        save_solution(&x_psi_ab,  debug_dir, opts.mesh_basename, "_psi_ab.gf", rank);
 
-        save_solution(&grad_phi_epi, debug_dir, opts.mesh_basename, "_grad_phi_epi.gf");
-        save_solution(&grad_phi_lv,  debug_dir, opts.mesh_basename, "_grad_phi_lv.gf");
-        save_solution(&grad_phi_rv,  debug_dir, opts.mesh_basename, "_grad_phi_rv.gf");
-        save_solution(&grad_psi_ab,  debug_dir, opts.mesh_basename, "_grad_psi_ab.gf");
+        save_solution(&grad_phi_epi, debug_dir, opts.mesh_basename, "_grad_phi_epi.gf", rank);
+        save_solution(&grad_phi_lv,  debug_dir, opts.mesh_basename, "_grad_phi_lv.gf", rank);
+        save_solution(&grad_phi_rv,  debug_dir, opts.mesh_basename, "_grad_phi_rv.gf", rank);
+        save_solution(&grad_psi_ab,  debug_dir, opts.mesh_basename, "_grad_psi_ab.gf", rank);
 #endif
-
+        // Save the solutions
         save_solution(&F,  mfem_output_dir, opts.mesh_basename, "_F.gf", rank);
         save_solution(&S,  mfem_output_dir, opts.mesh_basename, "_S.gf", rank);
         save_solution(&T,  mfem_output_dir, opts.mesh_basename, "_T.gf", rank);

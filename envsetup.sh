@@ -21,7 +21,6 @@
 
 module use /global/D1/homes/james/ex3modules/mi100q/1.0.0/modulefiles
 
-module load gcc-10.1.0
 module load amd/rocm/5.1.3
 module load hypre-32-2.24.0
 module load openmpi-4.1.4
