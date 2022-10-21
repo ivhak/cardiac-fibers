@@ -18,7 +18,11 @@
 #include <fstream>
 
 #include "mfem.hpp"
+#if 0
 #include "calculus_gpu.hpp"
+#else
+#include "calculus.hpp"
+#endif
 #include "util.hpp"
 #include "ldrb-gpu.hpp"
 
@@ -26,9 +30,44 @@ using namespace std;
 using namespace mfem;
 
 
+// Solve the Laplace equation
+//
+//      delta u = 0
+//
+// using the solver `solver`, storing the solution in `x`.
+//
+// This routine expects that
+//   1. ParGridFunction `x` and its associated ParFiniteElementSpace has been
+//      set up before hand.
+//   2. The wanted solver, `solver`, and possible preconditioner, has been configured.
+//
+//
+// Notes:
+//
+// - The boundary surfaces that are essential for a given solution are set in
+//   `essential_boundaries`. For this use case these surfaces are the
+//   epicardium, the left ventricle endocardium, the right ventricle and the
+//   base. Each of these surfaces are expected to have an id/attribute
+//   associated to it, which is dependent on the input mesh.
+//
+// - The essential boundary surfaces with boundary condition 0 are set
+//   `zero_essential_boundaries`. For the boundary condition to be properly
+//   enforced on a given surface, it also has to be set as an essential
+//   boundary in `essential_boundaries`.
+//
+// - The boundary surfaces with boundary condition 1 are set in
+//   `nonzero_essential_boundaries`. For the boundary condition to be properly
+//   enforced on a given surface, it also has to be set as an essential boundary
+//   in `essential_boundaries`.
+//
+// - The `apex` variable handles a corner case when solving the Laplace
+//   equation from the base to the epicardium (psi_ab). In this special case, a
+//   boundary condition of 0 needs to be enforced in a single vertex, namely
+//   the apex. This is handled by setting `apex` to be the index of the apex
+//   vertex in the mesh.
 void laplace(
     ParGridFunction* x,
-    ParMesh& pmesh,
+    Solver& solver,
     Array<int> &essential_boundaries,
     Array<int> &nonzero_essential_boundaries,
     Array<int> &zero_essential_boundaries,
@@ -37,92 +76,113 @@ void laplace(
     int verbose,
     int rank)
 {
+    struct timespec t0, t1;
+
     // Determine the list of true (i.e. parallel conforming) essential boundary
     // dofs, defined by the boundary attributes marked as essential (Dirichlet)
     // and converting to a list of true dofs..
     Array<int> ess_tdof_list;
-    MFEM_ASSERT(pmesh.bdr_attributes.Size() != 0, "Boundary size cannot be zero.");
 
     ParFiniteElementSpace *fespace = x->ParFESpace();
 
     fespace->GetEssentialTrueDofs(essential_boundaries, ess_tdof_list);
 
+    // Set up boundary conditions
+    {
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+        // Initialize x with initial guess of zero, which satisfies the boundary
+        // conditions.
+        *x = 0.0;
+
+        // Project the constant value 1.0 to all the essential boundaries marked as nonzero.
+        ConstantCoefficient nonzero_bdr(1.0);
+        x->ProjectBdrCoefficient(nonzero_bdr, nonzero_essential_boundaries);
+
+        // Project the constant value 0.0 to all the essential boundaries marked as zero.
+        ConstantCoefficient zero_bdr(0.0);
+        x->ProjectBdrCoefficient(zero_bdr, zero_essential_boundaries);
+
+        // For the laplacian involving the apex we need to treat the boundary
+        // conditions a little different, as it is to be enforced on a single node
+        // rather than a whole boundary surface. To do so, we make sure that the
+        // apex is en essential true dof, and then we project the wanted value, in
+        // this case 0.0, to only that node.
+        if (apex >= 0) {
+            // Initialize the internal data needed in the finite element space
+            fespace->BuildDofToArrays();
+
+            // Find the dof at the local apex vertex
+            int apex_dof = fespace->GetLocalTDofNumber(apex);
+
+            // This assertion should never fail, as we should have made sure that
+            // the apex is in the form of a local vertex number.
+            MFEM_ASSERT(apex_dof != -1, "No local DoF for the given local apex vertex");
+
+            // Make sure the apex is in the list of essential true Dofs
+            ess_tdof_list.Append(apex_dof);
+
+            Array<int> node_disp(1);
+            node_disp[0] = apex_dof;
+            Vector node_disp_value(1);
+            node_disp_value[0] = 0.0;
+
+            VectorConstantCoefficient node_disp_value_coeff(node_disp_value);
+
+            x->ProjectCoefficient(node_disp_value_coeff, node_disp);
+        }
+
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        if (verbose >= 2&& rank == 0) {
+            log_timing(cout, "Setup boundary cond.", timespec_duration(t0, t1), 2);
+        }
+    }
+
+
     // Set up the parallel linear form b(.) which corresponds to the right-hand
     // side of the FEM linear system, which in this case is (1,phi_i) where
     // phi_i are the basis functions in fespace.
+    clock_gettime(CLOCK_MONOTONIC, &t0);
     ParLinearForm b(fespace);
     ConstantCoefficient zero(0.0);
     b.AddDomainIntegrator(new DomainLFIntegrator(zero));
     b.Assemble();
-
-    // Initialize x with initial guess of zero, which satisfies the boundary
-    // conditions.
-    *x = 0.0;
-
-    // Project the constant value 1.0 to all the essential boundaries marked as nonzero.
-    ConstantCoefficient nonzero_bdr(1.0);
-    x->ProjectBdrCoefficient(nonzero_bdr, nonzero_essential_boundaries);
-
-    // Project the constant value 0.0 to all the essential boundaries marked as zero.
-    ConstantCoefficient zero_bdr(0.0);
-    x->ProjectBdrCoefficient(zero_bdr, zero_essential_boundaries);
-
-    // For the laplacians involving the apex we need to treat the boundary
-    // conditions a little different, as it is to be enforced on a single node
-    // rather than a whole boundary surface. To do so, we make sure that the
-    // apex is en essential true dof, and then we project the wanted value, in
-    // this case 0.0, to only that node.
-    if (apex >= 0) {
-        // Initialize the internal data needed in the finite element space
-        fespace->BuildDofToArrays();
-
-        // Find the dof at the local apex vertex
-        int apex_dof = fespace->GetLocalTDofNumber(apex);
-
-        // This assertion should never fail, as we should have made sure that
-        // the apex is in the form of a local vertex number.
-        MFEM_ASSERT(apex_dof != -1, "No local DoF for the given local apex vertex");
-
-        // Make sure the apex is in the list of essential true Dofs
-        ess_tdof_list.Append(apex_dof);
-
-        Array<int> node_disp(1);
-        node_disp[0] = apex_dof;
-        Vector node_disp_value(1);
-        node_disp_value[0] = 0.0;
-
-        VectorConstantCoefficient node_disp_value_coeff(node_disp_value);
-
-        x->ProjectCoefficient(node_disp_value_coeff, node_disp);
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    if (verbose >= 2 && rank == 0) {
+        log_timing(cout, "Assemble RHS", timespec_duration(t0, t1), 2);
     }
 
     // Set up the parallel bilinear form a(.,.) on the finite element space
     // corresponding to the Laplacian operator -Delta, by adding the
     // Diffusion domain integrator.
+    clock_gettime(CLOCK_MONOTONIC, &t0);
     ParBilinearForm a(fespace);
     ConstantCoefficient one(1.0);
     a.AddDomainIntegrator(new DiffusionIntegrator(one));
-
     // Assemble the parallel bilinear form and the corresponding linear system.
     a.Assemble();
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    if (verbose >= 2 && rank == 0) {
+        log_timing(cout, "Assemble LHS", timespec_duration(t0, t1), 2);
+    }
 
+    // Form the linear system
+    clock_gettime(CLOCK_MONOTONIC, &t0);
     OperatorPtr A;
     Vector B, X;
     a.FormLinearSystem(ess_tdof_list, *x, b, A, X, B);
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    if (verbose >= 2 && rank == 0) {
+        log_timing(cout, "Form linear system", timespec_duration(t0, t1), 2);
+    }
 
     // Solve the linear system A X = B.
-    // Use the BoomerAMG preconditioner from hypre.
-    HypreBoomerAMG *prec = NULL;
-    prec = new HypreBoomerAMG;
-    prec->SetPrintLevel(verbose > 1 ? 1 : 0);
-    CGSolver cg(MPI_COMM_WORLD);
-    cg.SetRelTol(1e-12);
-    cg.SetMaxIter(2000);
-    cg.SetPrintLevel(verbose > 1 ? 1 : 0);
-    if (prec) { cg.SetPreconditioner(*prec); }
-    cg.SetOperator(*A);
-    cg.Mult(B, X);
-    delete prec;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    solver.SetOperator(*A);
+    solver.Mult(B, X);
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    if (verbose >= 2 && rank == 0) {
+        log_timing(cout, "Solve", timespec_duration(t0, t1), 2);
+    }
 
     // Recover the parallel grid function corresponding to X. This is the local
     // finite element solution on each processor.
@@ -152,10 +212,10 @@ int main(int argc, char *argv[])
     opts.beta_endo  = -65.0;
     opts.beta_epi   =  25.0;
 
-    opts.base_attr = BASE;
-    opts.epi_attr  = EPI;
-    opts.lv_attr   = LV_ENDO;
-    opts.rv_attr   = RV_ENDO;
+    opts.base_id = 1;
+    opts.epi_id  = 2;
+    opts.lv_id   = 3;
+    opts.rv_id   = 4;
 
     opts.geom_has_rv = true;
 
@@ -192,17 +252,17 @@ int main(int argc, char *argv[])
     args.AddOption(&opts.beta_epi,
             "-bi", "--beta-epi",
             "Beta angle in epicardium.");
-    args.AddOption(&opts.base_attr,
-            "-base", "--base-attribute",
+    args.AddOption(&opts.base_id,
+            "-base", "--base-id",
             "Base attribute");
-    args.AddOption(&opts.epi_attr,
-            "-epi", "--epi-attribute",
+    args.AddOption(&opts.epi_id,
+            "-epi", "--epi-id",
             "Epicaridum attribute");
-    args.AddOption(&opts.lv_attr,
-            "-lv", "--lv-attribute",
+    args.AddOption(&opts.lv_id,
+            "-lv", "--lv-id",
             "Left ventricle endocardium attribute");
-    args.AddOption(&opts.rv_attr,
-            "-rv", "--rv-attribute",
+    args.AddOption(&opts.rv_id,
+            "-rv", "--rv-id",
             "Right ventricle endocardium attribute. "
             "Set to -1 if there is no right ventricle in the geometry, "
             "e.g. for a single ventricle geometry.");
@@ -214,10 +274,10 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    if (rank == 0 && opts.verbose > 1)
+    if (rank == 0 && opts.verbose > 2)
         args.PrintOptions(cout);
 
-    if (opts.rv_attr == -1)
+    if (opts.rv_id == -1)
         opts.geom_has_rv = false;
 
 
@@ -228,7 +288,7 @@ int main(int argc, char *argv[])
     // Enable hardware devices such as GPUs, and programming models such as
     // HIP, CUDA, OCCA, RAJA and OpenMP based on command line options.
     Device device(opts.device_config);
-    if (opts.verbose > 1 && rank == 0)
+    if (opts.verbose > 2 && rank == 0)
         device.Print();
 
     // Load the mesh
@@ -236,7 +296,7 @@ int main(int argc, char *argv[])
     Mesh mesh(opts.mesh_file, 1, 1);
     clock_gettime(CLOCK_MONOTONIC, &t1);
 
-    if (opts.verbose > 1 && rank == 0) {
+    if (opts.verbose > 2 && rank == 0) {
         cout << "Loaded meshfile '" << opts.mesh_file << "' "
              << "consisting of " << mesh.GetNV() << " vertices "
              << "and " << mesh.GetNE() << " elements" << endl;
@@ -260,6 +320,8 @@ int main(int argc, char *argv[])
     // Each rank finds the vertex in its submesh that is closest to the
     // prescribed apex. The rank with the closest one sets up the boundary
     // conditions in that vertex.
+    //
+    // XXX: What if the apex vertex is in multiple submeshes?
     int apex = -1;
     {
         clock_gettime(CLOCK_MONOTONIC, &t0);
@@ -291,10 +353,39 @@ int main(int argc, char *argv[])
     }
 
     struct timespec start_fiber, end_fiber;
+
+    // Setup the linear solver. Use Hypre's Preconditioned Conjugate Gradient
+    // (PCG) with the BoomerAMG (algebraic multigrid) preconditioner.
+    HyprePCG cg(MPI_COMM_WORLD);
+    {
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+        HypreBoomerAMG *prec = NULL;
+        prec = new HypreBoomerAMG;
+        prec->SetPrintLevel(opts.verbose > 2 ? 1 : 0);
+                                          //
+// TODO: These settings result in a non-SPD preconditioner???
+#if 0
+        prec->SetCoarsening(8);           // PMIS
+        prec->SetInterpolation(17);       // extended+i, matrix-matrix
+        prec->SetAggressiveCoarsening(0);
+        prec->SetStrengthThresh(0.5);
+        prec->SetRelaxType(7);            // weighted Jacobi
+#endif
+
+        cg.SetTol(1e-12);
+        cg.SetMaxIter(2000);
+        cg.SetPrintLevel(opts.verbose > 2 ? 1 : 0);
+        if (prec) { cg.SetPreconditioner(*prec); }
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        if (opts.verbose && rank == 0) {
+            log_timing(cout, "Setup prec and solver", timespec_duration(t0,t1));
+        }
+    }
+
     clock_gettime(CLOCK_MONOTONIC, &start_fiber);
 
     if (opts.verbose && rank == 0)
-        log_marker(std::cout, "Begin fiber computation");
+        log_marker(std::cout, "Compute fiber orientation");
 
     H1_FECollection fec(1, pmesh.Dimension());
 
@@ -315,35 +406,44 @@ int main(int argc, char *argv[])
     x_phi_epi.UseDevice(true);
     grad_phi_epi.UseDevice(true);
     {
+        if (opts.verbose > 1 && rank == 0) {
+            log_marker(cout, "Compute phi_epi", 1);
+        }
         clock_gettime(CLOCK_MONOTONIC, &t0);
 
         ess_bdr = 0;
-        ess_bdr[opts.epi_attr-1] = 1;
-        ess_bdr[opts.lv_attr -1] = 1;
+        ess_bdr[opts.epi_id-1] = 1;
+        ess_bdr[opts.lv_id -1] = 1;
         if (opts.geom_has_rv)
-            ess_bdr[opts.rv_attr-1] = 1;
+            ess_bdr[opts.rv_id-1] = 1;
 
         nonzero_ess_bdr = 0;
-        nonzero_ess_bdr[opts.epi_attr-1] = 1;
+        nonzero_ess_bdr[opts.epi_id-1] = 1;
 
         zero_ess_bdr = 0;
-        zero_ess_bdr[opts.lv_attr-1] = 1;
+        zero_ess_bdr[opts.lv_id-1] = 1;
         if (opts.geom_has_rv)
-            zero_ess_bdr[opts.rv_attr-1] = 1;
+            zero_ess_bdr[opts.rv_id-1] = 1;
 
-        laplace(&x_phi_epi, pmesh, ess_bdr, nonzero_ess_bdr, zero_ess_bdr, -1, dim, opts.verbose, rank);
+        laplace(&x_phi_epi, cg, ess_bdr, nonzero_ess_bdr, zero_ess_bdr, -1, dim, opts.verbose, rank);
 
         clock_gettime(CLOCK_MONOTONIC, &t1);
-        if (opts.verbose && rank == 0)
-            log_timing(cout, "Compute phi_epi", timespec_duration(t0, t1));
+        if (opts.verbose && rank == 0) {
+            if (opts.verbose > 1) {
+                log_timing(cout, "Total", timespec_duration(t0, t1), 2, '=');
+                std::cout << endl;
+            } else {
+                log_timing(cout, "Compute phi_epi", timespec_duration(t0, t1), 1);
+            }
+        }
 
 
         clock_gettime(CLOCK_MONOTONIC, &t0);
         double *grad_phi_epi_vals = grad_phi_epi.Write();
-        par_calculate_gradients(grad_phi_epi_vals, x_phi_epi, pmesh, v2e);
+        calculate_gradients(grad_phi_epi_vals, x_phi_epi, pmesh, v2e);
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose && rank == 0)
-            log_timing(cout, "Compute grad_phi_epi", timespec_duration(t0, t1));
+            log_timing(cout, "Compute grad_phi_epi", timespec_duration(t0, t1), 1);
     }
 
 
@@ -353,34 +453,43 @@ int main(int argc, char *argv[])
     x_phi_lv.UseDevice(true);
     grad_phi_lv.UseDevice(true);
     {
+        if (opts.verbose > 1 && rank == 0) {
+            log_marker(cout, "Compute phi_lv", 1);
+        }
         clock_gettime(CLOCK_MONOTONIC, &t0);
 
         ess_bdr = 0;
-        ess_bdr[opts.epi_attr-1] = 1;
-        ess_bdr[opts.lv_attr -1] = 1;
+        ess_bdr[opts.epi_id-1] = 1;
+        ess_bdr[opts.lv_id -1] = 1;
         if (opts.geom_has_rv)
-            ess_bdr[opts.rv_attr-1] = 1;
+            ess_bdr[opts.rv_id-1] = 1;
 
         nonzero_ess_bdr = 0;
-        nonzero_ess_bdr[opts.lv_attr-1] = 1;
+        nonzero_ess_bdr[opts.lv_id-1] = 1;
 
         zero_ess_bdr = 0;
-        zero_ess_bdr[opts.epi_attr-1] = 1;
+        zero_ess_bdr[opts.epi_id-1] = 1;
         if (opts.geom_has_rv)
-            zero_ess_bdr[opts.rv_attr-1] = 1;
+            zero_ess_bdr[opts.rv_id-1] = 1;
 
-        laplace(&x_phi_lv, pmesh, ess_bdr, nonzero_ess_bdr, zero_ess_bdr, -1, dim, opts.verbose, rank);
+        laplace(&x_phi_lv, cg, ess_bdr, nonzero_ess_bdr, zero_ess_bdr, -1, dim, opts.verbose, rank);
 
         clock_gettime(CLOCK_MONOTONIC, &t1);
-        if (opts.verbose && rank == 0)
-            log_timing(std::cout, "Compute phi_lv", timespec_duration(t0, t1));
+        if (opts.verbose && rank == 0) {
+            if (opts.verbose > 1) {
+                log_timing(cout, "Total", timespec_duration(t0, t1), 2, '=');
+                std::cout << endl;
+            } else {
+                log_timing(cout, "Compute phi_lv", timespec_duration(t0, t1), 1);
+            }
+        }
 
         clock_gettime(CLOCK_MONOTONIC, &t0);
         double *grad_phi_lv_vals = grad_phi_lv.Write();
-        par_calculate_gradients(grad_phi_lv_vals, x_phi_lv, pmesh, v2e);
+        calculate_gradients(grad_phi_lv_vals, x_phi_lv, pmesh, v2e);
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose && rank == 0)
-            log_timing(cout, "Compute grad_phi_lv", timespec_duration(t0, t1));
+            log_timing(cout, "Compute grad_phi_lv", timespec_duration(t0, t1), 1);
 
     }
 
@@ -391,32 +500,41 @@ int main(int argc, char *argv[])
     x_phi_rv.UseDevice(true);
     grad_phi_rv.UseDevice(true);
     if (opts.geom_has_rv) {
+        if (opts.verbose > 1 && rank == 0) {
+            log_marker(cout, "Compute phi rv", 1);
+        }
         clock_gettime(CLOCK_MONOTONIC, &t0);
 
         ess_bdr = 0;
-        ess_bdr[opts.epi_attr    -1] = 1;
-        ess_bdr[opts.lv_attr-1] = 1;
-        ess_bdr[opts.rv_attr-1] = 1;
+        ess_bdr[opts.epi_id    -1] = 1;
+        ess_bdr[opts.lv_id-1] = 1;
+        ess_bdr[opts.rv_id-1] = 1;
 
         nonzero_ess_bdr = 0;
-        nonzero_ess_bdr[opts.rv_attr-1] = 1;
+        nonzero_ess_bdr[opts.rv_id-1] = 1;
 
         zero_ess_bdr = 0;
-        zero_ess_bdr[opts.epi_attr-1] = 1;
-        zero_ess_bdr[opts.lv_attr -1] = 1;
+        zero_ess_bdr[opts.epi_id-1] = 1;
+        zero_ess_bdr[opts.lv_id -1] = 1;
 
-        laplace(&x_phi_rv, pmesh, ess_bdr, nonzero_ess_bdr, zero_ess_bdr, -1, dim, opts.verbose, rank);
+        laplace(&x_phi_rv, cg, ess_bdr, nonzero_ess_bdr, zero_ess_bdr, -1, dim, opts.verbose, rank);
 
         clock_gettime(CLOCK_MONOTONIC, &t1);
-        if (opts.verbose && rank == 0)
-            log_timing(std::cout, "Compute phi_rv", timespec_duration(t0, t1));
+        if (opts.verbose && rank == 0) {
+            if (opts.verbose > 1) {
+                log_timing(cout, "Total", timespec_duration(t0, t1), 2, '=');
+                std::cout << endl;
+            } else {
+                log_timing(cout, "Compute phi_rv", timespec_duration(t0, t1), 1);
+            }
+        }
 
         clock_gettime(CLOCK_MONOTONIC, &t0);
         double *grad_phi_rv_vals = grad_phi_rv.Write();
-        par_calculate_gradients(grad_phi_rv_vals, x_phi_rv, pmesh, v2e);
+        calculate_gradients(grad_phi_rv_vals, x_phi_rv, pmesh, v2e);
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose && rank == 0)
-            log_timing(cout, "Compute grad_phi_rv", timespec_duration(t0, t1));
+            log_timing(cout, "Compute grad_phi_rv", timespec_duration(t0, t1), 1);
 
     } else {
         x_phi_rv = 0.0;
@@ -430,28 +548,37 @@ int main(int argc, char *argv[])
     x_psi_ab.UseDevice(true);
     grad_psi_ab.UseDevice(true);
     {
+        if (opts.verbose > 1 && rank == 0) {
+            log_marker(cout, "Compute psi_ab", 1);
+        }
         clock_gettime(CLOCK_MONOTONIC, &t0);
 
         ess_bdr = 0;
-        ess_bdr[opts.base_attr-1] = 1;
+        ess_bdr[opts.base_id-1] = 1;
 
         nonzero_ess_bdr = 0;
-        nonzero_ess_bdr[opts.base_attr-1] = 1;
+        nonzero_ess_bdr[opts.base_id-1] = 1;
 
         zero_ess_bdr = 0;
 
-        laplace(&x_psi_ab, pmesh, ess_bdr, nonzero_ess_bdr, zero_ess_bdr, apex, dim, opts.verbose, rank);
+        laplace(&x_psi_ab, cg, ess_bdr, nonzero_ess_bdr, zero_ess_bdr, apex, dim, opts.verbose, rank);
 
         clock_gettime(CLOCK_MONOTONIC, &t1);
-        if (opts.verbose && rank == 0)
-            log_timing(std::cout, "Compute psi_ab", timespec_duration(t0, t1));
+        if (opts.verbose && rank == 0 ) {
+            if (opts.verbose > 1) {
+                log_timing(cout, "Total", timespec_duration(t0, t1), 2, '=');
+                std::cout << endl;
+            } else {
+                log_timing(cout, "Compute psi_epi", timespec_duration(t0, t1), 1);
+            }
+        }
 
         clock_gettime(CLOCK_MONOTONIC, &t0);
         double *grad_psi_ab_vals = grad_psi_ab.Write();
-        par_calculate_gradients(grad_psi_ab_vals, x_psi_ab, pmesh, v2e);
+        calculate_gradients(grad_psi_ab_vals, x_psi_ab, pmesh, v2e);
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose && rank == 0)
-            log_timing(cout, "Compute grad_psi_ab", timespec_duration(t0, t1));
+            log_timing(cout, "Compute grad_psi_ab", timespec_duration(t0, t1), 1);
 
     }
 
@@ -508,14 +635,14 @@ int main(int argc, char *argv[])
 
     clock_gettime(CLOCK_MONOTONIC, &t1);
     if (opts.verbose && rank == 0)
-        log_timing(std::cout, "Compute fiber orientation", timespec_duration(t0, t1));
+        log_timing(std::cout, "Define fiber orientation", timespec_duration(t0, t1), 1);
 
     clock_gettime(CLOCK_MONOTONIC, &end_fiber);
     clock_gettime(CLOCK_MONOTONIC, &end);
     if (opts.verbose && rank == 0) {
-        log_marker(std::cout, "End fiber computation");
-        log_timing(std::cout, "Fiber comp. time", timespec_duration(start_fiber, end_fiber));
-        log_timing(std::cout, "Total time", timespec_duration(start, end));
+        log_timing(std::cout, "Total (fiber)", timespec_duration(start_fiber, end_fiber), 1, '=');
+        std::cout << endl;
+        log_timing(std::cout, "Total time", timespec_duration(start, end), 0, '=');
     }
 
     F.HostRead();

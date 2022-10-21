@@ -68,7 +68,8 @@ all: ldrb-gpup ldrb-gpu
 ldrb-gpup: MFEM_ROOT=$(MFEM_PARALLEL_ROOT)
 ldrb-gpup: IFLAGS=$(PARALLEL_IFLAGS)
 ldrb-gpup: LFLAGS=$(PARALLEL_LFLAGS)
-ldrb-gpup: ldrb-gpup.o calculus_gpu.o util.o
+# ldrb-gpup: ldrb-gpup.o calculus_gpu.o util.o
+ldrb-gpup: ldrb-gpup.o calculus.o util.o
 	$(CC) $(CFLAGS) $(IFLAGS) -o $@ $^ $(LFLAGS)
 
 ldrb-gpu: MFEM_ROOT=$(MFEM_SERIAL_ROOT)
@@ -83,9 +84,15 @@ tests: LFLAGS=$(SERIAL_LFLAGS)
 tests: tests.o calculus.o util.o
 	$(CC) $(CFLAGS) $(IFLAGS) -o $@ $^ $(LFLAGS)
 
+tests_gpu: MFEM_ROOT=$(MFEM_PARALLEL_ROOT)
+tests_gpu: IFLAGS=$(PARALLEL_IFLAGS)
+tests_gpu: LFLAGS=$(PARALLEL_LFLAGS)
+tests_gpu: tests_gpu.o calculus_gpu.o util.o
+	$(CC) $(CFLAGS) $(IFLAGS) -o $@ $^ $(LFLAGS)
+
 %.o: %.cpp
 	$(CC) -c $(CFLAGS) $(IFLAGS) -o $@ $^
 
 .PHONY: clean
 clean:
-	$(RM) ldrb-gpu ldrb-gpup tests calculus.o calculus_gpu.o ldrb-gpu.o util.o tests.o
+	$(RM) ldrb-gpu ldrb-gpup tests test_gpu calculus.o calculus_gpu.o ldrb-gpu.o util.o tests.o

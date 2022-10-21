@@ -31,18 +31,12 @@ typedef struct {
     double alpha_epi;
     double beta_endo;
     double beta_epi;
-    int base_attr;
-    int epi_attr;
-    int lv_attr;
-    int rv_attr;
+    int base_id;
+    int epi_id;
+    int lv_id;
+    int rv_id;
     bool geom_has_rv;
 } Options;
 
-typedef enum {
-    BASE   = 1,
-    EPI    = 2,
-    LV_ENDO = 3,
-    RV_ENDO = 4,
-} MeshAttributes;
 #define LDRB_GPU_HPP
 #endif

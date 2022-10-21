@@ -32,18 +32,49 @@ double timespec_duration(
 void log_timing(
     std::ostream& out,
     const char *log_string,
-    double seconds)
+    double seconds,
+    int ident,
+    char override_marker)
 {
-    out << "[" << std::left << std::setw(25) << log_string << "]: "
+    char level_marker = '-';
+    if (ident == 1) level_marker = '*';
+    if (ident == 2) level_marker = '+';
+
+    if (override_marker)
+        level_marker = override_marker;
+
+    std::string ident_chars = std::string(2*ident, ' ');
+    out << ident_chars
+        << level_marker
+        << " "
+        << std::left << std::setw(30-2*ident) << log_string
         << std::right << std::fixed << std::setw(12)
         << std::setprecision(6)<< seconds << " s" << std::endl;
 }
 
+
 void log_marker(
     std::ostream& out,
-    const char *log_string)
+    const char *log_string,
+    int ident,
+    char override_marker)
 {
-    out << "[" << std::left << std::setw(25) << log_string << "]" << std::endl;
+    char level_marker = '-';
+    if (ident == 1) level_marker = '*';
+    if (ident == 2) level_marker = '+';
+
+    std::string ident_chars = std::string(2*ident, ' ');
+
+    if (override_marker)
+        level_marker = override_marker;
+
+    out << ident_chars
+        << level_marker
+        << " "
+        << std::left
+        << std::setw(30)
+        << log_string
+        << std::endl;
 }
 
 std::string basename(std::string const& path)
@@ -82,6 +113,7 @@ void save_solution(
     x->Save(x_ofs);
 }
 
+#ifdef MFEM_USE_MPI
 // Save a solution (in form of a GridFunction) to a file named "<prefix><suffix>".
 void save_solution(
     mfem::ParGridFunction *x,
@@ -99,6 +131,7 @@ void save_solution(
     x_ofs.precision(8);
     x->Save(x_ofs);
 }
+#endif
 
 // Find the vertex closest to the prescribed apex, Euclidean distance.
 int find_apex_vertex(mfem::Mesh& mesh, mfem::Vector& apex)

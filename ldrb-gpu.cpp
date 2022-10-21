@@ -437,7 +437,7 @@ int main(int argc, char *argv[])
     // Calculate the fiber orientation
     clock_gettime(CLOCK_MONOTONIC, &t0);
     define_fibers(
-            mesh,
+            mesh.GetNV(),
             phi_epi,      phi_lv,      phi_rv,      psi_ab,
             grad_phi_epi_vals, grad_phi_lv_vals, grad_phi_rv_vals, grad_psi_ab_vals,
             opts.alpha_endo, opts.alpha_epi, opts.beta_endo, opts.beta_epi,
@@ -468,7 +468,7 @@ int main(int argc, char *argv[])
         mfem_output_dir += "/mfem";
         mksubdir(mfem_output_dir);
 
-#ifdef DEBUG
+#if 0
         std::string debug_dir = mfem_output_dir + "/debug";
         mksubdir(debug_dir);
 
@@ -489,7 +489,7 @@ int main(int argc, char *argv[])
         mesh_ofs.precision(8);
         mesh.Print(mesh_ofs);
 
-#ifdef DEBUG
+#if 0
         // Save the solutions
         save_solution(&x_phi_epi, debug_dir, opts.mesh_basename, "_phi_epi.gf");
         save_solution(&x_phi_lv,  debug_dir, opts.mesh_basename, "_phi_lv.gf");

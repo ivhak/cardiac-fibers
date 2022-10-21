@@ -158,14 +158,14 @@ static void slerp(Vector& q, Vector& q1, Vector &q2, double t)
         q *= b;
         q += q1a;
     } else {
-        // Use linear interpolation
+        // Use linear interpolation: q = q1(1-t) + q2*t
         Vector a = q1;
         q1 *= (1-t);
 
         Vector b = q2;
-        q2 *= t;
+        b *= t;
 
-        q1 += q2;
+        q1 += b;
         q = q1;
     }
 
@@ -385,6 +385,7 @@ void calculate_gradients(double* grads, GridFunction& x, Mesh& mesh, Table* v2e)
     }
 }
 
+#if 0
 // Set the gradient in each vertex to be the average of the gradient in the
 // centers of the surrounding elements
 void par_calculate_gradients(double* grads, ParGridFunction& x, ParMesh& mesh, Table* v2e)
@@ -434,9 +435,10 @@ void par_calculate_gradients(double* grads, ParGridFunction& x, ParMesh& mesh, T
         grads[3*i + 2] = vertex_gradient(2);
     }
 }
+#endif
 
 void define_fibers(
-    Mesh& mesh,
+    int n,
     const double *phi_epi,
     const double *phi_lv,
     const double *phi_rv,
@@ -453,11 +455,8 @@ void define_fibers(
     double *S,
     double *T)
 {
-
-    int num_vertices = mesh.GetNV();
-
     const double tol = 1e-12;
-    for (int i = 0; i < num_vertices; i++) {
+    for (int i = 0; i < n; i++) {
 
         const double phi_epi_i = CLAMP(phi_epi[i], 0.0, 1.0);
         const double phi_lv_i  = CLAMP(phi_lv[i],  0.0, 1.0);

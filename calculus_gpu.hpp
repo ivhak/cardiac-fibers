@@ -23,30 +23,34 @@ const double PI=3.14159265;
 
 typedef struct Vector3D {
     double data[2];
-    MFEM_DEVICE double& operator[](int i) {
+    MFEM_HOST_DEVICE double& operator[](int i) {
         return data[i];
     }
 } Vector3D;
 
 typedef struct Quaternion {
     double data[4];
-    MFEM_DEVICE double& operator[](int i) {
+    MFEM_HOST_DEVICE double& operator[](int i) {
         return data[i];
     }
 } Quaternion;
 
 typedef struct Matrix3x3 {
     double data[3][3];
-    MFEM_DEVICE double* operator[](int i) {
+    MFEM_HOST_DEVICE double* operator[](int i) {
         return (double *) &data[i];
     }
 } Matrix3x3;
 
-MFEM_DEVICE void quat2rot(mfem::DenseMatrix& Q, mfem::Vector& q);
-MFEM_DEVICE void rot2quat(mfem::Vector& q, mfem::DenseMatrix& Q);
-MFEM_DEVICE void orient(mfem::DenseMatrix& Q_out, mfem::DenseMatrix& Q, double a, double b);
-MFEM_DEVICE void axis(mfem::DenseMatrix& Q, mfem::Vector& psi, mfem::Vector &phi);
-MFEM_DEVICE void bislerp(mfem::DenseMatrix& Qab, mfem::DenseMatrix& Qa, mfem::DenseMatrix& Qb, double t);
+MFEM_HOST_DEVICE void veccopy(Vector3D& a, Vector3D& b);
+MFEM_HOST_DEVICE void vecmul(Vector3D& a, double b);
+MFEM_HOST_DEVICE double vecdot(Vector3D& a, Vector3D& b);
+
+MFEM_HOST_DEVICE void quat2rot(Matrix3x3& Q, Quaternion& q);
+MFEM_HOST_DEVICE void rot2quat(Quaternion& q, Matrix3x3& Q);
+MFEM_HOST_DEVICE void orient(Matrix3x3& Q_out, Matrix3x3& Q, double a, double b);
+MFEM_HOST_DEVICE void axis(Matrix3x3& Q, Vector3D& psi, Vector3D& phi);
+MFEM_HOST_DEVICE void bislerp(Matrix3x3& Qab, Matrix3x3& Qa, Matrix3x3& Qb, double t);
 
 void par_calculate_gradients(double* grads, mfem::ParGridFunction& x, mfem::ParMesh& mesh, mfem::Table* v2e);
 
