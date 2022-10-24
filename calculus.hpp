@@ -27,14 +27,11 @@ void orient(mfem::DenseMatrix& Q_out, mfem::DenseMatrix& Q, double a, double b);
 void axis(mfem::DenseMatrix& Q, mfem::Vector& psi, mfem::Vector &phi);
 void bislerp(mfem::DenseMatrix& Qab, mfem::DenseMatrix& Qa, mfem::DenseMatrix& Qb, double t);
 
-void calculate_gradients(double* grads, mfem::GridFunction& x, mfem::Mesh& mesh, mfem::Table* v2e);
-
 void define_fibers(
     int n,
     const double *phi_epi,
     const double *phi_lv,
     const double *phi_rv,
-    const double *psi_ab,
     const double *grad_phi_epi,
     const double *grad_phi_lv,
     const double *grad_phi_rv,

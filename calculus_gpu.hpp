@@ -22,7 +22,7 @@
 const double PI=3.14159265;
 
 typedef struct Vector3D {
-    double data[2];
+    double data[3];
     MFEM_HOST_DEVICE double& operator[](int i) {
         return data[i];
     }
@@ -52,14 +52,11 @@ MFEM_HOST_DEVICE void orient(Matrix3x3& Q_out, Matrix3x3& Q, double a, double b)
 MFEM_HOST_DEVICE void axis(Matrix3x3& Q, Vector3D& psi, Vector3D& phi);
 MFEM_HOST_DEVICE void bislerp(Matrix3x3& Qab, Matrix3x3& Qa, Matrix3x3& Qb, double t);
 
-void par_calculate_gradients(double* grads, mfem::ParGridFunction& x, mfem::ParMesh& mesh, mfem::Table* v2e);
-
 void define_fibers(
     int n,
     const double *phi_epi,
     const double *phi_lv,
     const double *phi_rv,
-    const double *psi_ab,
     const double *grad_phi_epi,
     const double *grad_phi_lv,
     const double *grad_phi_rv,

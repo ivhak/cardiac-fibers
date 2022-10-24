@@ -19,13 +19,18 @@
 #include "mfem/general/forall.hpp"
 #include "calculus_gpu.hpp"
 
+#ifdef HIP_TRACE
+#include <roctx.h>
+#endif
+
 
 #define CLAMP(x, low, high)  (((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
 
 using namespace mfem;
 
 // Cross product of two 3D vectors a and b, store in c.
-MFEM_HOST_DEVICE static void cross(Vector3D& c, Vector3D& a, Vector3D& b)
+MFEM_HOST_DEVICE
+static void cross(Vector3D& c, Vector3D& a, Vector3D& b)
 {
     // c = a x b
     c[0] = a[1]*b[2] - a[2]*b[1];
@@ -34,7 +39,8 @@ MFEM_HOST_DEVICE static void cross(Vector3D& c, Vector3D& a, Vector3D& b)
 }
 
 // Dot product of two quaternions
-MFEM_HOST_DEVICE static double quatdot(Quaternion& q1, Quaternion& q2)
+MFEM_HOST_DEVICE
+static double quatdot(Quaternion& q1, Quaternion& q2)
 {
     return q1[0] * q2[0]
          + q1[1] * q2[1]
@@ -43,7 +49,8 @@ MFEM_HOST_DEVICE static double quatdot(Quaternion& q1, Quaternion& q2)
 }
 
 // Set q1 = q2
-MFEM_HOST_DEVICE static void quatcopy(Quaternion& q1, Quaternion& q2)
+MFEM_HOST_DEVICE
+static void quatcopy(Quaternion& q1, Quaternion& q2)
 {
     q1[0] = q2[0];
     q1[1] = q2[1];
@@ -52,7 +59,8 @@ MFEM_HOST_DEVICE static void quatcopy(Quaternion& q1, Quaternion& q2)
 }
 
 // Negate the values of quaternion q
-MFEM_HOST_DEVICE static void quatnegate(Quaternion& q)
+MFEM_HOST_DEVICE
+static void quatnegate(Quaternion& q)
 {
     q[0] = -(q[0]);
     q[1] = -(q[1]);
@@ -61,7 +69,8 @@ MFEM_HOST_DEVICE static void quatnegate(Quaternion& q)
 }
 
 // Multiple quaternion q with scalar a
-MFEM_HOST_DEVICE static void quatmul(Quaternion& q, double a)
+MFEM_HOST_DEVICE
+static void quatmul(Quaternion& q, double a)
 {
     q[0] *= a;
     q[1] *= a;
@@ -70,7 +79,8 @@ MFEM_HOST_DEVICE static void quatmul(Quaternion& q, double a)
 }
 
 // Elementwise multiplication q2 into q1
-MFEM_HOST_DEVICE static void quatelemmul(Quaternion& q1, Quaternion& q2)
+MFEM_HOST_DEVICE
+static void quatelemmul(Quaternion& q1, Quaternion& q2)
 {
     q1[0] *= q2[0];
     q1[1] *= q2[1];
@@ -79,7 +89,8 @@ MFEM_HOST_DEVICE static void quatelemmul(Quaternion& q1, Quaternion& q2)
 }
 
 // Add quaternion q2 to q1
-MFEM_HOST_DEVICE static void quatadd(Quaternion& q1, Quaternion& q2)
+MFEM_HOST_DEVICE
+static void quatadd(Quaternion& q1, Quaternion& q2)
 {
     q1[0] += q2[0];
     q1[1] += q2[1];
@@ -88,7 +99,8 @@ MFEM_HOST_DEVICE static void quatadd(Quaternion& q1, Quaternion& q2)
 }
 
 // Normalize quaternion
-MFEM_HOST_DEVICE static void quatnormalize(Quaternion& q)
+MFEM_HOST_DEVICE
+static void quatnormalize(Quaternion& q)
 {
     double sum = q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3];
     double sum_sqr = sqrt(sum);
@@ -100,15 +112,27 @@ MFEM_HOST_DEVICE static void quatnormalize(Quaternion& q)
 }
 
 // Set vector a = b
-MFEM_HOST_DEVICE void veccopy(Vector3D& a, Vector3D& b)
+MFEM_HOST_DEVICE
+void veccopy(Vector3D& a, Vector3D& b)
 {
     a[0] = b[0];
     a[1] = b[1];
     a[2] = b[2];
 }
 
+
+MFEM_HOST_DEVICE
+void vecset(Vector3D& a, const double *b)
+{
+    a[0] = b[0];
+    a[1] = b[1];
+    a[2] = b[2];
+}
+
+
 // Normalize vector a, a = a / ||a||
-MFEM_HOST_DEVICE static void vecnormalize(Vector3D& a)
+MFEM_HOST_DEVICE
+static void vecnormalize(Vector3D& a)
 {
     const double sum = a[0]*a[0] + a[1]*a[1] + a[2]*a[2];
     const double sum_sqr = sqrt(sum);
@@ -119,13 +143,15 @@ MFEM_HOST_DEVICE static void vecnormalize(Vector3D& a)
 }
 
 // Dot product of vectors a and b
-MFEM_HOST_DEVICE double vecdot(Vector3D& a, Vector3D& b)
+MFEM_HOST_DEVICE
+double vecdot(Vector3D& a, Vector3D& b)
 {
     return a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
 }
 
 // Subtract vector b from a; a = a - b
-MFEM_HOST_DEVICE static void vecsub(Vector3D& a, Vector3D& b)
+MFEM_HOST_DEVICE
+static void vecsub(Vector3D& a, Vector3D& b)
 {
     a[0] = a[0] - b[0];
     a[1] = a[1] - b[1];
@@ -133,7 +159,8 @@ MFEM_HOST_DEVICE static void vecsub(Vector3D& a, Vector3D& b)
 }
 
 // Scale vector a; a_i = a_i * b
-MFEM_HOST_DEVICE void vecmul(Vector3D& a, double b)
+MFEM_HOST_DEVICE
+void vecmul(Vector3D& a, double b)
 {
     a[0] = a[0] * b;
     a[1] = a[1] * b;
@@ -141,7 +168,8 @@ MFEM_HOST_DEVICE void vecmul(Vector3D& a, double b)
 }
 
 // Negate vector a; a = -a
-MFEM_HOST_DEVICE static void vecnegate(Vector3D& a)
+MFEM_HOST_DEVICE
+static void vecnegate(Vector3D& a)
 {
     a[0] = -a[0];
     a[1] = -a[1];
@@ -149,7 +177,8 @@ MFEM_HOST_DEVICE static void vecnegate(Vector3D& a)
 }
 
 // Initialize matrix A values to zero
-MFEM_HOST_DEVICE static void matzero(Matrix3x3& A)
+MFEM_HOST_DEVICE
+static void matzero(Matrix3x3& A)
 {
     A[0][0] = 0.0; A[0][1] = 0.0; A[0][2] = 0.0;
     A[1][0] = 0.0; A[1][1] = 0.0; A[1][2] = 0.0;
@@ -157,7 +186,8 @@ MFEM_HOST_DEVICE static void matzero(Matrix3x3& A)
 }
 
 // Copy matrix B into A
-MFEM_HOST_DEVICE static void matcopy(Matrix3x3& A, Matrix3x3& B)
+MFEM_HOST_DEVICE
+static void matcopy(Matrix3x3& A, Matrix3x3& B)
 {
     A[0][0] = B[0][0]; A[0][1] = B[0][1]; A[0][2] = B[0][2];
     A[1][0] = B[1][0]; A[1][1] = B[1][1]; A[1][2] = B[1][2];
@@ -165,7 +195,8 @@ MFEM_HOST_DEVICE static void matcopy(Matrix3x3& A, Matrix3x3& B)
 }
 
 // Set matrix C to the matrix multiplication of A and B; C = A x B
-MFEM_HOST_DEVICE static void matmul(Matrix3x3& C, Matrix3x3& A, Matrix3x3& B )
+MFEM_HOST_DEVICE
+static void matmul(Matrix3x3& C, Matrix3x3& A, Matrix3x3& B )
 {
     C[0][0] = A[0][0]*B[0][0] + A[0][1]*B[1][0] + A[0][2]*B[2][0];
     C[0][1] = A[0][0]*B[0][1] + A[0][1]*B[1][1] + A[0][2]*B[2][1];
@@ -186,7 +217,8 @@ MFEM_HOST_DEVICE static void matmul(Matrix3x3& C, Matrix3x3& A, Matrix3x3& B )
 //   Shoemake, K. (1985, July). Animating rotation with quaternion curves. In
 //   Proceedings of the 12th annual conference on Computer graphics and
 //   interactive techniques (pp. 245-254).
-MFEM_HOST_DEVICE void rot2quat(Quaternion& q, Matrix3x3& Q)
+MFEM_HOST_DEVICE
+void rot2quat(Quaternion& q, Matrix3x3& Q)
 {
     const double M11=Q[0][0], M12=Q[1][0], M13=Q[2][0];
     const double M21=Q[0][1], M22=Q[1][1], M23=Q[2][1];
@@ -237,7 +269,8 @@ MFEM_HOST_DEVICE void rot2quat(Quaternion& q, Matrix3x3& Q)
 //   Shoemake, K. (1985, July). Animating rotation with quaternion curves. In
 //   Proceedings of the 12th annual conference on Computer graphics and
 //   interactive techniques (pp. 245-254).
-MFEM_HOST_DEVICE void quat2rot(Matrix3x3& Q, Quaternion& q)
+MFEM_HOST_DEVICE
+void quat2rot(Matrix3x3& Q, Quaternion& q)
 {
     const double w = q[0], x = q[1], y = q[2], z = q[3];
 
@@ -269,7 +302,8 @@ MFEM_HOST_DEVICE void quat2rot(Matrix3x3& Q, Quaternion& q)
 }
 
 // Spherical Linear intERPolation
-MFEM_HOST_DEVICE static void slerp(Quaternion q, Quaternion q1, Quaternion q2, double t)
+MFEM_HOST_DEVICE
+static void slerp(Quaternion q, Quaternion q1, Quaternion q2, double t)
 {
     double dot = quatdot(q1, q2);
     quatcopy(q, q2);
@@ -311,7 +345,8 @@ MFEM_HOST_DEVICE static void slerp(Quaternion q, Quaternion q1, Quaternion q2, d
 // for assigning fiber orientation within the myocardium.
 //
 // As defined in Function 2 in the supplementary material of Bayer2012.
-MFEM_HOST_DEVICE void axis(Matrix3x3& Q, Vector3D& u, Vector3D& v)
+MFEM_HOST_DEVICE
+void axis(Matrix3x3& Q, Vector3D& u, Vector3D& v)
 {
 
     Vector3D e0, e1, e2;
@@ -362,14 +397,28 @@ MFEM_HOST_DEVICE void axis(Matrix3x3& Q, Vector3D& u, Vector3D& v)
 // is the transverse direction.
 //
 // As defined in Function 3 in the supplementary material of Bayer2012.
-MFEM_HOST_DEVICE void orient(Matrix3x3& Q_out, Matrix3x3& Q, double a, double b)
+MFEM_HOST_DEVICE
+void orient(Matrix3x3& Q_out, Matrix3x3& Q, double a, double b)
 {
-
-
     const double sina = sin(a*PI/180);
     const double sinb = sin(b*PI/180);
     const double cosa = cos(a*PI/180);
     const double cosb = cos(b*PI/180);
+
+    // The algorithm outlines the product of three matrices:
+    //
+    //         | cosa -sina  0 |   | 1    0    0   |
+    //     Q x | sina  cosa  0 | x | 0   cosb sinb |
+    //         |   0    0    1 |   | 0  -sinb cosb |
+    //
+    // Since the two rightmost matrices are constant (depending only on the
+    // angles a and b), we instead precompute it, and end up with a single
+    // matmul:
+    //
+    //         | cosa  -sina*cosb  cosa*sinb |
+    //     Q x | sina   cosa*cosb  cosa*sinb |
+    //         | 0        -sinb    cosb      |
+
 
     Matrix3x3 A;
 
@@ -387,14 +436,15 @@ MFEM_HOST_DEVICE void orient(Matrix3x3& Q_out, Matrix3x3& Q, double a, double b)
 
     matmul(Q_out, Q, A);
 }
-//
+
 // BIdirectional SLERP
 // Linearly interpolate two orhtogonal matrices Qa and Qb to produce a new
 // orthogonal matrix Qab, which is determined by the interpolation factor t.
 // When t = 0, Qab = Qa, and when t = 1, Qab = Qb.
 //
 // As defined in Function 4 in the supplementary material of Bayer2012.
-MFEM_HOST_DEVICE void bislerp(Matrix3x3& Qab, Matrix3x3& Qa, Matrix3x3& Qb, double t)
+MFEM_HOST_DEVICE
+void bislerp(Matrix3x3& Qab, Matrix3x3& Qa, Matrix3x3& Qb, double t)
 {
     const double tol = 1e-12;
 
@@ -449,13 +499,11 @@ MFEM_HOST_DEVICE void bislerp(Matrix3x3& Qab, Matrix3x3& Qa, Matrix3x3& Qb, doub
         }
     }
 
-#if 1
     // If the angle is very small, i.e. max_dot is very close to one, return Qb.
     if (max_abs_dot > 1-tol) {
         matcopy(Qab, Qb);
         return;
     }
-#endif
 
     Quaternion q;
     slerp(q, qm, qb, t);
@@ -463,12 +511,101 @@ MFEM_HOST_DEVICE void bislerp(Matrix3x3& Qab, Matrix3x3& Qa, Matrix3x3& Qb, doub
     quat2rot(Qab, q);
 }
 
+// Calculate the fiber orientation at vertex i
+MFEM_HOST_DEVICE
+static void calculate_fiber(
+    int i,
+    const double phi_epi,
+    const double phi_lv,
+    const double phi_rv,
+    Vector3D& grad_phi_epi,
+    Vector3D& grad_phi_lv,
+    Vector3D& grad_phi_rv,
+    Vector3D& grad_psi_ab,
+    double alpha_endo,
+    double alpha_epi,
+    double beta_endo,
+    double beta_epi,
+    double *F,
+    double *S,
+    double *T)
+{
+
+    const double tol = 1e-12;
+
+    // TODO (ivhak): What to do here? TOLERANCE
+    double depth;
+    if (phi_lv + phi_rv < tol) {
+        depth = 0.5;
+    } else {
+        depth = phi_rv / (phi_lv + phi_rv);
+    }
+
+    const double alpha_s_d = alpha_endo*(1.0-depth) - alpha_endo*depth;
+    const double beta_s_d  = beta_endo *(1.0-depth) - beta_endo *depth;
+
+    const double alpha_w_epi = alpha_endo*(1.0-phi_epi) + alpha_epi * phi_epi;
+    const double beta_w_epi  = beta_endo *(1.0-phi_epi) + beta_epi  * phi_epi;
+
+
+    Matrix3x3 Q_lv;
+    matzero(Q_lv);
+    if (phi_lv > tol) {
+        Matrix3x3 T;
+        Vector3D grad_phi_lv_neg;
+        {
+            veccopy(grad_phi_lv_neg, grad_phi_lv);
+            vecnegate(grad_phi_lv_neg);
+        }
+        axis(T, grad_psi_ab, grad_phi_lv_neg);
+        orient(Q_lv, T, alpha_s_d, beta_s_d);
+    }
+
+    Matrix3x3 Q_rv;
+    matzero(Q_rv);
+    if (phi_rv > tol) {
+        Matrix3x3 T;
+        axis(T, grad_psi_ab, grad_phi_rv);
+        orient(Q_rv, T, alpha_s_d, beta_s_d);
+    }
+
+    Matrix3x3 Q_endo;
+    matzero(Q_endo);
+    bislerp(Q_endo, Q_lv, Q_rv, depth);
+
+    Matrix3x3 Q_epi;
+    matzero(Q_epi);
+    if (phi_epi > tol) {
+        Matrix3x3 T;
+        axis(T, grad_psi_ab, grad_phi_epi);
+        orient(Q_epi, T, alpha_w_epi, beta_w_epi);
+    }
+
+    Matrix3x3 FST;
+    bislerp(FST, Q_endo, Q_epi, phi_epi);
+
+    F[3*i+0] = FST[0][0];
+    F[3*i+1] = FST[1][0];
+    F[3*i+2] = FST[2][0];
+
+    S[3*i+0] = FST[0][1];
+    S[3*i+1] = FST[1][1];
+    S[3*i+2] = FST[2][1];
+
+    T[3*i+0] = FST[0][2];
+    T[3*i+1] = FST[1][2];
+    T[3*i+2] = FST[2][2];
+
+}
+
+// Calculate the fiber orientations in each vertex.
+//
+// As defined in Algorithm DefineFibers in the supplementary material of Bayer2012.
 void define_fibers(
     int n,
     const double *phi_epi,
     const double *phi_lv,
     const double *phi_rv,
-    const double *psi_ab,
     const double *grad_phi_epi,
     const double *grad_phi_lv,
     const double *grad_phi_rv,
@@ -482,144 +619,35 @@ void define_fibers(
     double *T)
 {
 
-    const double tol = 1e-12;
-    MFEM_FORALL(i, n,
+#ifdef HIP_TRACE
+    roctxRangePush("define_fiber");
+#endif
+    MFEM_GPU_FORALL(i, n,
     {
-
         const double phi_epi_i = CLAMP(phi_epi[i], 0.0, 1.0);
         const double phi_lv_i  = CLAMP(phi_lv[i],  0.0, 1.0);
         const double phi_rv_i  = CLAMP(phi_rv[i],  0.0, 1.0);
 
         Vector3D grad_phi_epi_i;
-        grad_phi_epi_i[0] = grad_phi_epi[3*i+0];
-        grad_phi_epi_i[1] = grad_phi_epi[3*i+1];
-        grad_phi_epi_i[2] = grad_phi_epi[3*i+2];
+        vecset(grad_phi_epi_i, &grad_phi_epi[3*i]);
 
         Vector3D grad_phi_lv_i;
-        grad_phi_lv_i[0] = grad_phi_lv[3*i+0];
-        grad_phi_lv_i[1] = grad_phi_lv[3*i+1];
-        grad_phi_lv_i[2] = grad_phi_lv[3*i+2];
+        vecset(grad_phi_lv_i, &grad_phi_lv[3*i]);
 
         Vector3D grad_phi_rv_i;
-        grad_phi_rv_i[0] = grad_phi_rv[3*i+0];
-        grad_phi_rv_i[1] = grad_phi_rv[3*i+1];
-        grad_phi_rv_i[2] = grad_phi_rv[3*i+2];
+        vecset(grad_phi_rv_i, &grad_phi_rv[3*i]);
 
         Vector3D grad_psi_ab_i;
-        grad_psi_ab_i[0] = grad_psi_ab[3*i+0];
-        grad_psi_ab_i[1] = grad_psi_ab[3*i+1];
-        grad_psi_ab_i[2] = grad_psi_ab[3*i+2];
+        vecset(grad_psi_ab_i, &grad_psi_ab[3*i]);
 
-        // TODO: What to do here? TOLERANCE
-        double depth;
-        if (phi_lv_i + phi_rv_i < tol) {
-            depth = 0.5;
-        } else {
-            depth = phi_rv_i / (phi_lv_i + phi_rv_i);
-        }
-
-        const double alpha_s_d = alpha_endo*(1.0-depth) - alpha_endo*depth;
-        const double beta_s_d  = beta_endo *(1.0-depth) - beta_endo *depth;
-
-        const double alpha_w_epi = alpha_endo*(1.0-phi_epi_i) + alpha_epi * phi_epi_i;
-        const double beta_w_epi  = beta_endo *(1.0-phi_epi_i) + beta_epi  * phi_epi_i;
-
-
-        Matrix3x3 Q_lv;
-        matzero(Q_lv);
-        if (phi_lv_i > tol) {
-            Matrix3x3 T;
-            Vector3D grad_phi_lv_i_neg;
-            {
-                veccopy(grad_phi_lv_i_neg, grad_phi_lv_i);
-                vecnegate(grad_phi_lv_i_neg);
-            }
-            axis(T, grad_psi_ab_i, grad_phi_lv_i_neg);
-            orient(Q_lv, T, alpha_s_d, beta_s_d);
-        }
-
-        Matrix3x3 Q_rv;
-        matzero(Q_rv);
-        if (phi_rv_i > tol) {
-            Matrix3x3 T;
-            axis(T, grad_psi_ab_i, grad_phi_rv_i);
-            orient(Q_rv, T, alpha_s_d, beta_s_d);
-        }
-
-        Matrix3x3 Q_endo;
-        bislerp(Q_endo, Q_lv, Q_rv, depth);
-
-        Matrix3x3 Q_epi;
-        matzero(Q_epi);
-        if (phi_epi_i > tol) {
-            Matrix3x3 T;
-            axis(T, grad_psi_ab_i, grad_phi_epi_i);
-            orient(Q_epi, T, alpha_w_epi, beta_w_epi);
-        }
-
-        Matrix3x3 FST;
-        bislerp(FST, Q_endo, Q_epi, phi_epi_i);
-
-        F[3*i+0] = FST[0][0];
-        F[3*i+1] = FST[1][0];
-        F[3*i+2] = FST[2][0];
-
-        S[3*i+0] = FST[0][1];
-        S[3*i+1] = FST[1][1];
-        S[3*i+2] = FST[2][1];
-
-        T[3*i+0] = FST[0][2];
-        T[3*i+1] = FST[1][2];
-        T[3*i+2] = FST[2][2];
+        calculate_fiber(i,
+                        phi_epi_i, phi_lv_i, phi_rv_i,
+                        grad_phi_epi_i, grad_phi_lv_i, grad_phi_rv_i, grad_psi_ab_i,
+                        alpha_endo, alpha_epi, beta_endo, beta_epi,
+                        F, S, T);
     });
-}
-// Set the gradient in each vertex to be the average of the gradient in the
-// centers of the surrounding elements
-void par_calculate_gradients(double* grads, ParGridFunction& x, ParMesh& mesh, Table* v2e)
-{
-
-    for (int i = 0; i < mesh.GetNV(); i++) {
-        const int num_elements = v2e->RowSize(i);
-        const int *elements = v2e->GetRow(i);
-
-        Vector vertex_gradient(3);
-
-        for (int j = 0; j < num_elements; j++) {
-            Vector grad(3);
-            grad= 0.0;
-            int el_id = elements[j];
-#if 1
-            // Calculate the gradient of an element to be the gradient in its center.
-
-            ElementTransformation *tr = x.ParFESpace()->GetElementTransformation(el_id);
-            Geometry::Type geom = tr->GetGeometryType();
-            const IntegrationPoint& center = Geometries.GetCenter(geom);
-            tr->SetIntPoint(&center);
-            x.GetGradient(*tr, grad);
-            vertex_gradient += grad;
-#else
-            // Calculate the gradient of an element to be the average of the
-            // gradients in each of its integration points.
-
-            ElementTransformation *tr = x.FESpace()->GetElementTransformation(el_id);
-            const IntegrationRule& ir = x.FESpace()->GetFE(elements[j])->GetNodes();
-            for (int k = 0; k < ir.GetNPoints(); k++) {
-                Vector grad_point(3);
-                grad_point = 0.0;
-                const IntegrationPoint& ip = ir.IntPoint(k);
-                tr->SetIntPoint(&ip);
-                x.GetGradient((*tr), grad_point);
-                grad += grad_point;
-            }
-            grad /= ir.GetNPoints();
-            vertex_gradient += grad;
-
+#ifdef HIP_TRACE
+    roctxRangePop();
 #endif
-        }
-        vertex_gradient /= num_elements;
-        grads[3*i + 0] = vertex_gradient(0);
-        grads[3*i + 1] = vertex_gradient(1);
-        grads[3*i + 2] = vertex_gradient(2);
-    }
 }
 

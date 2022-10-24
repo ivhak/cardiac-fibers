@@ -36,6 +36,7 @@ typedef struct {
     int lv_id;
     int rv_id;
     bool geom_has_rv;
+    int solver;
 } Options;
 
 #define LDRB_GPU_HPP

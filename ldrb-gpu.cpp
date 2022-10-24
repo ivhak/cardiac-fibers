@@ -110,6 +110,56 @@ void laplace(
     a.RecoverFEMSolution(X, b, *x);
 }
 
+// Set the gradient in each vertex to be the average of the gradient in the
+// centers of the surrounding elements
+void calculate_gradients(double* grads, GridFunction& x, Mesh& mesh, Table* v2e)
+{
+
+    for (int i = 0; i < mesh.GetNV(); i++) {
+        const int num_elements = v2e->RowSize(i);
+        const int *elements = v2e->GetRow(i);
+
+        Vector vertex_gradient(3);
+
+        for (int j = 0; j < num_elements; j++) {
+            Vector grad(3);
+            grad= 0.0;
+            int el_id = elements[j];
+#if 1
+            // Calculate the gradient of an element to be the gradient in its center.
+
+            ElementTransformation *tr = x.ParFESpace()->GetElementTransformation(el_id);
+            Geometry::Type geom = tr->GetGeometryType();
+            const IntegrationPoint& center = Geometries.GetCenter(geom);
+            tr->SetIntPoint(&center);
+            x.GetGradient(*tr, grad);
+            vertex_gradient += grad;
+#else
+            // Calculate the gradient of an element to be the average of the
+            // gradients in each of its integration points.
+
+            ElementTransformation *tr = x.FESpace()->GetElementTransformation(el_id);
+            const IntegrationRule& ir = x.FESpace()->GetFE(elements[j])->GetNodes();
+            for (int k = 0; k < ir.GetNPoints(); k++) {
+                Vector grad_point(3);
+                grad_point = 0.0;
+                const IntegrationPoint& ip = ir.IntPoint(k);
+                tr->SetIntPoint(&ip);
+                x.GetGradient((*tr), grad_point);
+                grad += grad_point;
+            }
+            grad /= ir.GetNPoints();
+            vertex_gradient += grad;
+
+#endif
+        }
+        vertex_gradient /= num_elements;
+        grads[3*i + 0] = vertex_gradient(0);
+        grads[3*i + 1] = vertex_gradient(1);
+        grads[3*i + 2] = vertex_gradient(2);
+    }
+}
+
 int main(int argc, char *argv[])
 {
 
@@ -134,6 +184,8 @@ int main(int argc, char *argv[])
     opts.rv_attr   = RV_ENDO;
 
     opts.geom_has_rv = true;
+
+    opts.solver = 0;
 
     // Parse command-line options
     OptionsParser args(argc, argv);
@@ -415,7 +467,6 @@ int main(int argc, char *argv[])
     const double *phi_epi = x_phi_epi.Read();
     const double *phi_lv  = x_phi_lv.Read();
     const double *phi_rv  = x_phi_rv.Read();
-    const double *psi_ab  = x_psi_ab.Read();
 
     // Get read-only pointers to the internal arrays of the gradients
     const double *grad_phi_epi_vals = grad_phi_epi.Read();
@@ -438,7 +489,7 @@ int main(int argc, char *argv[])
     clock_gettime(CLOCK_MONOTONIC, &t0);
     define_fibers(
             mesh.GetNV(),
-            phi_epi,      phi_lv,      phi_rv,      psi_ab,
+            phi_epi,      phi_lv,      phi_rv,
             grad_phi_epi_vals, grad_phi_lv_vals, grad_phi_rv_vals, grad_psi_ab_vals,
             opts.alpha_endo, opts.alpha_epi, opts.beta_endo, opts.beta_epi,
             F_vals, S_vals, T_vals

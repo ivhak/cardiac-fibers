@@ -18,13 +18,18 @@
 #include <fstream>
 
 #include "mfem.hpp"
-#if 0
+#include "util.hpp"
+#include "ldrb-gpu.hpp"
+
+#ifdef HIP_TRACE
+#include <roctx.h>
+#endif
+
+#ifdef GPU_CALCULUS
 #include "calculus_gpu.hpp"
 #else
 #include "calculus.hpp"
 #endif
-#include "util.hpp"
-#include "ldrb-gpu.hpp"
 
 using namespace std;
 using namespace mfem;
@@ -67,7 +72,7 @@ using namespace mfem;
 //   vertex in the mesh.
 void laplace(
     ParGridFunction* x,
-    Solver& solver,
+    Solver* solver,
     Array<int> &essential_boundaries,
     Array<int> &nonzero_essential_boundaries,
     Array<int> &zero_essential_boundaries,
@@ -77,6 +82,11 @@ void laplace(
     int rank)
 {
     struct timespec t0, t1;
+
+#ifdef HIP_TRACE
+    roctxRangePush("laplace");
+    roctxRangePush("Setup boundary conditions");
+#endif
 
     // Determine the list of true (i.e. parallel conforming) essential boundary
     // dofs, defined by the boundary attributes marked as essential (Dirichlet)
@@ -137,7 +147,10 @@ void laplace(
         }
     }
 
-
+#ifdef HIP_TRACE
+    roctxRangePop(); // Setup boundary conditions
+    roctxRangePush("Assemble RHS");
+#endif
     // Set up the parallel linear form b(.) which corresponds to the right-hand
     // side of the FEM linear system, which in this case is (1,phi_i) where
     // phi_i are the basis functions in fespace.
@@ -150,7 +163,10 @@ void laplace(
     if (verbose >= 2 && rank == 0) {
         log_timing(cout, "Assemble RHS", timespec_duration(t0, t1), 2);
     }
-
+#ifdef HIP_TRACE
+    roctxRangePop(); // Assemble RHS
+    roctxRangePush("Assemble LHS");
+#endif
     // Set up the parallel bilinear form a(.,.) on the finite element space
     // corresponding to the Laplacian operator -Delta, by adding the
     // Diffusion domain integrator.
@@ -164,7 +180,10 @@ void laplace(
     if (verbose >= 2 && rank == 0) {
         log_timing(cout, "Assemble LHS", timespec_duration(t0, t1), 2);
     }
-
+#ifdef HIP_TRACE
+    roctxRangePop(); // Assmeble LHS
+    roctxRangePush("Form linear system");
+#endif
     // Form the linear system
     clock_gettime(CLOCK_MONOTONIC, &t0);
     OperatorPtr A;
@@ -174,19 +193,61 @@ void laplace(
     if (verbose >= 2 && rank == 0) {
         log_timing(cout, "Form linear system", timespec_duration(t0, t1), 2);
     }
-
+#ifdef HIP_TRACE
+    roctxRangePop(); // Form linear system
+    roctxRangePush("Solve");
+#endif
     // Solve the linear system A X = B.
     clock_gettime(CLOCK_MONOTONIC, &t0);
-    solver.SetOperator(*A);
-    solver.Mult(B, X);
+    solver->SetOperator(*A);
+    solver->Mult(B, X);
     clock_gettime(CLOCK_MONOTONIC, &t1);
     if (verbose >= 2 && rank == 0) {
         log_timing(cout, "Solve", timespec_duration(t0, t1), 2);
     }
+#ifdef HIP_TRACE
+    roctxRangePop(); // Solve
+#endif
 
     // Recover the parallel grid function corresponding to X. This is the local
     // finite element solution on each processor.
     a.RecoverFEMSolution(X, b, *x);
+
+#ifdef HIP_TRACE
+    roctxRangePop(); // laplace
+#endif
+}
+
+// Set the gradient in each vertex to be the average of the gradient in the
+// centers of the surrounding elements
+void calculate_gradients(double* grads, ParGridFunction& x, ParMesh& mesh, Table* v2e)
+{
+
+    for (int i = 0; i < mesh.GetNV(); i++) {
+        const int num_elements = v2e->RowSize(i);
+        const int *elements = v2e->GetRow(i);
+
+        Vector vertex_gradient(3);
+
+        for (int j = 0; j < num_elements; j++) {
+            Vector grad(3);
+            grad= 0.0;
+            int el_id = elements[j];
+#if 1
+            // Calculate the gradient of an element to be the gradient in its center.
+
+            ElementTransformation *tr = x.ParFESpace()->GetElementTransformation(el_id);
+            Geometry::Type geom = tr->GetGeometryType();
+            const IntegrationPoint& center = Geometries.GetCenter(geom);
+            tr->SetIntPoint(&center);
+            x.GetGradient(*tr, grad);
+            vertex_gradient += grad;
+        }
+        vertex_gradient /= num_elements;
+        grads[3*i + 0] = vertex_gradient(0);
+        grads[3*i + 1] = vertex_gradient(1);
+        grads[3*i + 2] = vertex_gradient(2);
+    }
 }
 
 int main(int argc, char *argv[])
@@ -218,6 +279,8 @@ int main(int argc, char *argv[])
     opts.rv_id   = 4;
 
     opts.geom_has_rv = true;
+
+    opts.solver = 0;
 
     // Parse command-line options
     OptionsParser args(argc, argv);
@@ -254,18 +317,21 @@ int main(int argc, char *argv[])
             "Beta angle in epicardium.");
     args.AddOption(&opts.base_id,
             "-base", "--base-id",
-            "Base attribute");
+            "Id of the base surface");
     args.AddOption(&opts.epi_id,
             "-epi", "--epi-id",
-            "Epicaridum attribute");
+            "Id of the epicardium surface");
     args.AddOption(&opts.lv_id,
             "-lv", "--lv-id",
-            "Left ventricle endocardium attribute");
+            "Id of the left ventricle endocardium surface.");
     args.AddOption(&opts.rv_id,
             "-rv", "--rv-id",
-            "Right ventricle endocardium attribute. "
+            "Id of the right ventricle endocardium surface. "
             "Set to -1 if there is no right ventricle in the geometry, "
             "e.g. for a single ventricle geometry.");
+    args.AddOption(&opts.solver,
+            "-s", "--solver",
+            "Solver to use. Options are: 0 - HyprePcg, 1 - CGSolver");
     args.Parse();
 
     if (!args.Good()) {
@@ -321,7 +387,7 @@ int main(int argc, char *argv[])
     // prescribed apex. The rank with the closest one sets up the boundary
     // conditions in that vertex.
     //
-    // XXX: What if the apex vertex is in multiple submeshes?
+    // XXX (ivhak): What if the apex vertex is in multiple submeshes?
     int apex = -1;
     {
         clock_gettime(CLOCK_MONOTONIC, &t0);
@@ -354,16 +420,19 @@ int main(int argc, char *argv[])
 
     struct timespec start_fiber, end_fiber;
 
+    // TODO (ivhak): Test different solvers+preconditioners, maybe make it
+    //               possible to specify which to use at runtime
+    //
     // Setup the linear solver. Use Hypre's Preconditioned Conjugate Gradient
     // (PCG) with the BoomerAMG (algebraic multigrid) preconditioner.
-    HyprePCG cg(MPI_COMM_WORLD);
+
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    HypreBoomerAMG *prec = NULL;
     {
-        clock_gettime(CLOCK_MONOTONIC, &t0);
-        HypreBoomerAMG *prec = NULL;
         prec = new HypreBoomerAMG;
         prec->SetPrintLevel(opts.verbose > 2 ? 1 : 0);
-                                          //
-// TODO: These settings result in a non-SPD preconditioner???
+
+        // TODO (ivhak): These settings result in a non-SPD preconditioner???
 #if 0
         prec->SetCoarsening(8);           // PMIS
         prec->SetInterpolation(17);       // extended+i, matrix-matrix
@@ -371,15 +440,37 @@ int main(int argc, char *argv[])
         prec->SetStrengthThresh(0.5);
         prec->SetRelaxType(7);            // weighted Jacobi
 #endif
+    }
 
-        cg.SetTol(1e-12);
-        cg.SetMaxIter(2000);
-        cg.SetPrintLevel(opts.verbose > 2 ? 1 : 0);
-        if (prec) { cg.SetPreconditioner(*prec); }
-        clock_gettime(CLOCK_MONOTONIC, &t1);
-        if (opts.verbose && rank == 0) {
-            log_timing(cout, "Setup prec and solver", timespec_duration(t0,t1));
-        }
+    Solver *s;
+    switch (opts.solver) {
+    case 0:
+        {
+            HyprePCG *cg = new HyprePCG(MPI_COMM_WORLD);
+            cg->SetTol(1e-12);
+            cg->SetMaxIter(2000);
+            cg->SetPrintLevel(opts.verbose > 2 ? 1 : 0);
+            if (prec) { cg->SetPreconditioner(*prec); }
+            s = cg;
+        } break;
+    case 1:
+        {
+            CGSolver *cg = new CGSolver(MPI_COMM_WORLD);
+            cg->SetAbsTol(1e-12);
+            cg->SetMaxIter(2000);
+            cg->SetPrintLevel(opts.verbose > 2 ? 1 : 0);
+            if (prec) { cg->SetPreconditioner(*prec); }
+            s = cg;
+        } break;
+    default:
+        std::cerr << "Invalid solver: " << opts.solver << std::endl;
+        exit(1);
+    }
+
+
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    if (opts.verbose && rank == 0) {
+        log_timing(cout, "Setup prec and solver", timespec_duration(t0,t1));
     }
 
     clock_gettime(CLOCK_MONOTONIC, &start_fiber);
@@ -425,7 +516,7 @@ int main(int argc, char *argv[])
         if (opts.geom_has_rv)
             zero_ess_bdr[opts.rv_id-1] = 1;
 
-        laplace(&x_phi_epi, cg, ess_bdr, nonzero_ess_bdr, zero_ess_bdr, -1, dim, opts.verbose, rank);
+        laplace(&x_phi_epi, s, ess_bdr, nonzero_ess_bdr, zero_ess_bdr, -1, dim, opts.verbose, rank);
 
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose && rank == 0) {
@@ -472,7 +563,7 @@ int main(int argc, char *argv[])
         if (opts.geom_has_rv)
             zero_ess_bdr[opts.rv_id-1] = 1;
 
-        laplace(&x_phi_lv, cg, ess_bdr, nonzero_ess_bdr, zero_ess_bdr, -1, dim, opts.verbose, rank);
+        laplace(&x_phi_lv, s, ess_bdr, nonzero_ess_bdr, zero_ess_bdr, -1, dim, opts.verbose, rank);
 
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose && rank == 0) {
@@ -517,7 +608,7 @@ int main(int argc, char *argv[])
         zero_ess_bdr[opts.epi_id-1] = 1;
         zero_ess_bdr[opts.lv_id -1] = 1;
 
-        laplace(&x_phi_rv, cg, ess_bdr, nonzero_ess_bdr, zero_ess_bdr, -1, dim, opts.verbose, rank);
+        laplace(&x_phi_rv, s, ess_bdr, nonzero_ess_bdr, zero_ess_bdr, -1, dim, opts.verbose, rank);
 
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose && rank == 0) {
@@ -561,7 +652,7 @@ int main(int argc, char *argv[])
 
         zero_ess_bdr = 0;
 
-        laplace(&x_psi_ab, cg, ess_bdr, nonzero_ess_bdr, zero_ess_bdr, apex, dim, opts.verbose, rank);
+        laplace(&x_psi_ab, s, ess_bdr, nonzero_ess_bdr, zero_ess_bdr, apex, dim, opts.verbose, rank);
 
         clock_gettime(CLOCK_MONOTONIC, &t1);
         if (opts.verbose && rank == 0 ) {
@@ -584,22 +675,10 @@ int main(int argc, char *argv[])
 
     delete v2e;
 
-#if 0
-    x_phi_epi.UseDevice(false);
-    x_phi_lv.UseDevice(false);
-    x_phi_rv.UseDevice(false);
-    x_psi_ab.UseDevice(false);
-
-    grad_phi_epi.UseDevice(false);
-    grad_phi_lv.UseDevice(false);
-    grad_phi_rv.UseDevice(false);
-    grad_psi_ab.UseDevice(false);
-#endif
     // Get read-only pointers to the internal arrays of the laplacian solutions
     const double *phi_epi = x_phi_epi.Read();
     const double *phi_lv  = x_phi_lv.Read();
     const double *phi_rv  = x_phi_rv.Read();
-    const double *psi_ab  = x_psi_ab.Read();
 
     // Get read-only pointers to the internal arrays of the gradients
     const double *grad_phi_epi_vals = grad_phi_epi.Read();
@@ -611,11 +690,6 @@ int main(int argc, char *argv[])
     ParGridFunction F(&fespace3d);
     ParGridFunction S(&fespace3d);
     ParGridFunction T(&fespace3d);
-#if 0
-    F.UseDevice(false);
-    S.UseDevice(false);
-    T.UseDevice(false);
-#endif
 
     // Get write-only pointers to the internal arrays
     double *F_vals = F.Write();
@@ -627,7 +701,7 @@ int main(int argc, char *argv[])
     clock_gettime(CLOCK_MONOTONIC, &t0);
     define_fibers(
             pmesh.GetNV(),
-            phi_epi,      phi_lv,      phi_rv,      psi_ab,
+            phi_epi, phi_lv, phi_rv,
             grad_phi_epi_vals, grad_phi_lv_vals, grad_phi_rv_vals, grad_psi_ab_vals,
             opts.alpha_endo, opts.alpha_epi, opts.beta_endo, opts.beta_epi,
             F_vals, S_vals, T_vals
@@ -654,7 +728,7 @@ int main(int argc, char *argv[])
         // Set the basename of the mesh
         opts.mesh_basename = remove_extension(basename(std::string(opts.mesh_file)));
 
-        // Make sure the output direcory exists
+        // Make sure the output directory exists
         mksubdir(opts.output_dir);
 
         // Output the normal solutions in the mfem subdirectory

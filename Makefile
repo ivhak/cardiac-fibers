@@ -31,28 +31,39 @@ MFEM_SERIAL_ROOT=${HOME}/packages/mfem-serial-dbg-4.4
 MFEM_PARALLEL_ROOT=${HOME}/packages/mfem-dbg-4.4
 endif
 
+ifeq ($(GPU_CALCULUS), YES)
+CFLAGS += -DGPU_CALCULUS
+endif
+
 IFLAGS=
 LFLAGS=
 
 # HIP
 CFLAGS += $(shell hipconfig -C)
+HIP_IFLAGS =
 HIP_LFLAGS = -lhipsparse
+
+ifeq ($(HIP_TRACE), YES)
+CFLAGS += -DHIP_TRACE
+HIP_IFLAGS += -I$(ROCm_ROOT)/roctracer/include
+HIP_LFLAGS += -lroctx64
+endif
 
 # MFEM
 MFEM_IFLAGS = -I$(MFEM_INCDIR)
 MFEM_LFLAGS = -L$(MFEM_LIBDIR) -lmfem
 
 # MPI
-MPI_IFLAGS = -I${MPI_HOME}/include
-MPI_LFLAGS = -L${MPI_HOME}/lib -lmpi -lmpi_cxx
+MPI_IFLAGS = -I$(MPI_HOME)/include
+MPI_LFLAGS = -L$(MPI_HOME)/lib -lmpi -lmpi_cxx
 
 # HYPRE
-HYPRE_IFLAGS = -I${HYPRE_INCDIR}
-HYPRE_LFLAGS = -L${HYPRE_LIBDIR} -lHYPRE
+HYPRE_IFLAGS = -I$(HYPRE_INCDIR)
+HYPRE_LFLAGS = -L$(HYPRE_LIBDIR) -lHYPRE
 
 # Metis
-METIS_IFLAGS = -I${METIS_INCDIR}
-METIS_LFLAGS = -L${METIS_LIBDIR} -lmetis
+METIS_IFLAGS = -I$(METIS_INCDIR)
+METIS_LFLAGS = -L$(METIS_LIBDIR) -lmetis
 
 CC=hipcc
 
@@ -68,8 +79,11 @@ all: ldrb-gpup ldrb-gpu
 ldrb-gpup: MFEM_ROOT=$(MFEM_PARALLEL_ROOT)
 ldrb-gpup: IFLAGS=$(PARALLEL_IFLAGS)
 ldrb-gpup: LFLAGS=$(PARALLEL_LFLAGS)
-# ldrb-gpup: ldrb-gpup.o calculus_gpu.o util.o
+ifeq ($(GPU_CALCULUS), YES)
+ldrb-gpup: ldrb-gpup.o calculus_gpu.o util.o
+else
 ldrb-gpup: ldrb-gpup.o calculus.o util.o
+endif
 	$(CC) $(CFLAGS) $(IFLAGS) -o $@ $^ $(LFLAGS)
 
 ldrb-gpu: MFEM_ROOT=$(MFEM_SERIAL_ROOT)
@@ -95,4 +109,4 @@ tests_gpu: tests_gpu.o calculus_gpu.o util.o
 
 .PHONY: clean
 clean:
-	$(RM) ldrb-gpu ldrb-gpup tests test_gpu calculus.o calculus_gpu.o ldrb-gpu.o util.o tests.o
+	$(RM) ldrb-gpu ldrb-gpup tests test_gpu calculus.o calculus_gpu.o ldrb-gpu.o ldrb-gpup.o util.o tests.o
