@@ -18,12 +18,9 @@
 #include <fstream>
 
 #include "mfem.hpp"
+#include "mfem/general/forall.hpp"
 #include "util.hpp"
 #include "ldrb-gpu.hpp"
-
-#ifdef HIP_TRACE
-#include <roctx.h>
-#endif
 
 #ifdef GPU_CALCULUS
 #include "calculus_gpu.hpp"
@@ -31,9 +28,8 @@
 #include "calculus.hpp"
 #endif
 
-using namespace std;
 using namespace mfem;
-
+using namespace util;
 
 // Solve the Laplace equation
 //
@@ -71,22 +67,18 @@ using namespace mfem;
 //   the apex. This is handled by setting `apex` to be the index of the apex
 //   vertex in the mesh.
 void laplace(
-    ParGridFunction* x,
-    Solver* solver,
-    Array<int> &essential_boundaries,
-    Array<int> &nonzero_essential_boundaries,
-    Array<int> &zero_essential_boundaries,
+        ParGridFunction* x,
+        Solver* solver,
+        Array<int> &essential_boundaries,
+        Array<int> &nonzero_essential_boundaries,
+        Array<int> &zero_essential_boundaries,
     int apex,
-    int dim,
     int verbose,
     int rank)
 {
     struct timespec t0, t1;
 
-#ifdef HIP_TRACE
-    roctxRangePush("laplace");
-    roctxRangePush("Setup boundary conditions");
-#endif
+    tracing::roctx_range_push("Setup boundary conditions");
 
     // Determine the list of true (i.e. parallel conforming) essential boundary
     // dofs, defined by the boundary attributes marked as essential (Dirichlet)
@@ -99,7 +91,7 @@ void laplace(
 
     // Set up boundary conditions
     {
-        clock_gettime(CLOCK_MONOTONIC, &t0);
+        timing::tick(&t0);
         // Initialize x with initial guess of zero, which satisfies the boundary
         // conditions.
         *x = 0.0;
@@ -141,113 +133,73 @@ void laplace(
             x->ProjectCoefficient(node_disp_value_coeff, node_disp);
         }
 
-        clock_gettime(CLOCK_MONOTONIC, &t1);
+        timing::tick(&t1);
         if (verbose >= 2&& rank == 0) {
-            log_timing(cout, "Setup boundary cond.", timespec_duration(t0, t1), 2);
+            logging::timestamp(std::cout, "Setup boundary cond.", timing::duration(t0, t1), 2);
         }
     }
 
-#ifdef HIP_TRACE
-    roctxRangePop(); // Setup boundary conditions
-    roctxRangePush("Assemble RHS");
-#endif
+    tracing::roctx_range_pop(); // Setup boundary conditions
+    tracing::roctx_range_push("Assemble RHS");
+
     // Set up the parallel linear form b(.) which corresponds to the right-hand
     // side of the FEM linear system, which in this case is (1,phi_i) where
     // phi_i are the basis functions in fespace.
-    clock_gettime(CLOCK_MONOTONIC, &t0);
+    timing::tick(&t0);
     ParLinearForm b(fespace);
     ConstantCoefficient zero(0.0);
     b.AddDomainIntegrator(new DomainLFIntegrator(zero));
     b.Assemble();
-    clock_gettime(CLOCK_MONOTONIC, &t1);
+    timing::tick(&t1);
     if (verbose >= 2 && rank == 0) {
-        log_timing(cout, "Assemble RHS", timespec_duration(t0, t1), 2);
+        logging::timestamp(std::cout, "Assemble RHS", timing::duration(t0, t1), 2);
     }
-#ifdef HIP_TRACE
-    roctxRangePop(); // Assemble RHS
-    roctxRangePush("Assemble LHS");
-#endif
+    tracing::roctx_range_pop(); // Assemble RHS
+
     // Set up the parallel bilinear form a(.,.) on the finite element space
     // corresponding to the Laplacian operator -Delta, by adding the
     // Diffusion domain integrator.
-    clock_gettime(CLOCK_MONOTONIC, &t0);
+    tracing::roctx_range_push("Assemble LHS");
+    timing::tick(&t0);
     ParBilinearForm a(fespace);
     ConstantCoefficient one(1.0);
     a.AddDomainIntegrator(new DiffusionIntegrator(one));
     // Assemble the parallel bilinear form and the corresponding linear system.
     a.Assemble();
-    clock_gettime(CLOCK_MONOTONIC, &t1);
+    timing::tick(&t1);
     if (verbose >= 2 && rank == 0) {
-        log_timing(cout, "Assemble LHS", timespec_duration(t0, t1), 2);
+        logging::timestamp(std::cout, "Assemble LHS", timing::duration(t0, t1), 2);
     }
-#ifdef HIP_TRACE
-    roctxRangePop(); // Assmeble LHS
-    roctxRangePush("Form linear system");
-#endif
+    tracing::roctx_range_pop(); // Assemble LHS
+
     // Form the linear system
-    clock_gettime(CLOCK_MONOTONIC, &t0);
+    tracing::roctx_range_push("Form linear system");
+    timing::tick(&t0);
+
     OperatorPtr A;
     Vector B, X;
     a.FormLinearSystem(ess_tdof_list, *x, b, A, X, B);
-    clock_gettime(CLOCK_MONOTONIC, &t1);
+    timing::tick(&t1);
     if (verbose >= 2 && rank == 0) {
-        log_timing(cout, "Form linear system", timespec_duration(t0, t1), 2);
+        logging::timestamp(std::cout, "Form linear system", timing::duration(t0, t1), 2);
     }
-#ifdef HIP_TRACE
-    roctxRangePop(); // Form linear system
-    roctxRangePush("Solve");
-#endif
+    tracing::roctx_range_pop(); // Form linear system
+                              //
     // Solve the linear system A X = B.
-    clock_gettime(CLOCK_MONOTONIC, &t0);
+    tracing::roctx_range_push("Solve");
+    timing::tick(&t0);
+
     solver->SetOperator(*A);
     solver->Mult(B, X);
-    clock_gettime(CLOCK_MONOTONIC, &t1);
+    timing::tick(&t1);
     if (verbose >= 2 && rank == 0) {
-        log_timing(cout, "Solve", timespec_duration(t0, t1), 2);
+        logging::timestamp(std::cout, "Solve", timing::duration(t0, t1), 2);
     }
-#ifdef HIP_TRACE
-    roctxRangePop(); // Solve
-#endif
+    tracing::roctx_range_pop(); // Solve
 
     // Recover the parallel grid function corresponding to X. This is the local
     // finite element solution on each processor.
     a.RecoverFEMSolution(X, b, *x);
-
-#ifdef HIP_TRACE
-    roctxRangePop(); // laplace
-#endif
-}
-
-// Set the gradient in each vertex to be the average of the gradient in the
-// centers of the surrounding elements
-void calculate_gradients(double* grads, ParGridFunction& x, ParMesh& mesh, Table* v2e)
-{
-
-    for (int i = 0; i < mesh.GetNV(); i++) {
-        const int num_elements = v2e->RowSize(i);
-        const int *elements = v2e->GetRow(i);
-
-        Vector vertex_gradient(3);
-
-        for (int j = 0; j < num_elements; j++) {
-            Vector grad(3);
-            grad= 0.0;
-            int el_id = elements[j];
-#if 1
-            // Calculate the gradient of an element to be the gradient in its center.
-
-            ElementTransformation *tr = x.ParFESpace()->GetElementTransformation(el_id);
-            Geometry::Type geom = tr->GetGeometryType();
-            const IntegrationPoint& center = Geometries.GetCenter(geom);
-            tr->SetIntPoint(&center);
-            x.GetGradient(*tr, grad);
-            vertex_gradient += grad;
-        }
-        vertex_gradient /= num_elements;
-        grads[3*i + 0] = vertex_gradient(0);
-        grads[3*i + 1] = vertex_gradient(1);
-        grads[3*i + 2] = vertex_gradient(2);
-    }
 }
 
 int main(int argc, char *argv[])
@@ -336,20 +288,20 @@ int main(int argc, char *argv[])
 
     if (!args.Good()) {
         if (rank == 0)
-            args.PrintUsage(cout);
+            args.PrintUsage(std::cout);
         exit(1);
     }
 
     if (rank == 0 && opts.verbose > 2)
-        args.PrintOptions(cout);
+        args.PrintOptions(std::cout);
 
     if (opts.rv_id == -1)
         opts.geom_has_rv = false;
 
 
-    struct timespec t0, t1;
-    struct timespec start, end;
-    clock_gettime(CLOCK_MONOTONIC, &start);
+    struct timespec t0, t1;     // For all intermediate timings
+    struct timespec start, end; // Start to finish timing
+    timing::tick(&start);
 
     // Enable hardware devices such as GPUs, and programming models such as
     // HIP, CUDA, OCCA, RAJA and OpenMP based on command line options.
@@ -358,29 +310,26 @@ int main(int argc, char *argv[])
         device.Print();
 
     // Load the mesh
-    clock_gettime(CLOCK_MONOTONIC, &t0);
+    timing::tick(&t0);
     Mesh mesh(opts.mesh_file, 1, 1);
-    clock_gettime(CLOCK_MONOTONIC, &t1);
+    timing::tick(&t1);
 
     if (opts.verbose > 2 && rank == 0) {
-        cout << "Loaded meshfile '" << opts.mesh_file << "' "
+        std::cout << "Loaded meshfile '" << opts.mesh_file << "' "
              << "consisting of " << mesh.GetNV() << " vertices "
-             << "and " << mesh.GetNE() << " elements" << endl;
+             << "and " << mesh.GetNE() << " elements" << std::endl;
 
     }
     if (opts.verbose && rank == 0)
-        log_timing(cout, "Mesh load", timespec_duration(t0, t1));
-
-    int dim = mesh.Dimension();
-
+        logging::timestamp(std::cout, "Mesh load", timing::duration(t0, t1));
 
     // Define a parallel mesh by a partitioning of the serial mesh.
-    clock_gettime(CLOCK_MONOTONIC, &t0);
+    timing::tick(&t0);
     ParMesh pmesh(MPI_COMM_WORLD, mesh);
     mesh.Clear();
-    clock_gettime(CLOCK_MONOTONIC, &t1);
+    timing::tick(&t1);
     if (opts.verbose && rank == 0)
-        log_timing(cout, "Partition mesh", timespec_duration(t0, t1));
+        logging::timestamp(std::cout, "Partition mesh", timing::duration(t0, t1));
 
 
     // Each rank finds the vertex in its submesh that is closest to the
@@ -390,7 +339,7 @@ int main(int argc, char *argv[])
     // XXX (ivhak): What if the apex vertex is in multiple submeshes?
     int apex = -1;
     {
-        clock_gettime(CLOCK_MONOTONIC, &t0);
+        timing::tick(&t0);
         std::vector<double> min_buffer(nranks, -1);
         double min_distance = std::numeric_limits<double>::max();
         for (int i = 0; i < pmesh.GetNV(); i++) {
@@ -413,20 +362,17 @@ int main(int argc, char *argv[])
             apex = -1;
         }
 
-        clock_gettime(CLOCK_MONOTONIC, &t1);
+        timing::tick(&t1);
         if (opts.verbose && rank == 0)
-            log_timing(cout, "Find apex", timespec_duration(t0, t1));
+            logging::timestamp(std::cout, "Find apex", timing::duration(t0, t1));
     }
 
-    struct timespec start_fiber, end_fiber;
 
-    // TODO (ivhak): Test different solvers+preconditioners, maybe make it
-    //               possible to specify which to use at runtime
+    // TODO (ivhak): Test different solvers + preconditioners.
     //
-    // Setup the linear solver. Use Hypre's Preconditioned Conjugate Gradient
-    // (PCG) with the BoomerAMG (algebraic multigrid) preconditioner.
+    // Setup the linear solver.
 
-    clock_gettime(CLOCK_MONOTONIC, &t0);
+    timing::tick(&t0);
     HypreBoomerAMG *prec = NULL;
     {
         prec = new HypreBoomerAMG;
@@ -442,65 +388,59 @@ int main(int argc, char *argv[])
 #endif
     }
 
-    Solver *s;
-    switch (opts.solver) {
-    case 0:
-        {
-            HyprePCG *cg = new HyprePCG(MPI_COMM_WORLD);
-            cg->SetTol(1e-12);
-            cg->SetMaxIter(2000);
-            cg->SetPrintLevel(opts.verbose > 2 ? 1 : 0);
-            if (prec) { cg->SetPreconditioner(*prec); }
-            s = cg;
-        } break;
-    case 1:
-        {
-            CGSolver *cg = new CGSolver(MPI_COMM_WORLD);
-            cg->SetAbsTol(1e-12);
-            cg->SetMaxIter(2000);
-            cg->SetPrintLevel(opts.verbose > 2 ? 1 : 0);
-            if (prec) { cg->SetPreconditioner(*prec); }
-            s = cg;
-        } break;
-    default:
+    Solver *solver;
+    if (opts.solver == 0) {
+        HyprePCG *cg = new HyprePCG(MPI_COMM_WORLD);
+        cg->SetTol(1e-12);
+        cg->SetMaxIter(2000);
+        cg->SetPrintLevel(opts.verbose > 2 ? 1 : 0);
+        cg->SetPreconditioner(*prec);
+        solver = cg;
+    } else if (opts.solver == 1) {
+        CGSolver *cg = new CGSolver(MPI_COMM_WORLD);
+        cg->SetAbsTol(1e-12);
+        cg->SetMaxIter(2000);
+        cg->SetPrintLevel(opts.verbose > 2 ? 1 : 0);
+        cg->SetPreconditioner(*prec);
+        solver = cg;
+    } else {
         std::cerr << "Invalid solver: " << opts.solver << std::endl;
         exit(1);
     }
 
 
-    clock_gettime(CLOCK_MONOTONIC, &t1);
+    timing::tick(&t1);
     if (opts.verbose && rank == 0) {
-        log_timing(cout, "Setup prec and solver", timespec_duration(t0,t1));
+        logging::timestamp(std::cout, "Setup precond. and solver", timing::duration(t0,t1));
     }
 
-    clock_gettime(CLOCK_MONOTONIC, &start_fiber);
+    // Time the fiber orientation calculations
+    struct timespec start_fiber, end_fiber;
+    timing::tick(&start_fiber);
 
     if (opts.verbose && rank == 0)
-        log_marker(std::cout, "Compute fiber orientation");
+        logging::marker(std::cout, "Compute fiber orientation");
 
+    // Set up the finite element collection. We use  first order H1-conforming finite elements.
     H1_FECollection fec(1, pmesh.Dimension());
 
     // Set up two finite element spaces: one for scalar values (1D) , and one for 3d vectors
-    ParFiniteElementSpace fespace1d(&pmesh, &fec);
-    ParFiniteElementSpace fespace3d(&pmesh, &fec, 3, mfem::Ordering::byVDIM);
-
-    Table *v2e = pmesh.GetVertexToElementTable();
+    ParFiniteElementSpace fespace_scalar_h1(&pmesh, &fec);
+    ParFiniteElementSpace fespace_vector_h1(&pmesh, &fec, 3, mfem::Ordering::byVDIM);
 
     int nattr = pmesh.bdr_attributes.Max();
     Array<int> ess_bdr(nattr);          // Essential boundaries
-    Array<int> nonzero_ess_bdr(nattr);  // Essential boundaries with nonzero value
-    Array<int> zero_ess_bdr(nattr);     // Essential boudnaries with zero value
+    Array<int> nonzero_ess_bdr(nattr);  // Essential boundaries with value 1.0
+    Array<int> zero_ess_bdr(nattr);     // Essential boundaries with value 0.0
 
     // Solve the Laplace equation from EPI (1.0) to (LV_ENDO union RV_ENDO) (0.0)
-    ParGridFunction x_phi_epi(&fespace1d);
-    ParGridFunction grad_phi_epi(&fespace3d);
+    ParGridFunction x_phi_epi(&fespace_scalar_h1);
     x_phi_epi.UseDevice(true);
-    grad_phi_epi.UseDevice(true);
     {
         if (opts.verbose > 1 && rank == 0) {
-            log_marker(cout, "Compute phi_epi", 1);
+            logging::marker(std::cout, "Compute phi_epi", 1);
         }
-        clock_gettime(CLOCK_MONOTONIC, &t0);
+        timing::tick(&t0);
 
         ess_bdr = 0;
         ess_bdr[opts.epi_id-1] = 1;
@@ -516,38 +456,34 @@ int main(int argc, char *argv[])
         if (opts.geom_has_rv)
             zero_ess_bdr[opts.rv_id-1] = 1;
 
-        laplace(&x_phi_epi, s, ess_bdr, nonzero_ess_bdr, zero_ess_bdr, -1, dim, opts.verbose, rank);
+        tracing::roctx_range_push("laplace x_phi_epi");
 
-        clock_gettime(CLOCK_MONOTONIC, &t1);
+        laplace(&x_phi_epi, solver,
+                ess_bdr, nonzero_ess_bdr, zero_ess_bdr,
+                -1, opts.verbose, rank);
+
+        tracing::roctx_range_pop();
+
+        timing::tick(&t1);
         if (opts.verbose && rank == 0) {
             if (opts.verbose > 1) {
-                log_timing(cout, "Total", timespec_duration(t0, t1), 2, '=');
-                std::cout << endl;
+                logging::timestamp(std::cout, "Total", timing::duration(t0, t1), 2, '=');
+                std::cout << std::endl;
             } else {
-                log_timing(cout, "Compute phi_epi", timespec_duration(t0, t1), 1);
+                logging::timestamp(std::cout, "Compute phi_epi", timing::duration(t0, t1), 1);
             }
         }
-
-
-        clock_gettime(CLOCK_MONOTONIC, &t0);
-        double *grad_phi_epi_vals = grad_phi_epi.Write();
-        calculate_gradients(grad_phi_epi_vals, x_phi_epi, pmesh, v2e);
-        clock_gettime(CLOCK_MONOTONIC, &t1);
-        if (opts.verbose && rank == 0)
-            log_timing(cout, "Compute grad_phi_epi", timespec_duration(t0, t1), 1);
     }
 
 
     // Solve the Laplace equation from LV_ENDO (1.0) to (RV_ENDO union EPI) (0.0)
-    ParGridFunction x_phi_lv(&fespace1d);
-    ParGridFunction grad_phi_lv(&fespace3d);
+    ParGridFunction x_phi_lv(&fespace_scalar_h1);
     x_phi_lv.UseDevice(true);
-    grad_phi_lv.UseDevice(true);
     {
         if (opts.verbose > 1 && rank == 0) {
-            log_marker(cout, "Compute phi_lv", 1);
+            logging::marker(std::cout, "Compute phi_lv", 1);
         }
-        clock_gettime(CLOCK_MONOTONIC, &t0);
+        timing::tick(&t0);
 
         ess_bdr = 0;
         ess_bdr[opts.epi_id-1] = 1;
@@ -563,38 +499,34 @@ int main(int argc, char *argv[])
         if (opts.geom_has_rv)
             zero_ess_bdr[opts.rv_id-1] = 1;
 
-        laplace(&x_phi_lv, s, ess_bdr, nonzero_ess_bdr, zero_ess_bdr, -1, dim, opts.verbose, rank);
+        tracing::roctx_range_push("laplace x_phi_lv");
 
-        clock_gettime(CLOCK_MONOTONIC, &t1);
+        laplace(&x_phi_lv, solver,
+                ess_bdr, nonzero_ess_bdr, zero_ess_bdr,
+                -1, opts.verbose, rank);
+
+        tracing::roctx_range_pop();
+
+        timing::tick(&t1);
         if (opts.verbose && rank == 0) {
             if (opts.verbose > 1) {
-                log_timing(cout, "Total", timespec_duration(t0, t1), 2, '=');
-                std::cout << endl;
+                logging::timestamp(std::cout, "Total", timing::duration(t0, t1), 2, '=');
+                std::cout << std::endl;
             } else {
-                log_timing(cout, "Compute phi_lv", timespec_duration(t0, t1), 1);
+                logging::timestamp(std::cout, "Compute phi_lv", timing::duration(t0, t1), 1);
             }
         }
-
-        clock_gettime(CLOCK_MONOTONIC, &t0);
-        double *grad_phi_lv_vals = grad_phi_lv.Write();
-        calculate_gradients(grad_phi_lv_vals, x_phi_lv, pmesh, v2e);
-        clock_gettime(CLOCK_MONOTONIC, &t1);
-        if (opts.verbose && rank == 0)
-            log_timing(cout, "Compute grad_phi_lv", timespec_duration(t0, t1), 1);
-
     }
 
 
     // Solve the Laplace equation from RV_ENDO (1.0) to (LV_ENDO union EPI) (0.0)
-    ParGridFunction x_phi_rv(&fespace1d);
-    ParGridFunction grad_phi_rv(&fespace3d);
+    ParGridFunction x_phi_rv(&fespace_scalar_h1);
     x_phi_rv.UseDevice(true);
-    grad_phi_rv.UseDevice(true);
     if (opts.geom_has_rv) {
         if (opts.verbose > 1 && rank == 0) {
-            log_marker(cout, "Compute phi rv", 1);
+            logging::marker(std::cout, "Compute phi rv", 1);
         }
-        clock_gettime(CLOCK_MONOTONIC, &t0);
+        timing::tick(&t0);
 
         ess_bdr = 0;
         ess_bdr[opts.epi_id    -1] = 1;
@@ -608,41 +540,35 @@ int main(int argc, char *argv[])
         zero_ess_bdr[opts.epi_id-1] = 1;
         zero_ess_bdr[opts.lv_id -1] = 1;
 
-        laplace(&x_phi_rv, s, ess_bdr, nonzero_ess_bdr, zero_ess_bdr, -1, dim, opts.verbose, rank);
+        tracing::roctx_range_push("laplace x_phi_rv");
 
-        clock_gettime(CLOCK_MONOTONIC, &t1);
+        laplace(&x_phi_rv, solver,
+                ess_bdr, nonzero_ess_bdr, zero_ess_bdr,
+                -1, opts.verbose, rank);
+
+        tracing::roctx_range_pop();
+        timing::tick(&t1);
         if (opts.verbose && rank == 0) {
             if (opts.verbose > 1) {
-                log_timing(cout, "Total", timespec_duration(t0, t1), 2, '=');
-                std::cout << endl;
+                logging::timestamp(std::cout, "Total", timing::duration(t0, t1), 2, '=');
+                std::cout << std::endl;
             } else {
-                log_timing(cout, "Compute phi_rv", timespec_duration(t0, t1), 1);
+                logging::timestamp(std::cout, "Compute phi_rv", timing::duration(t0, t1), 1);
             }
         }
-
-        clock_gettime(CLOCK_MONOTONIC, &t0);
-        double *grad_phi_rv_vals = grad_phi_rv.Write();
-        calculate_gradients(grad_phi_rv_vals, x_phi_rv, pmesh, v2e);
-        clock_gettime(CLOCK_MONOTONIC, &t1);
-        if (opts.verbose && rank == 0)
-            log_timing(cout, "Compute grad_phi_rv", timespec_duration(t0, t1), 1);
-
     } else {
         x_phi_rv = 0.0;
-        grad_phi_rv = 0.0;
     }
 
 
     // Solve the Laplace equation from BASE (1.0) to APEX (0.0)
-    ParGridFunction x_psi_ab(&fespace1d);
-    ParGridFunction grad_psi_ab(&fespace3d);
+    ParGridFunction x_psi_ab(&fespace_scalar_h1);
     x_psi_ab.UseDevice(true);
-    grad_psi_ab.UseDevice(true);
     {
         if (opts.verbose > 1 && rank == 0) {
-            log_marker(cout, "Compute psi_ab", 1);
+            logging::marker(std::cout, "Compute psi_ab", 1);
         }
-        clock_gettime(CLOCK_MONOTONIC, &t0);
+        timing::tick(&t0);
 
         ess_bdr = 0;
         ess_bdr[opts.base_id-1] = 1;
@@ -652,28 +578,93 @@ int main(int argc, char *argv[])
 
         zero_ess_bdr = 0;
 
-        laplace(&x_psi_ab, s, ess_bdr, nonzero_ess_bdr, zero_ess_bdr, apex, dim, opts.verbose, rank);
+        tracing::roctx_range_push("laplace x_psi_ab");
 
-        clock_gettime(CLOCK_MONOTONIC, &t1);
+        laplace(&x_psi_ab, solver,
+                ess_bdr, nonzero_ess_bdr, zero_ess_bdr,
+                apex, opts.verbose, rank);
+
+        tracing::roctx_range_pop();
+
+        timing::tick(&t1);
         if (opts.verbose && rank == 0 ) {
             if (opts.verbose > 1) {
-                log_timing(cout, "Total", timespec_duration(t0, t1), 2, '=');
-                std::cout << endl;
+                logging::timestamp(std::cout, "Total", timing::duration(t0, t1), 2, '=');
+                std::cout << std::endl;
             } else {
-                log_timing(cout, "Compute psi_epi", timespec_duration(t0, t1), 1);
+                logging::timestamp(std::cout, "Compute psi_epi", timing::duration(t0, t1), 1);
             }
         }
-
-        clock_gettime(CLOCK_MONOTONIC, &t0);
-        double *grad_psi_ab_vals = grad_psi_ab.Write();
-        calculate_gradients(grad_psi_ab_vals, x_psi_ab, pmesh, v2e);
-        clock_gettime(CLOCK_MONOTONIC, &t1);
-        if (opts.verbose && rank == 0)
-            log_timing(cout, "Compute grad_psi_ab", timespec_duration(t0, t1), 1);
-
     }
 
-    delete v2e;
+
+    // Compute gradients for phi_epi, phi_lv, phi_rv and psi_ab
+    ParGridFunction grad_phi_epi(&fespace_vector_h1);
+    grad_phi_epi.UseDevice(true);
+    {
+        timing::tick(&t0);
+        tracing::roctx_range_push("grad_phi_epi");
+
+        GradientGridFunctionCoefficient ggfc(&x_phi_epi);
+        grad_phi_epi.ProjectCoefficient(ggfc);
+
+        tracing::roctx_range_pop();
+        timing::tick(&t1);
+        if (opts.verbose && rank == 0) {
+            logging::timestamp(std::cout, "Compute grad_phi_epi", timing::duration(t0, t1), 1);
+        }
+    }
+
+    ParGridFunction grad_phi_lv(&fespace_vector_h1);
+    grad_phi_lv.UseDevice(true);
+    {
+        timing::tick(&t0);
+        tracing::roctx_range_push("grad_phi_lv");
+
+        GradientGridFunctionCoefficient ggfc(&x_phi_lv);
+        grad_phi_lv.ProjectCoefficient(ggfc);
+
+        tracing::roctx_range_pop();
+        timing::tick(&t1);
+        if (opts.verbose && rank == 0) {
+            logging::timestamp(std::cout, "Compute grad_phi_lv", timing::duration(t0, t1), 1);
+        }
+    }
+
+    ParGridFunction grad_phi_rv(&fespace_vector_h1);
+    grad_phi_rv.UseDevice(true);
+    if (opts.geom_has_rv) {
+        timing::tick(&t0);
+        tracing::roctx_range_push("grad_phi_rv");
+
+        GradientGridFunctionCoefficient ggfc(&x_phi_rv);
+        grad_phi_rv.ProjectCoefficient(ggfc);
+
+        tracing::roctx_range_pop();
+        timing::tick(&t1);
+        if (opts.verbose && rank == 0) {
+            logging::timestamp(std::cout, "Compute grad_phi_rv", timing::duration(t0, t1), 1);
+        }
+    } else {
+        grad_phi_rv = 0.0;
+    }
+
+    ParGridFunction grad_psi_ab(&fespace_vector_h1);
+    grad_psi_ab.UseDevice(true);
+    {
+        timing::tick(&t0);
+        tracing::roctx_range_push("grad_psi_ab");
+
+        GradientGridFunctionCoefficient ggfc(&x_psi_ab);
+        grad_psi_ab.ProjectCoefficient(ggfc);
+
+        tracing::roctx_range_pop();
+        timing::tick(&t1);
+        if (opts.verbose && rank == 0) {
+            logging::timestamp(std::cout, "Compute grad_psi_ab", timing::duration(t0, t1), 1);
+        }
+    }
+
 
     // Get read-only pointers to the internal arrays of the laplacian solutions
     const double *phi_epi = x_phi_epi.Read();
@@ -687,9 +678,9 @@ int main(int argc, char *argv[])
     const double *grad_psi_ab_vals  = grad_psi_ab.Read();
 
     // Setup GridFunctions to store the fibre directions in
-    ParGridFunction F(&fespace3d);
-    ParGridFunction S(&fespace3d);
-    ParGridFunction T(&fespace3d);
+    ParGridFunction F(&fespace_vector_h1);
+    ParGridFunction S(&fespace_vector_h1);
+    ParGridFunction T(&fespace_vector_h1);
 
     // Get write-only pointers to the internal arrays
     double *F_vals = F.Write();
@@ -698,7 +689,7 @@ int main(int argc, char *argv[])
 
 
     // Calculate the fiber orientation
-    clock_gettime(CLOCK_MONOTONIC, &t0);
+    timing::tick(&t0);
     define_fibers(
             pmesh.GetNV(),
             phi_epi, phi_lv, phi_rv,
@@ -707,67 +698,66 @@ int main(int argc, char *argv[])
             F_vals, S_vals, T_vals
     );
 
-    clock_gettime(CLOCK_MONOTONIC, &t1);
+    timing::tick(&t1);
     if (opts.verbose && rank == 0)
-        log_timing(std::cout, "Define fiber orientation", timespec_duration(t0, t1), 1);
+        logging::timestamp(std::cout, "Define fiber orientation", timing::duration(t0, t1), 1);
 
-    clock_gettime(CLOCK_MONOTONIC, &end_fiber);
-    clock_gettime(CLOCK_MONOTONIC, &end);
+    timing::tick(&end_fiber);
+    timing::tick(&end);
     if (opts.verbose && rank == 0) {
-        log_timing(std::cout, "Total (fiber)", timespec_duration(start_fiber, end_fiber), 1, '=');
-        std::cout << endl;
-        log_timing(std::cout, "Total time", timespec_duration(start, end), 0, '=');
+        logging::timestamp(std::cout, "Total (fiber)", timing::duration(start_fiber, end_fiber), 1, '=');
+        std::cout << std::endl;
+        logging::timestamp(std::cout, "Total time", timing::duration(start, end), 0, '=');
     }
 
+    // Make sure the fiber directions are read back to the host before saving
+    // the solutions.
     F.HostRead();
     S.HostRead();
     T.HostRead();
 
+    timing::tick(&t0);
     // Save the mesh and solutions
     {
         // Set the basename of the mesh
-        opts.mesh_basename = remove_extension(basename(std::string(opts.mesh_file)));
+        opts.mesh_basename = fs::remove_extension(
+                fs::basename(std::string(opts.mesh_file)));
 
         // Make sure the output directory exists
-        mksubdir(opts.output_dir);
+        // TODO (ivhak): This does not properly create nested subdirectories.
+        fs::mksubdir(opts.output_dir);
 
         // Output the normal solutions in the mfem subdirectory
         std::string mfem_output_dir(opts.output_dir);
         mfem_output_dir += "/mfem";
-        mksubdir(mfem_output_dir);
+        fs::mksubdir(mfem_output_dir);
 
         // Save the MFEM mesh
-        ostringstream mesh_out;
-        mesh_out << mfem_output_dir << "/"
-                 << opts.mesh_basename << ".mesh."
-                 << setfill('0') << setw(6) << rank;
-        ofstream mesh_ofs(mesh_out.str().c_str());
-        mesh_ofs.precision(8);
-        pmesh.Print(mesh_ofs);
+        save::save_mesh(&pmesh, mfem_output_dir, opts.mesh_basename, rank);
 
 #ifdef DEBUG
         std::string debug_dir = mfem_output_dir + "/debug";
-        save_solution(&x_phi_epi, debug_dir, opts.mesh_basename, "_phi_epi.gf", rank);
-        save_solution(&x_phi_lv,  debug_dir, opts.mesh_basename, "_phi_lv.gf", rank);
-        save_solution(&x_phi_rv,  debug_dir, opts.mesh_basename, "_phi_rv.gf", rank);
-        save_solution(&x_psi_ab,  debug_dir, opts.mesh_basename, "_psi_ab.gf", rank);
+        save::save_solution(&x_phi_epi, debug_dir, opts.mesh_basename, "_phi_epi.gf", rank);
+        save::save_solution(&x_phi_lv,  debug_dir, opts.mesh_basename, "_phi_lv.gf", rank);
+        save::save_solution(&x_phi_rv,  debug_dir, opts.mesh_basename, "_phi_rv.gf", rank);
+        save::save_solution(&x_psi_ab,  debug_dir, opts.mesh_basename, "_psi_ab.gf", rank);
 
-        save_solution(&grad_phi_epi, debug_dir, opts.mesh_basename, "_grad_phi_epi.gf", rank);
-        save_solution(&grad_phi_lv,  debug_dir, opts.mesh_basename, "_grad_phi_lv.gf", rank);
-        save_solution(&grad_phi_rv,  debug_dir, opts.mesh_basename, "_grad_phi_rv.gf", rank);
-        save_solution(&grad_psi_ab,  debug_dir, opts.mesh_basename, "_grad_psi_ab.gf", rank);
+        save::save_solution(&grad_phi_epi, debug_dir, opts.mesh_basename, "_grad_phi_epi.gf", rank);
+        save::save_solution(&grad_phi_lv,  debug_dir, opts.mesh_basename, "_grad_phi_lv.gf", rank);
+        save::save_solution(&grad_phi_rv,  debug_dir, opts.mesh_basename, "_grad_phi_rv.gf", rank);
+        save::save_solution(&grad_psi_ab,  debug_dir, opts.mesh_basename, "_grad_psi_ab.gf", rank);
 #endif
         // Save the solutions
-        save_solution(&F,  mfem_output_dir, opts.mesh_basename, "_F.gf", rank);
-        save_solution(&S,  mfem_output_dir, opts.mesh_basename, "_S.gf", rank);
-        save_solution(&T,  mfem_output_dir, opts.mesh_basename, "_T.gf", rank);
+        save::save_solution(&F,  mfem_output_dir, opts.mesh_basename, "_F.gf", rank);
+        save::save_solution(&S,  mfem_output_dir, opts.mesh_basename, "_S.gf", rank);
+        save::save_solution(&T,  mfem_output_dir, opts.mesh_basename, "_T.gf", rank);
 
         // Save in paraview as well
         ParaViewDataCollection *pd = NULL;
         if (opts.paraview) {
             std::string paraview_path(opts.output_dir);
             paraview_path += "/paraview";
-            mksubdir(paraview_path);
+            fs::mksubdir(paraview_path);
 
             pd = new ParaViewDataCollection(opts.mesh_basename, &pmesh);
             pd->SetPrefixPath(paraview_path);
@@ -791,5 +781,7 @@ int main(int argc, char *argv[])
         }
 
     }
+    timing::tick(&t1);
+    logging::timestamp(std::cout, "Save", timing::duration(t0, t1));
 }
 

@@ -19,17 +19,25 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
+#ifdef HIP_TRACE
+#include <roctx.h>
+#endif
+
 #include "util.hpp"
 
-double timespec_duration(
-    struct timespec t0,
-    struct timespec t1)
-{
-    return (t1.tv_sec - t0.tv_sec) +
-        (t1.tv_nsec - t0.tv_nsec) * 1e-9;
+void util::tracing::roctx_range_push(const char *s) {
+#ifdef HAVE_HIP
+    roctxRangePush(s);
+#endif
 }
 
-void log_timing(
+void util::tracing::roctx_range_pop(void) {
+#ifdef HAVE_HIP
+    roctxRangePop();
+#endif
+}
+
+void util::logging::timestamp(
     std::ostream& out,
     const char *log_string,
     double seconds,
@@ -52,8 +60,7 @@ void log_timing(
         << std::setprecision(6)<< seconds << " s" << std::endl;
 }
 
-
-void log_marker(
+void util::logging::marker(
     std::ostream& out,
     const char *log_string,
     int ident,
@@ -77,18 +84,33 @@ void log_marker(
         << std::endl;
 }
 
-std::string basename(std::string const& path)
+double util::timing::duration(
+    struct timespec t0,
+    struct timespec t1)
+{
+    return (t1.tv_sec - t0.tv_sec) +
+        (t1.tv_nsec - t0.tv_nsec) * 1e-9;
+}
+
+void util::timing::tick(struct timespec *t)
+{
+    clock_gettime(CLOCK_MONOTONIC, t);
+}
+
+
+
+std::string util::fs::basename(std::string const& path)
 {
     return path.substr(path.find_last_of("/\\") + 1);
 }
 
-std::string remove_extension(std::string const& filename)
+std::string util::fs::remove_extension(std::string const& filename)
 {
     size_t index_of_extension = filename.find_last_of(".");
     return filename.substr(0, index_of_extension);
 }
 
-void mksubdir(std::string const& subdir)
+void util::fs::mksubdir(std::string const& subdir)
 {
     const char *cwd = getcwd(NULL, 0);
     std::string path(cwd);
@@ -98,7 +120,7 @@ void mksubdir(std::string const& subdir)
 }
 
 // Save a solution (in form of a GridFunction) to a file named "<prefix><suffix>".
-void save_solution(
+void util::save::save_solution(
     mfem::GridFunction *x,
     std::string const& dir,
     std::string const& base_name,
@@ -115,7 +137,7 @@ void save_solution(
 
 #ifdef MFEM_USE_MPI
 // Save a solution (in form of a GridFunction) to a file named "<prefix><suffix>".
-void save_solution(
+void util::save::save_solution(
     mfem::ParGridFunction *x,
     std::string const& dir,
     std::string const& base_name,
@@ -123,46 +145,27 @@ void save_solution(
     int rank)
 {
     std::ostringstream filename;
-    filename << dir << "/"
-             << base_name
-             << suffix << "."
+    filename << dir << "/" << base_name << suffix << "."
              << std::setfill('0') << std::setw(6) << rank;
     std::ofstream x_ofs(filename.str().c_str());
     x_ofs.precision(8);
     x->Save(x_ofs);
 }
+
+void util::save::save_mesh(
+    mfem::ParMesh *pmesh,
+    std::string const& dir,
+    std::string const& base_name,
+    int rank)
+{
+    std::ostringstream mesh_out;
+    mesh_out << dir << "/" << base_name << ".mesh."
+             << std::setfill('0') << std::setw(6) << rank;
+    std::ofstream mesh_ofs(mesh_out.str().c_str());
+    mesh_ofs.precision(8);
+    pmesh->Print(mesh_ofs);
+}
 #endif
-
-// Find the vertex closest to the prescribed apex, Euclidean distance.
-int find_apex_vertex(mfem::Mesh& mesh, mfem::Vector& apex)
-{
-    int apex_vertex = 0;
-    double distance = std::numeric_limits<double>::max();
-    for (int i = 0; i < mesh.GetNV(); i++) {
-        double *vertices = mesh.GetVertex(i);
-        double this_distance = (vertices[0]-apex[0]) * (vertices[0]-apex[0])
-                             + (vertices[1]-apex[1]) * (vertices[1]-apex[1])
-                             + (vertices[2]-apex[2]) * (vertices[2]-apex[2]);
-        if (this_distance < distance) {
-            apex_vertex = i;
-            distance = this_distance;
-        }
-    }
-    return apex_vertex;
-}
-
-// Convert an array of the form xyzxyz...xyz to a 3D GridFunction
-void vertex_vector_to_grid_function(
-    mfem::Mesh& mesh,
-    double* x,
-    mfem::GridFunction *gf)
-{
-    mfem::FiniteElementCollection *fec = new mfem::H1_FECollection(1, mesh.Dimension());
-    mfem::FiniteElementSpace *fespace = new mfem::FiniteElementSpace(&mesh, fec, 3, mfem::Ordering::byVDIM);
-    gf->SetSpace(fespace);
-    mfem::Vector vals(x, 3*mesh.GetNV());
-    gf->SetFromTrueDofs(vals);
-}
 
 #ifdef DEBUG
 void debug_print_to_file(

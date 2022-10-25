@@ -17,12 +17,9 @@
 
 #include "mfem.hpp"
 #include "mfem/general/forall.hpp"
+
 #include "calculus_gpu.hpp"
-
-#ifdef HIP_TRACE
-#include <roctx.h>
-#endif
-
+#include "util.hpp"
 
 #define CLAMP(x, low, high)  (((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
 
@@ -619,9 +616,7 @@ void define_fibers(
     double *T)
 {
 
-#ifdef HIP_TRACE
-    roctxRangePush("define_fiber");
-#endif
+    util::roctx::range_push("define_fiber");
     MFEM_GPU_FORALL(i, n,
     {
         const double phi_epi_i = CLAMP(phi_epi[i], 0.0, 1.0);
@@ -646,8 +641,6 @@ void define_fibers(
                         alpha_endo, alpha_epi, beta_endo, beta_epi,
                         F, S, T);
     });
-#ifdef HIP_TRACE
-    roctxRangePop();
-#endif
+    util::roctx::range_pop();
 }
 
