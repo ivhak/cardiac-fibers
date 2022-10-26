@@ -30,10 +30,11 @@ namespace util {
     }
 
     namespace logging {
-        void timestamp(std::ostream& out, const char *log_string, double seconds,
+        void timestamp(std::ostream& out, std::string const& log_string, double seconds,
                        int ident=0, char override_marker=0);
-        void marker(std::ostream& out, const char *log_string,
+        void marker(std::ostream& out, std::string const& log_string,
                 int ident=0, char override_marker=0);
+        void info(std::ostream& out, std::string const& log_string);
     }
 
     namespace timing {

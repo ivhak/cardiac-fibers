@@ -271,6 +271,11 @@ void quat2rot(Matrix3x3& Q, Quaternion& q)
 {
     const double w = q[0], x = q[1], y = q[2], z = q[3];
 
+    {
+        const double dot = w*w + x*x + y*y + z*z;
+        MFEM_ASSERT_KERNEL(dot - 1.0 <= 1e-12, "Quaternion not normalized");
+    }
+
     const double x2 = x*x;
     const double y2 = y*y;
     const double z2 = z*z;
@@ -615,13 +620,14 @@ void define_fibers(
     double *S,
     double *T)
 {
-
-    util::roctx::range_push("define_fiber");
     MFEM_GPU_FORALL(i, n,
     {
         const double phi_epi_i = CLAMP(phi_epi[i], 0.0, 1.0);
         const double phi_lv_i  = CLAMP(phi_lv[i],  0.0, 1.0);
         const double phi_rv_i  = CLAMP(phi_rv[i],  0.0, 1.0);
+
+        MFEM_ASSERT_KERNEL(abs(phi_epi_i + phi_lv_i + phi_rv_i - 1.0) < 1e-3,
+                    "The laplacians epi, lv and rv do not add up to 1.");
 
         Vector3D grad_phi_epi_i;
         vecset(grad_phi_epi_i, &grad_phi_epi[3*i]);
@@ -635,12 +641,17 @@ void define_fibers(
         Vector3D grad_psi_ab_i;
         vecset(grad_psi_ab_i, &grad_psi_ab[3*i]);
 
+        MFEM_ASSERT_KERNEL(
+                    abs(grad_phi_epi_i[0] + grad_phi_lv_i[0] + grad_phi_rv_i[0]) < 1e-3
+                 && abs(grad_phi_epi_i[1] + grad_phi_lv_i[1] + grad_phi_rv_i[1]) < 1e-3
+                 && abs(grad_phi_epi_i[2] + grad_phi_lv_i[2] + grad_phi_rv_i[2]) < 1e-3,
+                    "The gradients do not add up to zero");
+
         calculate_fiber(i,
                         phi_epi_i, phi_lv_i, phi_rv_i,
                         grad_phi_epi_i, grad_phi_lv_i, grad_phi_rv_i, grad_psi_ab_i,
                         alpha_endo, alpha_epi, beta_endo, beta_epi,
                         F, S, T);
     });
-    util::roctx::range_pop();
 }
 

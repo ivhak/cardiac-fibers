@@ -16,7 +16,7 @@
 # Authors: Iver Håkonsen <hakonseniver@yahoo.no
 
 MFEM_SERIAL_ROOT=${HOME}/packages/mfem-serial-4.4
-MFEM_PARALLEL_ROOT=${HOME}/packages/mfem-4.4
+MFEM_PARALLEL_ROOT=${HOME}/packages/mfem-4.5
 
 MFEM_ROOT=
 MFEM_INCDIR=$(MFEM_ROOT)/include
@@ -28,7 +28,7 @@ CFLAGS += -march=native -O3
 else
 CFLAGS += -O0 -DDEBUG -g -Wall
 MFEM_SERIAL_ROOT=${HOME}/packages/mfem-serial-dbg-4.4
-MFEM_PARALLEL_ROOT=${HOME}/packages/mfem-dbg-4.4
+MFEM_PARALLEL_ROOT=${HOME}/packages/mfem-dbg-4.5
 endif
 
 ifeq ($(GPU_CALCULUS), YES)

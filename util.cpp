@@ -26,62 +26,69 @@
 #include "util.hpp"
 
 void util::tracing::roctx_range_push(const char *s) {
-#ifdef HAVE_HIP
+#ifdef HIP_TRACE
     roctxRangePush(s);
 #endif
 }
 
 void util::tracing::roctx_range_pop(void) {
-#ifdef HAVE_HIP
+#ifdef HIP_TRACE
     roctxRangePop();
 #endif
 }
 
+static const char level_markers[] = {'-', '*', '+'};
+#define INDENT_WIDTH 2
+#define LOG_LEFT_COL_WIDTH 30
+
 void util::logging::timestamp(
     std::ostream& out,
-    const char *log_string,
+    std::string const& log_string,
     double seconds,
-    int ident,
+    const int indent,
     char override_marker)
 {
-    char level_marker = '-';
-    if (ident == 1) level_marker = '*';
-    if (ident == 2) level_marker = '+';
+    assert(indent >= 0 && indent <= 2);
+    char level_marker = level_markers[indent];
 
     if (override_marker)
         level_marker = override_marker;
 
-    std::string ident_chars = std::string(2*ident, ' ');
-    out << ident_chars
+    std::string indent_chars = std::string(INDENT_WIDTH*indent, ' ');
+    out << indent_chars
         << level_marker
         << " "
-        << std::left << std::setw(30-2*ident) << log_string
+        << std::left << std::setw(LOG_LEFT_COL_WIDTH-INDENT_WIDTH*indent) << log_string
         << std::right << std::fixed << std::setw(12)
         << std::setprecision(6)<< seconds << " s" << std::endl;
 }
 
 void util::logging::marker(
     std::ostream& out,
-    const char *log_string,
-    int ident,
+    std::string const& log_string,
+    const int indent,
     char override_marker)
 {
-    char level_marker = '-';
-    if (ident == 1) level_marker = '*';
-    if (ident == 2) level_marker = '+';
+    assert(indent >= 0 && indent <= 2);
+    char level_marker = level_markers[indent];
 
-    std::string ident_chars = std::string(2*ident, ' ');
+    std::string indent_chars = std::string(INDENT_WIDTH*indent, ' ');
 
     if (override_marker)
         level_marker = override_marker;
 
-    out << ident_chars
+    out << indent_chars
         << level_marker
         << " "
-        << std::left
-        << std::setw(30)
         << log_string
         << std::endl;
+}
+
+void util::logging::info(
+    std::ostream& out,
+    std::string const& log_string)
+{
+    out << "[INFO]: " << log_string << std::endl;
 }
 
 double util::timing::duration(

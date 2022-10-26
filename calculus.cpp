@@ -16,8 +16,9 @@
 // Authors: Iver Håkonsen <hakonseniver@yahoo.no
 
 #include "mfem.hpp"
-#include "mfem.hpp"
 #include "calculus.hpp"
+
+#include "util.hpp"
 
 #define CLAMP(x, low, high)  (((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
 
@@ -351,6 +352,7 @@ void define_fibers(
     double *S,
     double *T)
 {
+    util::tracing::roctx_range_push("define_fibers (cpu)");
     const double tol = 1e-12;
     for (int i = 0; i < n; i++) {
 
@@ -433,4 +435,6 @@ void define_fibers(
         T[3*i+1] = FST(1,2);
         T[3*i+2] = FST(2,2);
     }
+
+    util::tracing::roctx_range_pop();
 }

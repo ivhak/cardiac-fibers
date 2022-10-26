@@ -140,15 +140,27 @@ void laplace(
     }
 
     tracing::roctx_range_pop(); // Setup boundary conditions
-    tracing::roctx_range_push("Assemble RHS");
 
     // Set up the parallel linear form b(.) which corresponds to the right-hand
     // side of the FEM linear system, which in this case is (1,phi_i) where
     // phi_i are the basis functions in fespace.
+    tracing::roctx_range_push("Assemble RHS");
     timing::tick(&t0);
+
     ParLinearForm b(fespace);
     ConstantCoefficient zero(0.0);
     b.AddDomainIntegrator(new DomainLFIntegrator(zero));
+
+    // As of mfem-4.5 it is possible to perform the assembly on device!
+#if MFEM_VERSION_MAJOR > 4 || (MFEM_VERSION_MAJOR == 4 && MFEM_VERSION_MINOR >= 5)
+    if (b.SupportsDevice()) {
+        if (verbose > 2 & rank == 0) {
+            logging::info(std::cout, "MFEM_VERSION >= 4.5, using FastAssembly on RHS b.");
+        }
+        b.UseFastAssembly(true);
+    }
+#endif
+
     b.Assemble();
     timing::tick(&t1);
     if (verbose >= 2 && rank == 0) {
@@ -162,9 +174,15 @@ void laplace(
     tracing::roctx_range_push("Assemble LHS");
     timing::tick(&t0);
     ParBilinearForm a(fespace);
+
+
     ConstantCoefficient one(1.0);
     a.AddDomainIntegrator(new DiffusionIntegrator(one));
     // Assemble the parallel bilinear form and the corresponding linear system.
+#if 0
+    // TODO (ivhak): This causes the program to crash. Not sure why, it should work.
+    a.SetAssemblyLevel(AssemblyLevel::FULL);
+#endif
     a.Assemble();
     timing::tick(&t1);
     if (verbose >= 2 && rank == 0) {
@@ -184,7 +202,7 @@ void laplace(
         logging::timestamp(std::cout, "Form linear system", timing::duration(t0, t1), 2);
     }
     tracing::roctx_range_pop(); // Form linear system
-                              //
+
     // Solve the linear system A X = B.
     tracing::roctx_range_push("Solve");
     timing::tick(&t0);
@@ -394,14 +412,14 @@ int main(int argc, char *argv[])
         cg->SetTol(1e-12);
         cg->SetMaxIter(2000);
         cg->SetPrintLevel(opts.verbose > 2 ? 1 : 0);
-        cg->SetPreconditioner(*prec);
+        if (prec) cg->SetPreconditioner(*prec);
         solver = cg;
     } else if (opts.solver == 1) {
         CGSolver *cg = new CGSolver(MPI_COMM_WORLD);
         cg->SetAbsTol(1e-12);
         cg->SetMaxIter(2000);
         cg->SetPrintLevel(opts.verbose > 2 ? 1 : 0);
-        cg->SetPreconditioner(*prec);
+        if (prec) cg->SetPreconditioner(*prec);
         solver = cg;
     } else {
         std::cerr << "Invalid solver: " << opts.solver << std::endl;
@@ -665,7 +683,6 @@ int main(int argc, char *argv[])
         }
     }
 
-
     // Get read-only pointers to the internal arrays of the laplacian solutions
     const double *phi_epi = x_phi_epi.Read();
     const double *phi_lv  = x_phi_lv.Read();
@@ -690,6 +707,7 @@ int main(int argc, char *argv[])
 
     // Calculate the fiber orientation
     timing::tick(&t0);
+    util::tracing::roctx_range_push("define_fibers");
     define_fibers(
             pmesh.GetNV(),
             phi_epi, phi_lv, phi_rv,
@@ -698,6 +716,7 @@ int main(int argc, char *argv[])
             F_vals, S_vals, T_vals
     );
 
+    util::tracing::roctx_range_pop();
     timing::tick(&t1);
     if (opts.verbose && rank == 0)
         logging::timestamp(std::cout, "Define fiber orientation", timing::duration(t0, t1), 1);
@@ -782,6 +801,7 @@ int main(int argc, char *argv[])
 
     }
     timing::tick(&t1);
-    logging::timestamp(std::cout, "Save", timing::duration(t0, t1));
+    if (opts.verbose && rank == 0)
+        logging::timestamp(std::cout, "Save", timing::duration(t0, t1));
 }
 
