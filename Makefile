@@ -26,7 +26,7 @@ CFLAGS =
 ifneq ($(DEBUG), YES)
 CFLAGS += -march=native -O3
 else
-CFLAGS += -O0 -DDEBUG -g -Wall
+CFLAGS += -O0 -DDEBUG -g3 -Wall
 MFEM_SERIAL_ROOT=${HOME}/packages/mfem-serial-dbg-4.4
 MFEM_PARALLEL_ROOT=${HOME}/packages/mfem-dbg-4.5
 endif

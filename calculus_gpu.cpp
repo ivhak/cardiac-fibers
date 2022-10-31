@@ -100,12 +100,12 @@ MFEM_HOST_DEVICE
 static void quatnormalize(quat& q)
 {
     double sum = q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3];
-    double sum_sqr = sqrt(sum);
-    if (sum_sqr == 0.0) return;
-    q[0] = q[0] / sum_sqr;
-    q[1] = q[1] / sum_sqr;
-    q[2] = q[2] / sum_sqr;
-    q[3] = q[3] / sum_sqr;
+    double m = 1.0 / sqrt(sum);
+    // if (sum_sqr == 0.0) return;
+    q[0] = q[0] * m;
+    q[1] = q[1] * m;
+    q[2] = q[2] * m;
+    q[3] = q[3] * m;
 }
 
 // Set vector a = b
@@ -647,8 +647,7 @@ void define_fibers(
                  && abs(grad_phi_epi_i[2] + grad_phi_lv_i[2] + grad_phi_rv_i[2]) < 1e-3,
                     "The gradients do not add up to zero");
 
-        calculate_fiber(i,
-                        phi_epi_i, phi_lv_i, phi_rv_i,
+        calculate_fiber(i, phi_epi_i, phi_lv_i, phi_rv_i,
                         grad_phi_epi_i, grad_phi_lv_i, grad_phi_rv_i, grad_psi_ab_i,
                         alpha_endo, alpha_epi, beta_endo, beta_epi,
                         F, S, T);

@@ -67,18 +67,17 @@ using namespace util;
 //   the apex. This is handled by setting `apex` to be the index of the apex
 //   vertex in the mesh.
 void laplace(
-        ParGridFunction* x,
-        Solver* solver,
-        Array<int> &essential_boundaries,
-        Array<int> &nonzero_essential_boundaries,
-        Array<int> &zero_essential_boundaries,
+    ParGridFunction* x,
+    Solver* solver,
+    Array<int> &essential_boundaries,
+    Array<int> &nonzero_essential_boundaries,
+    Array<int> &zero_essential_boundaries,
     int apex,
     int verbose,
     int rank)
 {
     struct timespec t0, t1;
 
-    tracing::roctx_range_push("Setup boundary conditions");
 
     // Determine the list of true (i.e. parallel conforming) essential boundary
     // dofs, defined by the boundary attributes marked as essential (Dirichlet)
@@ -90,8 +89,9 @@ void laplace(
     fespace->GetEssentialTrueDofs(essential_boundaries, ess_tdof_list);
 
     // Set up boundary conditions
+    tracing::roctx_range_push("Setup boundary conditions");
+    timing::tick(&t0);
     {
-        timing::tick(&t0);
         // Initialize x with initial guess of zero, which satisfies the boundary
         // conditions.
         *x = 0.0;
@@ -133,12 +133,11 @@ void laplace(
             x->ProjectCoefficient(node_disp_value_coeff, node_disp);
         }
 
-        timing::tick(&t1);
-        if (verbose >= 2&& rank == 0) {
-            logging::timestamp(std::cout, "Setup boundary cond.", timing::duration(t0, t1), 2);
-        }
     }
-
+    timing::tick(&t1);
+    if (verbose >= 2&& rank == 0) {
+        logging::timestamp(std::cout, "Setup boundary cond.", timing::duration(t0, t1), 2);
+    }
     tracing::roctx_range_pop(); // Setup boundary conditions
 
     // Set up the parallel linear form b(.) which corresponds to the right-hand
@@ -154,9 +153,8 @@ void laplace(
     // As of mfem-4.5 it is possible to perform the assembly on device!
 #if MFEM_VERSION_MAJOR > 4 || (MFEM_VERSION_MAJOR == 4 && MFEM_VERSION_MINOR >= 5)
     if (b.SupportsDevice()) {
-        if (verbose > 2 & rank == 0) {
+        if (verbose > 2 & rank == 0)
             logging::info(std::cout, "MFEM_VERSION >= 4.5, using FastAssembly on RHS b.");
-        }
         b.UseFastAssembly(true);
     }
 #endif
@@ -175,10 +173,9 @@ void laplace(
     timing::tick(&t0);
     ParBilinearForm a(fespace);
 
-
+    // Assemble the parallel bilinear form and the corresponding linear system.
     ConstantCoefficient one(1.0);
     a.AddDomainIntegrator(new DiffusionIntegrator(one));
-    // Assemble the parallel bilinear form and the corresponding linear system.
 #if 0
     // TODO (ivhak): This causes the program to crash. Not sure why, it should work.
     a.SetAssemblyLevel(AssemblyLevel::FULL);
