@@ -15,98 +15,99 @@
 #
 # Authors: Iver Håkonsen <hakonseniver@yahoo.no
 
-MFEM_SERIAL_ROOT=${HOME}/packages/mfem-serial-4.4
-MFEM_PARALLEL_ROOT=${HOME}/packages/mfem-4.5
-
-MFEM_ROOT=
-MFEM_INCDIR=$(MFEM_ROOT)/include
-MFEM_LIBDIR=$(MFEM_ROOT)/lib
 
 CFLAGS =
 ifneq ($(DEBUG), YES)
 CFLAGS += -march=native -O3
 else
 CFLAGS += -O0 -DDEBUG -g3 -Wall
-MFEM_SERIAL_ROOT=${HOME}/packages/mfem-serial-dbg-4.4
-MFEM_PARALLEL_ROOT=${HOME}/packages/mfem-dbg-4.5
 endif
 
 ifeq ($(GPU_CALCULUS), YES)
 CFLAGS += -DGPU_CALCULUS
 endif
 
-IFLAGS=
-LFLAGS=
+CC=mpiCC
+
+# MFEM
+ifeq ($(DEBUG), YES)
+MFEM_ROOT=$(MFEM_DBG_ROOT)
+endif
+
+MFEM_INCDIR = $(MFEM_ROOT)/include
+MFEM_LIBDIR = $(MFEM_ROOT)/lib
+
+# Setup the include and link flags
+IFLAGS = -I$(MFEM_INCDIR) \
+		 -I$(MPI_INCDIR) \
+		 -I$(HYPRE_INCDIR) \
+		 -I$(METIS_INCDIR)
+
+LFLAGS = -L$(MFEM_LIBDIR) -lmfem \
+		 -L$(MPI_LIBDIR) -lmpi -lmpi_cxx \
+		 -L$(HYPRE_LIBDIR) -lHYPRE \
+		 -L$(METIS_LIBDIR) -lmetis
 
 # HIP
+ifeq ($(LDRB_HAS_HIP), YES)
+CC=hipcc
 CFLAGS += $(shell hipconfig -C)
-HIP_IFLAGS =
-HIP_LFLAGS = -lhipsparse
+LFLAGS += -lhipsparse
 
 ifeq ($(HIP_TRACE), YES)
 CFLAGS += -DHIP_TRACE
-HIP_IFLAGS += -I$(ROCm_ROOT)/roctracer/include
-HIP_LFLAGS += -lroctx64
+IFLAGS += -I$(ROCm_ROOT)/roctracer/include
+LFLAGS += -lroctx64
+endif
 endif
 
-# MFEM
-MFEM_IFLAGS = -I$(MFEM_INCDIR)
-MFEM_LFLAGS = -L$(MFEM_LIBDIR) -lmfem
-
-# MPI
-MPI_IFLAGS = -I$(MPI_HOME)/include
-MPI_LFLAGS = -L$(MPI_HOME)/lib -lmpi -lmpi_cxx
-
-# HYPRE
-HYPRE_IFLAGS = -I$(HYPRE_INCDIR)
-HYPRE_LFLAGS = -L$(HYPRE_LIBDIR) -lHYPRE
-
-# Metis
-METIS_IFLAGS = -I$(METIS_INCDIR)
-METIS_LFLAGS = -L$(METIS_LIBDIR) -lmetis
-
-CC=hipcc
-
-PARALLEL_IFLAGS = $(HIP_IFLAGS) $(MFEM_IFLAGS) $(MPI_IFLAGS) $(HYPRE_IFLAGS) $(METIS_IFLAGS)
-PARALLEL_LFLAGS = $(HIP_LFLAGS) $(MFEM_LFLAGS) $(MPI_LFLAGS) $(HYPRE_LFLAGS) $(METIS_LFLAGS)
-
-SERIAL_IFLAGS = $(HIP_IFLAGS) $(MFEM_IFLAGS)
-SERIAL_LFLAGS = $(HIP_LFLAGS) $(MFEM_LFLAGS)
-
-
-all: ldrb-gpup ldrb-gpu
-
-ldrb-gpup: MFEM_ROOT=$(MFEM_PARALLEL_ROOT)
-ldrb-gpup: IFLAGS=$(PARALLEL_IFLAGS)
-ldrb-gpup: LFLAGS=$(PARALLEL_LFLAGS)
+SRC = ldrb-gpup.cpp util.cpp
 ifeq ($(GPU_CALCULUS), YES)
-ldrb-gpup: ldrb-gpup.o calculus_gpu.o util.o
+SRC += calculus_gpu.cpp
 else
-ldrb-gpup: ldrb-gpup.o calculus.o util.o
+SRC += calculus.cpp
 endif
-	$(CC) $(CFLAGS) $(IFLAGS) -o $@ $^ $(LFLAGS)
 
-ldrb-gpu: MFEM_ROOT=$(MFEM_SERIAL_ROOT)
-ldrb-gpu: IFLAGS=$(SERIAL_IFLAGS)
-ldrb-gpu: LFLAGS=$(SERIAL_LFLAGS)
-ldrb-gpu: ldrb-gpu.o calculus.o util.o
-	$(CC) $(CFLAGS) $(IFLAGS) -o $@ $^ $(LFLAGS)
+OBJ=$(SRC:.cpp=.o)
 
-tests: MFEM_ROOT=$(MFEM_SERIAL_ROOT)
-tests: IFLAGS=$(SERIAL_IFLAGS)
-tests: LFLAGS=$(SERIAL_LFLAGS)
+all: ldrb-gpup
+
+
+ldrb-gpup: .check-env
+ldrb-gpup: $(OBJ)
+	$(CC) $(CFLAGS) $(IFLAGS) -o $@ $(OBJ) $(LFLAGS)
+
 tests: tests.o calculus.o util.o
 	$(CC) $(CFLAGS) $(IFLAGS) -o $@ $^ $(LFLAGS)
 
-tests_gpu: MFEM_ROOT=$(MFEM_PARALLEL_ROOT)
-tests_gpu: IFLAGS=$(PARALLEL_IFLAGS)
-tests_gpu: LFLAGS=$(PARALLEL_LFLAGS)
 tests_gpu: tests_gpu.o calculus_gpu.o util.o
 	$(CC) $(CFLAGS) $(IFLAGS) -o $@ $^ $(LFLAGS)
 
 %.o: %.cpp
 	$(CC) -c $(CFLAGS) $(IFLAGS) -o $@ $^
 
-.PHONY: clean
+# Check that all the needed environment variables are set
+.check-env:
+ifndef MPI_INCDIR
+	$(error MPI_INCDIR is not set!)
+endif
+ifndef MPI_LIBDIR
+	$(error MPI_LIBDIR is not set!)
+endif
+ifndef HYPRE_INCDIR
+	$(error HYPRE_INCDIR is not set!)
+endif
+ifndef HYPRE_LIBDIR
+	$(error HYPRE_LIBDIR is not set!)
+endif
+ifndef METIS_INCDIR
+	$(error METIS_INCDIR is not set!)
+endif
+ifndef METIS_LIBDIR
+	$(error METIS_LIBDIR is not set!)
+endif
+
 clean:
-	$(RM) ldrb-gpu ldrb-gpup tests test_gpu calculus.o calculus_gpu.o ldrb-gpu.o ldrb-gpup.o util.o tests.o
+	$(RM) ldrb-gpup tests test_gpu calculus.o calculus_gpu.o ldrb-gpu.o ldrb-gpup.o util.o tests.o
+
+.PHONY: .check-env clean
