@@ -393,14 +393,12 @@ int main(int argc, char *argv[])
         prec = new HypreBoomerAMG;
         prec->SetPrintLevel(opts.verbose > 2 ? 1 : 0);
 
-        // TODO (ivhak): These settings result in a non-SPD preconditioner???
-#if 0
         prec->SetCoarsening(8);           // PMIS
+        prec->SetCycleNumSweeps(1,1);     // 1 sweep on the up and down cycle
         prec->SetInterpolation(17);       // extended+i, matrix-matrix
-        prec->SetAggressiveCoarsening(0);
-        prec->SetStrengthThresh(0.5);
+        prec->SetAggressiveCoarsening(1); // Number of levels of aggressive coarsening
+        // prec->SetStrengthThresh(0.5);
         prec->SetRelaxType(7);            // weighted Jacobi
-#endif
     }
 
     Solver *solver;
