@@ -21,36 +21,36 @@
 
 const double PI=3.14159265;
 
-typedef struct Vector3D {
+typedef struct vec3 {
     double data[3];
     MFEM_HOST_DEVICE double& operator[](int i) {
         return data[i];
     }
-} Vector3D;
+} vec3;
 
-typedef struct Quaternion {
+typedef struct quat {
     double data[4];
     MFEM_HOST_DEVICE double& operator[](int i) {
         return data[i];
     }
-} Quaternion;
+} quat;
 
-typedef struct Matrix3x3 {
+typedef struct mat3x3 {
     double data[3][3];
     MFEM_HOST_DEVICE double* operator[](int i) {
         return (double *) &data[i];
     }
-} Matrix3x3;
+} mat3x3;
 
-MFEM_HOST_DEVICE void veccopy(Vector3D& a, Vector3D& b);
-MFEM_HOST_DEVICE void vecmul(Vector3D& a, double b);
-MFEM_HOST_DEVICE double vecdot(Vector3D& a, Vector3D& b);
+MFEM_HOST_DEVICE void veccopy(vec3& a, vec3& b);
+MFEM_HOST_DEVICE void vecmul(vec3& a, double b);
+MFEM_HOST_DEVICE double vecdot(vec3& a, vec3& b);
 
-MFEM_HOST_DEVICE void quat2rot(Matrix3x3& Q, Quaternion& q);
-MFEM_HOST_DEVICE void rot2quat(Quaternion& q, Matrix3x3& Q);
-MFEM_HOST_DEVICE void orient(Matrix3x3& Q_out, Matrix3x3& Q, double a, double b);
-MFEM_HOST_DEVICE void axis(Matrix3x3& Q, Vector3D& psi, Vector3D& phi);
-MFEM_HOST_DEVICE void bislerp(Matrix3x3& Qab, Matrix3x3& Qa, Matrix3x3& Qb, double t);
+MFEM_HOST_DEVICE void quat2rot(mat3x3& Q, quat& q);
+MFEM_HOST_DEVICE void rot2quat(quat& q, mat3x3& Q);
+MFEM_HOST_DEVICE void orient(mat3x3& Q_out, mat3x3& Q, double a, double b);
+MFEM_HOST_DEVICE void axis(mat3x3& Q, vec3& psi, vec3& phi);
+MFEM_HOST_DEVICE void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t);
 
 void define_fibers(
     int n,
