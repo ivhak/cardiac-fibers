@@ -18,7 +18,7 @@
 
 CFLAGS =
 ifneq ($(DEBUG), YES)
-CFLAGS += -march=native -O3
+CFLAGS += -O3
 else
 CFLAGS += -O0 -DDEBUG -g3 -Wall
 endif
@@ -61,6 +61,13 @@ LFLAGS += -lroctx64
 endif
 endif
 
+# CUDA
+ifeq ($(LDRB_HAS_CUDA), YES)
+CC=nvcc
+CFLAGS += -ccbin=mpiCC -x=cu --expt-extended-lambda
+LFLAGS += -lcusparse -lrt
+endif
+
 SRC = ldrb-gpup.cpp util.cpp
 ifeq ($(GPU_CALCULUS), YES)
 SRC += calculus_gpu.cpp
@@ -75,7 +82,7 @@ all: ldrb-gpup
 
 ldrb-gpup: .check-env
 ldrb-gpup: $(OBJ)
-	$(CC) $(CFLAGS) $(IFLAGS) -o $@ $(OBJ) $(LFLAGS)
+	$(CC) -o $@ $(OBJ) $(LFLAGS)
 
 tests: tests.o calculus.o util.o
 	$(CC) $(CFLAGS) $(IFLAGS) -o $@ $^ $(LFLAGS)
@@ -88,6 +95,14 @@ tests_gpu: tests_gpu.o calculus_gpu.o util.o
 
 # Check that all the needed environment variables are set
 .check-env:
+ifeq ($(LDRB_HAS_CUDA), YES)
+ifndef CUDA_INCDIR
+	$(error CUDA_INCDIR is not set!)
+endif
+ifndef CUDA_LIBDIR
+	$(error CUDA_LIBDIR is not set!)
+endif
+endif
 ifndef MPI_INCDIR
 	$(error MPI_INCDIR is not set!)
 endif

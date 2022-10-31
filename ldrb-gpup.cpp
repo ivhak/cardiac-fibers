@@ -231,9 +231,9 @@ int main(int argc, char *argv[])
     opts.mesh_file = NULL;
     opts.output_dir = "./out";
 
-#ifdef MFEM_USE_HIP
+#if defined(MFEM_USE_HIP)
     opts.device_config = "hip";
-#elif MFEM_USE_CUDA
+#elif defined(MFEM_USE_CUDA)
     opts.device_config = "cuda";
 #else
     opts.device_config = "cpu";

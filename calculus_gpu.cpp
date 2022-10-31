@@ -507,7 +507,7 @@ void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t)
         return;
     }
 
-    quat q;
+    quat q = {0};
     slerp(q, qm, qb, t);
     quatnormalize(q);
     quat2rot(Qab, q);
