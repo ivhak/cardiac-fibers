@@ -248,6 +248,7 @@ int main(int argc, char *argv[])
     opts.geom_has_rv = true;
 
     opts.solver = 0;
+    opts.gpu_tuned_amg = true;
 
     // Parse command-line options
     OptionsParser args(argc, argv);
@@ -299,6 +300,10 @@ int main(int argc, char *argv[])
     args.AddOption(&opts.solver,
             "-s", "--solver",
             "Solver to use. Options are: 0 - HyprePcg, 1 - CGSolver");
+    args.AddOption(&opts.gpu_tuned_amg,
+            "-gamg",  "--gpu-tuned-amg",
+            "-ngamg", "--no-gpu-tuned-amg",
+            "Tune the BoomerAmg preconditioner for (hopefully) better GPU performance.");
     args.Parse();
 
     if (!args.Good()) {
@@ -393,12 +398,14 @@ int main(int argc, char *argv[])
         prec = new HypreBoomerAMG;
         prec->SetPrintLevel(opts.verbose > 2 ? 1 : 0);
 
-        prec->SetCoarsening(8);           // PMIS
-        prec->SetCycleNumSweeps(1,1);     // 1 sweep on the up and down cycle
-        prec->SetInterpolation(17);       // extended+i, matrix-matrix
-        prec->SetAggressiveCoarsening(1); // Number of levels of aggressive coarsening
-        // prec->SetStrengthThresh(0.5);
-        prec->SetRelaxType(7);            // weighted Jacobi
+        if (opts.gpu_tuned_amg) {
+            prec->SetCoarsening(8);           // PMIS
+            prec->SetCycleNumSweeps(1,1);     // 1 sweep on the up and down cycle
+            prec->SetInterpolation(17);       // extended+i, matrix-matrix
+            prec->SetAggressiveCoarsening(1); // Number of levels of aggressive coarsening
+            // prec->SetStrengthThresh(0.5);
+            prec->SetRelaxType(7);            // weighted Jacobi
+        }
     }
 
     Solver *solver;

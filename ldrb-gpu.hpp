@@ -37,6 +37,7 @@ typedef struct {
     int rv_id;
     bool geom_has_rv;
     int solver;
+    bool gpu_tuned_amg;
 } Options;
 
 #define LDRB_GPU_HPP
