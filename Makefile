@@ -18,7 +18,7 @@
 
 CFLAGS =
 ifneq ($(DEBUG), YES)
-CFLAGS += -O3
+CFLAGS += -O3 -Wall
 else
 CFLAGS += -O0 -DDEBUG -g3 -Wall
 endif
@@ -64,7 +64,8 @@ endif
 # CUDA
 ifeq ($(LDRB_HAS_CUDA), YES)
 CC=nvcc
-CFLAGS += -ccbin=mpiCC -x=cu --expt-extended-lambda
+# Wrap the old CFLAGS into --compiler-options, and set the needed nvcc specific flags
+CFLAGS := -ccbin=mpiCC -x=cu --expt-extended-lambda --compiler-options="$(CFLAGS)"
 LFLAGS += -lcusparse -lrt
 endif
 
@@ -95,14 +96,6 @@ tests_gpu: tests_gpu.o calculus_gpu.o util.o
 
 # Check that all the needed environment variables are set
 .check-env:
-ifeq ($(LDRB_HAS_CUDA), YES)
-ifndef CUDA_INCDIR
-	$(error CUDA_INCDIR is not set!)
-endif
-ifndef CUDA_LIBDIR
-	$(error CUDA_LIBDIR is not set!)
-endif
-endif
 ifndef MPI_INCDIR
 	$(error MPI_INCDIR is not set!)
 endif

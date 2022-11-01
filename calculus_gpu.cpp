@@ -274,6 +274,7 @@ void quat2rot(mat3x3& Q, quat& q)
     {
         const double dot = w*w + x*x + y*y + z*z;
         MFEM_ASSERT_KERNEL(dot - 1.0 <= 1e-12, "Quaternion not normalized");
+        MFEM_CONTRACT_VAR(dot);
     }
 
     const double x2 = x*x;
@@ -402,10 +403,10 @@ void axis(mat3x3& Q, vec3& u, vec3& v)
 MFEM_HOST_DEVICE
 void orient(mat3x3& Q_out, mat3x3& Q, double a, double b)
 {
-    const double sina = sin(a*PI/180);
-    const double sinb = sin(b*PI/180);
-    const double cosa = cos(a*PI/180);
-    const double cosb = cos(b*PI/180);
+    const double sina = sin(a*PI/180.0);
+    const double sinb = sin(b*PI/180.0);
+    const double cosa = cos(a*PI/180.0);
+    const double cosb = cos(b*PI/180.0);
 
     // The algorithm outlines the product of three matrices:
     //
@@ -417,24 +418,16 @@ void orient(mat3x3& Q_out, mat3x3& Q, double a, double b)
     // angles a and b), we instead precompute it, and end up with a single
     // matmul:
     //
-    //         | cosa  -sina*cosb  cosa*sinb |
-    //     Q x | sina   cosa*cosb  cosa*sinb |
-    //         | 0        -sinb    cosb      |
+    //         | cosa  -sina*cosb  -sina*sinb |
+    //     Q x | sina   cosa*cosb   cosa*sinb |
+    //         | 0        -sinb       cosb   |
 
 
     mat3x3 A;
 
-    A[0][0] = cosa;
-    A[0][1] = -sina*cosb;
-    A[0][2] = -sina*sinb;
-
-    A[1][0] = sina;
-    A[1][1] = cosa*cosb;
-    A[1][2] = cosa*sinb;
-
-    A[2][0] = 0;
-    A[2][1] = -sinb;
-    A[2][2] = cosb;
+    A[0][0] = cosa; A[0][1] = -sina*cosb; A[0][2] = -sina*sinb;
+    A[1][0] = sina; A[1][1] =  cosa*cosb; A[1][2] = cosa*sinb;
+    A[2][0] = 0;    A[2][1] = -sinb;      A[2][2] = cosb;
 
     matmul(Q_out, Q, A);
 }
@@ -461,19 +454,19 @@ void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t)
     }
 
     // Translate the rotation matrices Qa and Qb into quaternions
-    quat qa, qb;
+    quat qa = {0}, qb = {0};
     rot2quat(qa, Qa);
     rot2quat(qb, Qb);
 
     // Find qm in { ±qa, ±i*qa, ±j*qa, ±k*qa} that maximizes ||qm*qb||
 
-    quat i; i[0] = 0.0; i[1] = 1.0; i[2] = 0.0; i[3] = 0.0;
-    quat j; j[0] = 0.0; j[1] = 0.0; j[2] = 1.0; j[3] = 0.0;
-    quat k; k[0] = 0.0; k[1] = 0.0; k[2] = 0.0; k[3] = 1.0;
+    quat i = {0}; i[1] = 1.0;
+    quat j = {0}; j[2] = 1.0;
+    quat k = {0}; k[3] = 1.0;
 
-    quat i_qa; quatcopy(i_qa, i); quatelemmul(i_qa, qa);
-    quat j_qa; quatcopy(j_qa, j); quatelemmul(j_qa, qa);
-    quat k_qa; quatcopy(k_qa, k); quatelemmul(k_qa, qa);
+    quat i_qa = {0}; quatcopy(i_qa, i); quatelemmul(i_qa, qa);
+    quat j_qa = {0}; quatcopy(j_qa, j); quatelemmul(j_qa, qa);
+    quat k_qa = {0}; quatcopy(k_qa, k); quatelemmul(k_qa, qa);
 
     quat qa_minus;   quatcopy(qa_minus,   qa);   quatmul(qa_minus, -1.0);
     quat i_qa_minus; quatcopy(i_qa_minus, i_qa); quatmul(i_qa_minus, -1.0);
@@ -491,7 +484,7 @@ void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t)
     quat_array[7] = &k_qa_minus;
 
     double max_abs_dot  = 0.0;
-    quat qm;
+    quat qm = {0};
     for (int i = 0; i < 8; i++) {
         quat *v = quat_array[i];
         const double abs_dot = abs(quatdot(qb, (*v)));
@@ -620,7 +613,7 @@ void define_fibers(
     double *S,
     double *T)
 {
-    MFEM_GPU_FORALL(i, n,
+    MFEM_FORALL(i, n,
     {
         const double phi_epi_i = CLAMP(phi_epi[i], 0.0, 1.0);
         const double phi_lv_i  = CLAMP(phi_lv[i],  0.0, 1.0);
@@ -641,11 +634,10 @@ void define_fibers(
         vec3 grad_psi_ab_i;
         vecset(grad_psi_ab_i, &grad_psi_ab[3*i]);
 
-        MFEM_ASSERT_KERNEL(
-                    abs(grad_phi_epi_i[0] + grad_phi_lv_i[0] + grad_phi_rv_i[0]) < 1e-3
-                 && abs(grad_phi_epi_i[1] + grad_phi_lv_i[1] + grad_phi_rv_i[1]) < 1e-3
-                 && abs(grad_phi_epi_i[2] + grad_phi_lv_i[2] + grad_phi_rv_i[2]) < 1e-3,
-                    "The gradients do not add up to zero");
+        MFEM_ASSERT_KERNEL(abs(grad_phi_epi_i[0] + grad_phi_lv_i[0] + grad_phi_rv_i[0]) < 1e-3
+                        && abs(grad_phi_epi_i[1] + grad_phi_lv_i[1] + grad_phi_rv_i[1]) < 1e-3
+                        && abs(grad_phi_epi_i[2] + grad_phi_lv_i[2] + grad_phi_rv_i[2]) < 1e-3,
+                        "The gradients do not add up to zero");
 
         calculate_fiber(i, phi_epi_i, phi_lv_i, phi_rv_i,
                         grad_phi_epi_i, grad_phi_lv_i, grad_phi_rv_i, grad_psi_ab_i,

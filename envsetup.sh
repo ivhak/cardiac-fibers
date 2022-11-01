@@ -30,6 +30,7 @@ module purge
 
 if [ "$1" = "mi100q" ] || [ -z "$1" ]; then
     # HIP build, default
+    echo "Setting up environment for mi100q (HIP)"
 
     module use /global/D1/homes/james/ex3modules/mi100q/1.0.0/modulefiles
 
@@ -43,12 +44,13 @@ if [ "$1" = "mi100q" ] || [ -z "$1" ]; then
     export MPI_LIBDIR=${MPI_HOME}/lib
 
     export MFEM_ROOT="${PKG_ROOT}/mi100q/mfem-4.5"
-    export MFEM_DBG_ROOT="${PKG_ROOT}/packages/mi100q/mfem-dbg-4.5"
+    export MFEM_DBG_ROOT="${PKG_ROOT}/mi100q/mfem-dbg-4.5"
 
     LDRB_HAS_HIP=YES
 
 elif [ "$1" = "dgx2q" ]; then
     # CUDA build
+    echo "Setting up environment for dgx2q (CUDA)"
 
     module use /global/D1/homes/james/ex3modules/dgx2q/1.0.0/modulefiles
 
@@ -68,6 +70,7 @@ elif [ "$1" = "dgx2q" ]; then
 
 elif [ "$1" = "defq" ]; then
     # CPU build
+    echo "Setting up environment for defq (cpu)"
 
     module use /global/D1/homes/james/ex3modules/defq/1.0.0/modulefiles
 
