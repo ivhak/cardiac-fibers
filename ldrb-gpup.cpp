@@ -136,7 +136,7 @@ void laplace(
     }
     timing::tick(&t1);
     if (verbose >= 2&& rank == 0) {
-        logging::timestamp(std::cout, "Setup boundary cond.", timing::duration(t0, t1), 2);
+        logging::timestamp(std::cerr, "Setup boundary cond.", timing::duration(t0, t1), 2);
     }
     tracing::roctx_range_pop(); // Setup boundary conditions
 
@@ -153,7 +153,7 @@ void laplace(
     // As of mfem-4.5 it is possible to perform the assembly on device!
 #if MFEM_VERSION_MAJOR > 4 || (MFEM_VERSION_MAJOR == 4 && MFEM_VERSION_MINOR >= 5)
     if (b.SupportsDevice()) {
-        if (verbose > 2 & rank == 0)
+        if (verbose > 2 && rank == 0)
             logging::info(std::cout, "MFEM_VERSION >= 4.5, using FastAssembly on RHS b.");
         b.UseFastAssembly(true);
     }
@@ -162,7 +162,7 @@ void laplace(
     b.Assemble();
     timing::tick(&t1);
     if (verbose >= 2 && rank == 0) {
-        logging::timestamp(std::cout, "Assemble RHS", timing::duration(t0, t1), 2);
+        logging::timestamp(std::cerr, "Assemble RHS", timing::duration(t0, t1), 2);
     }
     tracing::roctx_range_pop(); // Assemble RHS
 
@@ -183,7 +183,7 @@ void laplace(
     a.Assemble();
     timing::tick(&t1);
     if (verbose >= 2 && rank == 0) {
-        logging::timestamp(std::cout, "Assemble LHS", timing::duration(t0, t1), 2);
+        logging::timestamp(std::cerr, "Assemble LHS", timing::duration(t0, t1), 2);
     }
     tracing::roctx_range_pop(); // Assemble LHS
 
@@ -196,7 +196,7 @@ void laplace(
     a.FormLinearSystem(ess_tdof_list, *x, b, A, X, B);
     timing::tick(&t1);
     if (verbose >= 2 && rank == 0) {
-        logging::timestamp(std::cout, "Form linear system", timing::duration(t0, t1), 2);
+        logging::timestamp(std::cerr, "Form linear system", timing::duration(t0, t1), 2);
     }
     tracing::roctx_range_pop(); // Form linear system
 
@@ -208,7 +208,7 @@ void laplace(
     solver->Mult(B, X);
     timing::tick(&t1);
     if (verbose >= 2 && rank == 0) {
-        logging::timestamp(std::cout, "Solve", timing::duration(t0, t1), 2);
+        logging::timestamp(std::cerr, "Solve", timing::duration(t0, t1), 2);
     }
     tracing::roctx_range_pop(); // Solve
 
@@ -352,7 +352,7 @@ int main(int argc, char *argv[])
 
     }
     if (opts.verbose && rank == 0)
-        logging::timestamp(std::cout, "Mesh load", timing::duration(t0, t1));
+        logging::timestamp(std::cerr, "Mesh load", timing::duration(t0, t1));
 
     // Define a parallel mesh by a partitioning of the serial mesh.
     timing::tick(&t0);
@@ -360,7 +360,7 @@ int main(int argc, char *argv[])
     mesh.Clear();
     timing::tick(&t1);
     if (opts.verbose && rank == 0)
-        logging::timestamp(std::cout, "Partition mesh", timing::duration(t0, t1));
+        logging::timestamp(std::cerr, "Partition mesh", timing::duration(t0, t1));
 
 
     // Each rank finds the vertex in its submesh that is closest to the
@@ -395,7 +395,7 @@ int main(int argc, char *argv[])
 
         timing::tick(&t1);
         if (opts.verbose && rank == 0)
-            logging::timestamp(std::cout, "Find apex", timing::duration(t0, t1));
+            logging::timestamp(std::cerr, "Find apex", timing::duration(t0, t1));
     }
 
 
@@ -443,7 +443,7 @@ int main(int argc, char *argv[])
 
     timing::tick(&t1);
     if (opts.verbose && rank == 0) {
-        logging::timestamp(std::cout, "Setup precond. and solver", timing::duration(t0,t1));
+        logging::timestamp(std::cerr, "Setup precond. and solver", timing::duration(t0,t1));
     }
 
     // Time the fiber orientation calculations
@@ -451,7 +451,7 @@ int main(int argc, char *argv[])
     timing::tick(&start_fiber);
 
     if (opts.verbose && rank == 0)
-        logging::marker(std::cout, "Compute fiber orientation");
+        logging::marker(std::cerr, "Compute fiber orientation");
 
     // Set up the finite element collection. We use  first order H1-conforming finite elements.
     H1_FECollection fec(1, pmesh.Dimension());
@@ -470,7 +470,7 @@ int main(int argc, char *argv[])
     x_phi_epi.UseDevice(true);
     {
         if (opts.verbose > 1 && rank == 0) {
-            logging::marker(std::cout, "Compute phi_epi", 1);
+            logging::marker(std::cerr, "Compute phi_epi", 1);
         }
         timing::tick(&t0);
 
@@ -499,10 +499,10 @@ int main(int argc, char *argv[])
         timing::tick(&t1);
         if (opts.verbose && rank == 0) {
             if (opts.verbose > 1) {
-                logging::timestamp(std::cout, "Total", timing::duration(t0, t1), 2, '=');
+                logging::timestamp(std::cerr, "Total", timing::duration(t0, t1), 2, '=');
                 std::cout << std::endl;
             } else {
-                logging::timestamp(std::cout, "Compute phi_epi", timing::duration(t0, t1), 1);
+                logging::timestamp(std::cerr, "Compute phi_epi", timing::duration(t0, t1), 1);
             }
         }
     }
@@ -513,7 +513,7 @@ int main(int argc, char *argv[])
     x_phi_lv.UseDevice(true);
     {
         if (opts.verbose > 1 && rank == 0) {
-            logging::marker(std::cout, "Compute phi_lv", 1);
+            logging::marker(std::cerr, "Compute phi_lv", 1);
         }
         timing::tick(&t0);
 
@@ -542,10 +542,10 @@ int main(int argc, char *argv[])
         timing::tick(&t1);
         if (opts.verbose && rank == 0) {
             if (opts.verbose > 1) {
-                logging::timestamp(std::cout, "Total", timing::duration(t0, t1), 2, '=');
+                logging::timestamp(std::cerr, "Total", timing::duration(t0, t1), 2, '=');
                 std::cout << std::endl;
             } else {
-                logging::timestamp(std::cout, "Compute phi_lv", timing::duration(t0, t1), 1);
+                logging::timestamp(std::cerr, "Compute phi_lv", timing::duration(t0, t1), 1);
             }
         }
     }
@@ -556,7 +556,7 @@ int main(int argc, char *argv[])
     x_phi_rv.UseDevice(true);
     if (opts.geom_has_rv) {
         if (opts.verbose > 1 && rank == 0) {
-            logging::marker(std::cout, "Compute phi rv", 1);
+            logging::marker(std::cerr, "Compute phi rv", 1);
         }
         timing::tick(&t0);
 
@@ -582,10 +582,10 @@ int main(int argc, char *argv[])
         timing::tick(&t1);
         if (opts.verbose && rank == 0) {
             if (opts.verbose > 1) {
-                logging::timestamp(std::cout, "Total", timing::duration(t0, t1), 2, '=');
+                logging::timestamp(std::cerr, "Total", timing::duration(t0, t1), 2, '=');
                 std::cout << std::endl;
             } else {
-                logging::timestamp(std::cout, "Compute phi_rv", timing::duration(t0, t1), 1);
+                logging::timestamp(std::cerr, "Compute phi_rv", timing::duration(t0, t1), 1);
             }
         }
     } else {
@@ -598,7 +598,7 @@ int main(int argc, char *argv[])
     x_psi_ab.UseDevice(true);
     {
         if (opts.verbose > 1 && rank == 0) {
-            logging::marker(std::cout, "Compute psi_ab", 1);
+            logging::marker(std::cerr, "Compute psi_ab", 1);
         }
         timing::tick(&t0);
 
@@ -621,10 +621,10 @@ int main(int argc, char *argv[])
         timing::tick(&t1);
         if (opts.verbose && rank == 0 ) {
             if (opts.verbose > 1) {
-                logging::timestamp(std::cout, "Total", timing::duration(t0, t1), 2, '=');
+                logging::timestamp(std::cerr, "Total", timing::duration(t0, t1), 2, '=');
                 std::cout << std::endl;
             } else {
-                logging::timestamp(std::cout, "Compute psi_epi", timing::duration(t0, t1), 1);
+                logging::timestamp(std::cerr, "Compute psi_epi", timing::duration(t0, t1), 1);
             }
         }
     }
@@ -643,7 +643,7 @@ int main(int argc, char *argv[])
         tracing::roctx_range_pop();
         timing::tick(&t1);
         if (opts.verbose && rank == 0) {
-            logging::timestamp(std::cout, "Compute grad_phi_epi", timing::duration(t0, t1), 1);
+            logging::timestamp(std::cerr, "Compute grad_phi_epi", timing::duration(t0, t1), 1);
         }
     }
 
@@ -659,7 +659,7 @@ int main(int argc, char *argv[])
         tracing::roctx_range_pop();
         timing::tick(&t1);
         if (opts.verbose && rank == 0) {
-            logging::timestamp(std::cout, "Compute grad_phi_lv", timing::duration(t0, t1), 1);
+            logging::timestamp(std::cerr, "Compute grad_phi_lv", timing::duration(t0, t1), 1);
         }
     }
 
@@ -675,7 +675,7 @@ int main(int argc, char *argv[])
         tracing::roctx_range_pop();
         timing::tick(&t1);
         if (opts.verbose && rank == 0) {
-            logging::timestamp(std::cout, "Compute grad_phi_rv", timing::duration(t0, t1), 1);
+            logging::timestamp(std::cerr, "Compute grad_phi_rv", timing::duration(t0, t1), 1);
         }
     } else {
         grad_phi_rv = 0.0;
@@ -693,7 +693,7 @@ int main(int argc, char *argv[])
         tracing::roctx_range_pop();
         timing::tick(&t1);
         if (opts.verbose && rank == 0) {
-            logging::timestamp(std::cout, "Compute grad_psi_ab", timing::duration(t0, t1), 1);
+            logging::timestamp(std::cerr, "Compute grad_psi_ab", timing::duration(t0, t1), 1);
         }
     }
 
@@ -733,14 +733,12 @@ int main(int argc, char *argv[])
     util::tracing::roctx_range_pop();
     timing::tick(&t1);
     if (opts.verbose && rank == 0)
-        logging::timestamp(std::cout, "Define fiber orientation", timing::duration(t0, t1), 1);
+        logging::timestamp(std::cerr, "Define fiber orientation", timing::duration(t0, t1), 1);
 
     timing::tick(&end_fiber);
-    timing::tick(&end);
     if (opts.verbose && rank == 0) {
-        logging::timestamp(std::cout, "Total (fiber)", timing::duration(start_fiber, end_fiber), 1, '=');
+        logging::timestamp(std::cerr, "Total (fiber)", timing::duration(start_fiber, end_fiber), 1, '=');
         std::cout << std::endl;
-        logging::timestamp(std::cout, "Total time", timing::duration(start, end), 0, '=');
     }
 
     // Make sure the fiber directions are read back to the host before saving
@@ -816,6 +814,11 @@ int main(int argc, char *argv[])
     }
     timing::tick(&t1);
     if (opts.verbose && rank == 0)
-        logging::timestamp(std::cout, "Save", timing::duration(t0, t1));
+        logging::timestamp(std::cerr, "Save", timing::duration(t0, t1));
+
+    timing::tick(&end);
+    if (opts.verbose && rank == 0) {
+        logging::timestamp(std::cerr, "Total time", timing::duration(start, end), 0, '=');
+    }
 }
 
