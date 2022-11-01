@@ -305,7 +305,7 @@ void quat2rot(mat3x3& Q, quat& q)
 
 // Spherical Linear intERPolation
 MFEM_HOST_DEVICE
-static void slerp(quat q, quat q1, quat q2, double t)
+static void slerp(quat& q, quat& q1, quat& q2, double t)
 {
     double dot = quatdot(q1, q2);
     quatcopy(q, q2);
