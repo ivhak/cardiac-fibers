@@ -36,7 +36,7 @@ if [ "$1" = "mi100q" ] || [ -z "$1" ]; then
     module load amd/rocm/5.1.3
     module load hypre-32-2.24.0
     module load openmpi-4.1.4
-    module load metis-5.1.0
+    module load metis-32-5.1.0
 
     # The openmpi-4.1.4 module does not properly export MPI_INCDIR and MPI_LIBDIR
     export MPI_INCDIR=${MPI_HOME}/include
