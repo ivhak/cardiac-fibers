@@ -23,10 +23,6 @@ else
 CFLAGS += -O0 -DDEBUG -g3 -Wall
 endif
 
-ifeq ($(GPU_CALCULUS), YES)
-CFLAGS += -DGPU_CALCULUS
-endif
-
 CC=mpiCC
 
 # MFEM
@@ -69,26 +65,16 @@ CFLAGS := -ccbin=mpiCC -x=cu --expt-extended-lambda --compiler-options="$(CFLAGS
 LFLAGS += -lcusparse -lrt
 endif
 
-SRC = ldrb-gpup.cpp util.cpp
-ifeq ($(GPU_CALCULUS), YES)
-SRC += calculus_gpu.cpp
-else
-SRC += calculus.cpp
-endif
-
+SRC = ldrb-gpu.cpp util.cpp calculus.cpp
 OBJ=$(SRC:.cpp=.o)
 
-all: ldrb-gpup
+all: ldrb-gpu
 
-
-ldrb-gpup: .check-env
-ldrb-gpup: $(OBJ)
+ldrb-gpu: .check-env
+ldrb-gpu: $(OBJ)
 	$(CC) -o $@ $(OBJ) $(LFLAGS)
 
-tests: tests.o calculus.o util.o
-	$(CC) $(CFLAGS) $(IFLAGS) -o $@ $^ $(LFLAGS)
-
-tests_gpu: tests_gpu.o calculus_gpu.o util.o
+tests: tests.o calculus_gpu.o util.o
 	$(CC) $(CFLAGS) $(IFLAGS) -o $@ $^ $(LFLAGS)
 
 %.o: %.cpp
@@ -116,6 +102,6 @@ ifndef METIS_LIBDIR
 endif
 
 clean:
-	$(RM) ldrb-gpup tests test_gpu calculus.o calculus_gpu.o ldrb-gpu.o ldrb-gpup.o util.o tests.o
+	$(RM) ldrb-gpu tests ldrb-gpu.o calculus.o util.o tests.o
 
 .PHONY: .check-env clean

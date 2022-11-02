@@ -17,7 +17,7 @@ OUT_DIR="${JOB_DIR}/out"
 
 
 function run {
-    mpirun -np ${SLURM_NTASKS} ${LDRB_DIR}/ldrb-gpup \
+    mpirun -np ${SLURM_NTASKS} ${LDRB_DIR}/ldrb-gpu \
         --mesh ${DATA_DIR}/"$1".msh \
         --out "${OUT_DIR}/$1" \
         --verbose 3 \
@@ -38,7 +38,7 @@ function main {
     . envsetup.sh mi100q
 
     set -x
-    make GPU_CALCULUS=YES clean ldrb-gpup
+    make clean ldrb-gpu
     popd
 
     mkdir -p ${JOB_DIR}

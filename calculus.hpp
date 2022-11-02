@@ -21,11 +21,36 @@
 
 const double PI=3.14159265;
 
-void quat2rot(mfem::DenseMatrix& Q, mfem::Vector& q);
-void rot2quat(mfem::Vector& q, mfem::DenseMatrix& Q);
-void orient(mfem::DenseMatrix& Q_out, mfem::DenseMatrix& Q, double a, double b);
-void axis(mfem::DenseMatrix& Q, mfem::Vector& psi, mfem::Vector &phi);
-void bislerp(mfem::DenseMatrix& Qab, mfem::DenseMatrix& Qa, mfem::DenseMatrix& Qb, double t);
+typedef struct vec3 {
+    double data[3];
+    MFEM_HOST_DEVICE double& operator[](int i) {
+        return data[i];
+    }
+} vec3;
+
+typedef struct quat {
+    double data[4];
+    MFEM_HOST_DEVICE double& operator[](int i) {
+        return data[i];
+    }
+} quat;
+
+typedef struct mat3x3 {
+    double data[3][3];
+    MFEM_HOST_DEVICE double* operator[](int i) {
+        return (double *) &data[i];
+    }
+} mat3x3;
+
+MFEM_HOST_DEVICE void veccopy(vec3& a, vec3& b);
+MFEM_HOST_DEVICE void vecmul(vec3& a, double b);
+MFEM_HOST_DEVICE double vecdot(vec3& a, vec3& b);
+
+MFEM_HOST_DEVICE void quat2rot(mat3x3& Q, quat& q);
+MFEM_HOST_DEVICE void rot2quat(quat& q, mat3x3& Q);
+MFEM_HOST_DEVICE void orient(mat3x3& Q_out, mat3x3& Q, double a, double b);
+MFEM_HOST_DEVICE void axis(mat3x3& Q, vec3& psi, vec3& phi);
+MFEM_HOST_DEVICE void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t);
 
 void define_fibers(
     int n,
