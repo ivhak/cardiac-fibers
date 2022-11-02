@@ -26,8 +26,6 @@ PKG_ROOT="/global/D1/homes/iverh/packages"
 LDRB_HAS_HIP=NO
 LDRB_HAS_CUDA=NO
 
-module purge
-
 if [ "$1" = "mi100q" ] || [ -z "$1" ]; then
     # HIP build, default
     echo "Setting up environment for mi100q (HIP)"
