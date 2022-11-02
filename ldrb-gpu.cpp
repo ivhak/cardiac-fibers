@@ -15,6 +15,7 @@
 //
 // Authors: Iver Håkonsen <hakonseniver@yahoo.no
 
+#include <iostream>
 #include <fstream>
 
 #include "mfem.hpp"
@@ -69,6 +70,7 @@ void laplace(
     Array<int> &zero_essential_boundaries,
     int apex,
     int verbose,
+    std::ostream& tout,
     int rank)
 {
     struct timespec t0, t1;
@@ -131,7 +133,7 @@ void laplace(
     }
     timing::tick(&t1);
     if (verbose >= 2&& rank == 0) {
-        logging::timestamp(std::cerr, "Setup boundary cond.", timing::duration(t0, t1), 2);
+        logging::timestamp(tout, "Setup boundary cond.", timing::duration(t0, t1), 2);
     }
     tracing::roctx_range_pop(); // Setup boundary conditions
 
@@ -157,7 +159,7 @@ void laplace(
     b.Assemble();
     timing::tick(&t1);
     if (verbose >= 2 && rank == 0) {
-        logging::timestamp(std::cerr, "Assemble RHS", timing::duration(t0, t1), 2);
+        logging::timestamp(tout, "Assemble RHS", timing::duration(t0, t1), 2);
     }
     tracing::roctx_range_pop(); // Assemble RHS
 
@@ -178,7 +180,7 @@ void laplace(
     a.Assemble();
     timing::tick(&t1);
     if (verbose >= 2 && rank == 0) {
-        logging::timestamp(std::cerr, "Assemble LHS", timing::duration(t0, t1), 2);
+        logging::timestamp(tout, "Assemble LHS", timing::duration(t0, t1), 2);
     }
     tracing::roctx_range_pop(); // Assemble LHS
 
@@ -191,7 +193,7 @@ void laplace(
     a.FormLinearSystem(ess_tdof_list, *x, b, A, X, B);
     timing::tick(&t1);
     if (verbose >= 2 && rank == 0) {
-        logging::timestamp(std::cerr, "Form linear system", timing::duration(t0, t1), 2);
+        logging::timestamp(tout, "Form linear system", timing::duration(t0, t1), 2);
     }
     tracing::roctx_range_pop(); // Form linear system
 
@@ -203,7 +205,7 @@ void laplace(
     solver->Mult(B, X);
     timing::tick(&t1);
     if (verbose >= 2 && rank == 0) {
-        logging::timestamp(std::cerr, "Solve", timing::duration(t0, t1), 2);
+        logging::timestamp(tout, "Solve", timing::duration(t0, t1), 2);
     }
     tracing::roctx_range_pop(); // Solve
 
@@ -225,6 +227,7 @@ int main(int argc, char *argv[])
     // Set program defaults
     opts.mesh_file = NULL;
     opts.output_dir = "./out";
+    opts.time_file = NULL;
 
 #if defined(MFEM_USE_HIP)
     opts.device_config = "hip";
@@ -303,6 +306,10 @@ int main(int argc, char *argv[])
     args.AddOption(&opts.solver,
             "-s", "--solver",
             "Solver to use. Options are: 0 - HyprePcg, 1 - CGSolver");
+    args.AddOption(&opts.time_file,
+            "-t", "--timing",
+            "Output time logging to the file <filename> in the output directory, "
+            "i.e., <out_dir>/<filename>. Outputs to stdout by default.");
 
 #if defined (MFEM_USE_HIP) || defined (MFEM_USE_CUDA)
     args.AddOption(&opts.gpu_tuned_amg,
@@ -324,6 +331,14 @@ int main(int argc, char *argv[])
     if (opts.rv_id == -1)
         opts.geom_has_rv = false;
 
+    // Make sure the output directory exists
+    fs::mksubdir(opts.output_dir);
+
+    // If a filename has been passed with the -t flag, we output everything
+    // that uses logging::timestamp and logging::marker to the filename instead
+    // of stdout.
+    std::ofstream f;
+    std::ostream& tout = opts.time_file ? (f.open(opts.time_file), f) : std::cout;
 
     struct timespec t0, t1;     // For all intermediate timings
     struct timespec start, end; // Start to finish timing
@@ -347,7 +362,7 @@ int main(int argc, char *argv[])
 
     }
     if (opts.verbose && rank == 0)
-        logging::timestamp(std::cerr, "Mesh load", timing::duration(t0, t1));
+        logging::timestamp(tout, "Mesh load", timing::duration(t0, t1));
 
     // Define a parallel mesh by a partitioning of the serial mesh.
     timing::tick(&t0);
@@ -355,7 +370,7 @@ int main(int argc, char *argv[])
     mesh.Clear();
     timing::tick(&t1);
     if (opts.verbose && rank == 0)
-        logging::timestamp(std::cerr, "Partition mesh", timing::duration(t0, t1));
+        logging::timestamp(tout, "Partition mesh", timing::duration(t0, t1));
 
 
     // Each rank finds the vertex in its submesh that is closest to the
@@ -390,7 +405,7 @@ int main(int argc, char *argv[])
 
         timing::tick(&t1);
         if (opts.verbose && rank == 0)
-            logging::timestamp(std::cerr, "Find apex", timing::duration(t0, t1));
+            logging::timestamp(tout, "Find apex", timing::duration(t0, t1));
     }
 
 
@@ -438,7 +453,7 @@ int main(int argc, char *argv[])
 
     timing::tick(&t1);
     if (opts.verbose && rank == 0) {
-        logging::timestamp(std::cerr, "Setup precond. and solver", timing::duration(t0,t1));
+        logging::timestamp(tout, "Setup precond. and solver", timing::duration(t0,t1));
     }
 
     // Time the fiber orientation calculations
@@ -446,7 +461,7 @@ int main(int argc, char *argv[])
     timing::tick(&start_fiber);
 
     if (opts.verbose && rank == 0)
-        logging::marker(std::cerr, "Compute fiber orientation");
+        logging::marker(tout, "Compute fiber orientation");
 
     // Set up the finite element collection. We use  first order H1-conforming finite elements.
     H1_FECollection fec(1, pmesh.Dimension());
@@ -465,7 +480,7 @@ int main(int argc, char *argv[])
     x_phi_epi.UseDevice(true);
     {
         if (opts.verbose > 1 && rank == 0) {
-            logging::marker(std::cerr, "Compute phi_epi", 1);
+            logging::marker(tout, "Compute phi_epi", 1);
         }
         timing::tick(&t0);
 
@@ -487,17 +502,16 @@ int main(int argc, char *argv[])
 
         laplace(&x_phi_epi, solver,
                 ess_bdr, nonzero_ess_bdr, zero_ess_bdr,
-                -1, opts.verbose, rank);
+                -1, opts.verbose, tout, rank);
 
         tracing::roctx_range_pop();
 
         timing::tick(&t1);
         if (opts.verbose && rank == 0) {
             if (opts.verbose > 1) {
-                logging::timestamp(std::cerr, "Total", timing::duration(t0, t1), 2, '=');
-                std::cout << std::endl;
+                logging::timestamp(tout, "Total", timing::duration(t0, t1), 2, '=');
             } else {
-                logging::timestamp(std::cerr, "Compute phi_epi", timing::duration(t0, t1), 1);
+                logging::timestamp(tout, "Compute phi_epi", timing::duration(t0, t1), 1);
             }
         }
     }
@@ -508,7 +522,7 @@ int main(int argc, char *argv[])
     x_phi_lv.UseDevice(true);
     {
         if (opts.verbose > 1 && rank == 0) {
-            logging::marker(std::cerr, "Compute phi_lv", 1);
+            logging::marker(tout, "Compute phi_lv", 1);
         }
         timing::tick(&t0);
 
@@ -530,17 +544,16 @@ int main(int argc, char *argv[])
 
         laplace(&x_phi_lv, solver,
                 ess_bdr, nonzero_ess_bdr, zero_ess_bdr,
-                -1, opts.verbose, rank);
+                -1, opts.verbose, tout, rank);
 
         tracing::roctx_range_pop();
 
         timing::tick(&t1);
         if (opts.verbose && rank == 0) {
             if (opts.verbose > 1) {
-                logging::timestamp(std::cerr, "Total", timing::duration(t0, t1), 2, '=');
-                std::cout << std::endl;
+                logging::timestamp(tout, "Total", timing::duration(t0, t1), 2, '=');
             } else {
-                logging::timestamp(std::cerr, "Compute phi_lv", timing::duration(t0, t1), 1);
+                logging::timestamp(tout, "Compute phi_lv", timing::duration(t0, t1), 1);
             }
         }
     }
@@ -551,7 +564,7 @@ int main(int argc, char *argv[])
     x_phi_rv.UseDevice(true);
     if (opts.geom_has_rv) {
         if (opts.verbose > 1 && rank == 0) {
-            logging::marker(std::cerr, "Compute phi rv", 1);
+            logging::marker(tout, "Compute phi rv", 1);
         }
         timing::tick(&t0);
 
@@ -571,16 +584,15 @@ int main(int argc, char *argv[])
 
         laplace(&x_phi_rv, solver,
                 ess_bdr, nonzero_ess_bdr, zero_ess_bdr,
-                -1, opts.verbose, rank);
+                -1, opts.verbose, tout, rank);
 
         tracing::roctx_range_pop();
         timing::tick(&t1);
         if (opts.verbose && rank == 0) {
             if (opts.verbose > 1) {
-                logging::timestamp(std::cerr, "Total", timing::duration(t0, t1), 2, '=');
-                std::cout << std::endl;
+                logging::timestamp(tout, "Total", timing::duration(t0, t1), 2, '=');
             } else {
-                logging::timestamp(std::cerr, "Compute phi_rv", timing::duration(t0, t1), 1);
+                logging::timestamp(tout, "Compute phi_rv", timing::duration(t0, t1), 1);
             }
         }
     } else {
@@ -593,7 +605,7 @@ int main(int argc, char *argv[])
     x_psi_ab.UseDevice(true);
     {
         if (opts.verbose > 1 && rank == 0) {
-            logging::marker(std::cerr, "Compute psi_ab", 1);
+            logging::marker(tout, "Compute psi_ab", 1);
         }
         timing::tick(&t0);
 
@@ -609,17 +621,16 @@ int main(int argc, char *argv[])
 
         laplace(&x_psi_ab, solver,
                 ess_bdr, nonzero_ess_bdr, zero_ess_bdr,
-                apex, opts.verbose, rank);
+                apex, opts.verbose, tout, rank);
 
         tracing::roctx_range_pop();
 
         timing::tick(&t1);
         if (opts.verbose && rank == 0 ) {
             if (opts.verbose > 1) {
-                logging::timestamp(std::cerr, "Total", timing::duration(t0, t1), 2, '=');
-                std::cout << std::endl;
+                logging::timestamp(tout, "Total", timing::duration(t0, t1), 2, '=');
             } else {
-                logging::timestamp(std::cerr, "Compute psi_epi", timing::duration(t0, t1), 1);
+                logging::timestamp(tout, "Compute psi_epi", timing::duration(t0, t1), 1);
             }
         }
     }
@@ -638,7 +649,7 @@ int main(int argc, char *argv[])
         tracing::roctx_range_pop();
         timing::tick(&t1);
         if (opts.verbose && rank == 0) {
-            logging::timestamp(std::cerr, "Compute grad_phi_epi", timing::duration(t0, t1), 1);
+            logging::timestamp(tout, "Compute grad_phi_epi", timing::duration(t0, t1), 1);
         }
     }
 
@@ -654,7 +665,7 @@ int main(int argc, char *argv[])
         tracing::roctx_range_pop();
         timing::tick(&t1);
         if (opts.verbose && rank == 0) {
-            logging::timestamp(std::cerr, "Compute grad_phi_lv", timing::duration(t0, t1), 1);
+            logging::timestamp(tout, "Compute grad_phi_lv", timing::duration(t0, t1), 1);
         }
     }
 
@@ -670,7 +681,7 @@ int main(int argc, char *argv[])
         tracing::roctx_range_pop();
         timing::tick(&t1);
         if (opts.verbose && rank == 0) {
-            logging::timestamp(std::cerr, "Compute grad_phi_rv", timing::duration(t0, t1), 1);
+            logging::timestamp(tout, "Compute grad_phi_rv", timing::duration(t0, t1), 1);
         }
     } else {
         grad_phi_rv = 0.0;
@@ -688,7 +699,7 @@ int main(int argc, char *argv[])
         tracing::roctx_range_pop();
         timing::tick(&t1);
         if (opts.verbose && rank == 0) {
-            logging::timestamp(std::cerr, "Compute grad_psi_ab", timing::duration(t0, t1), 1);
+            logging::timestamp(tout, "Compute grad_psi_ab", timing::duration(t0, t1), 1);
         }
     }
 
@@ -728,12 +739,11 @@ int main(int argc, char *argv[])
     util::tracing::roctx_range_pop();
     timing::tick(&t1);
     if (opts.verbose && rank == 0)
-        logging::timestamp(std::cerr, "Define fiber orientation", timing::duration(t0, t1), 1);
+        logging::timestamp(tout, "Define fiber orientation", timing::duration(t0, t1), 1);
 
     timing::tick(&end_fiber);
     if (opts.verbose && rank == 0) {
-        logging::timestamp(std::cerr, "Total (fiber)", timing::duration(start_fiber, end_fiber), 1, '=');
-        std::cout << std::endl;
+        logging::timestamp(tout, "Total (fiber)", timing::duration(start_fiber, end_fiber), 1, '=');
     }
 
     // Make sure the fiber directions are read back to the host before saving
@@ -749,9 +759,6 @@ int main(int argc, char *argv[])
         opts.mesh_basename = fs::remove_extension(
                 fs::basename(std::string(opts.mesh_file)));
 
-        // Make sure the output directory exists
-        // TODO (ivhak): This does not properly create nested subdirectories.
-        fs::mksubdir(opts.output_dir);
 
         // Output the normal solutions in the mfem subdirectory
         std::string mfem_output_dir(opts.output_dir);
@@ -809,11 +816,11 @@ int main(int argc, char *argv[])
     }
     timing::tick(&t1);
     if (opts.verbose && rank == 0)
-        logging::timestamp(std::cerr, "Save", timing::duration(t0, t1));
+        logging::timestamp(tout, "Save", timing::duration(t0, t1));
 
     timing::tick(&end);
     if (opts.verbose && rank == 0) {
-        logging::timestamp(std::cerr, "Total time", timing::duration(start, end), 0, '=');
+        logging::timestamp(tout, "Total time", timing::duration(start, end), 0, '=');
     }
 }
 

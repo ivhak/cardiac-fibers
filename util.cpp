@@ -117,12 +117,21 @@ std::string util::fs::remove_extension(std::string const& filename)
     return filename.substr(0, index_of_extension);
 }
 
-void util::fs::mksubdir(std::string const& subdir)
+void util::fs::mksubdir(std::string const& subpath)
 {
     const char *cwd = getcwd(NULL, 0);
-    std::string path(cwd);
-    path += "/";
-    path += subdir;
+    std::string cwdpath(cwd);
+    std::string path;
+
+    size_t pos = 0;
+    std::string subdir;
+    while ((pos = subpath.find("/", pos)) != std::string::npos) {
+        subdir = subpath.substr(0, pos);
+        path = cwdpath + "/" + subdir;
+        mkdir(path.c_str(), 0777);
+        pos += subdir.length();
+    }
+    path = cwdpath + "/" + subpath;
     mkdir(path.c_str(), 0777);
 }
 
