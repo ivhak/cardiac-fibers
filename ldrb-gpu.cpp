@@ -241,10 +241,10 @@ int main(int argc, char *argv[])
     opts.prescribed_apex = Vector(3);
     opts.paraview = false;
 
-    opts.alpha_endo =  40.0;
-    opts.alpha_epi  = -50.0;
-    opts.beta_endo  = -65.0;
-    opts.beta_epi   =  25.0;
+    opts.alpha_endo =  60.0;
+    opts.alpha_epi  = -60.0;
+    opts.beta_endo  = -60.0;
+    opts.beta_epi   =  60.0;
 
     opts.base_id = 1;
     opts.epi_id  = 2;
