@@ -18,7 +18,7 @@
 #include "mfem.hpp"
 #include "mfem/general/forall.hpp"
 
-#include "calculus_gpu.hpp"
+#include "calculus.hpp"
 #include "util.hpp"
 
 #define CLAMP(x, low, high)  (((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
