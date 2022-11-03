@@ -50,7 +50,7 @@ MFEM_HOST_DEVICE void quat2rot(mat3x3& Q, quat& q);
 MFEM_HOST_DEVICE void rot2quat(quat& q, mat3x3& Q);
 MFEM_HOST_DEVICE void orient(mat3x3& Q_out, mat3x3& Q, double a, double b);
 MFEM_HOST_DEVICE void axis(mat3x3& Q, vec3& psi, vec3& phi);
-MFEM_HOST_DEVICE void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t);
+MFEM_HOST_DEVICE void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t, double tol);
 
 void define_fibers(
     int n,
@@ -67,5 +67,6 @@ void define_fibers(
     double beta_epi,
     double *F,
     double *S,
-    double *T);
+    double *T,
+    double tol);
 #endif

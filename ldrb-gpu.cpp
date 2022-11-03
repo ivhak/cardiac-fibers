@@ -132,7 +132,7 @@ void laplace(
 
     }
     timing::tick(&t1);
-    if (verbose >= 2&& rank == 0) {
+    if (verbose >= 2 && rank == 0) {
         logging::timestamp(tout, "Setup boundary cond.", timing::duration(t0, t1), 2);
     }
     tracing::roctx_range_pop(); // Setup boundary conditions
@@ -147,14 +147,13 @@ void laplace(
     ConstantCoefficient zero(0.0);
     b.AddDomainIntegrator(new DomainLFIntegrator(zero));
 
-    // As of mfem-4.5 it is possible to perform the assembly on device!
-#if MFEM_VERSION_MAJOR > 4 || (MFEM_VERSION_MAJOR == 4 && MFEM_VERSION_MINOR >= 5)
     if (b.SupportsDevice()) {
-        if (verbose > 2 && rank == 0)
+        // This does not work on a simplex mesh, probably for the same reason that
+        // AssemblyLevel::FULL does not work.
+        if (verbose >= 3 && rank == 0)
             logging::info(std::cout, "MFEM_VERSION >= 4.5, using FastAssembly on RHS b.");
         b.UseFastAssembly(true);
     }
-#endif
 
     b.Assemble();
     timing::tick(&t1);
@@ -173,10 +172,14 @@ void laplace(
     // Assemble the parallel bilinear form and the corresponding linear system.
     ConstantCoefficient one(1.0);
     a.AddDomainIntegrator(new DiffusionIntegrator(one));
+
 #if 0
-    // TODO (ivhak): This causes the program to crash. Not sure why, it should work.
+    // AssemblyLevel::FULL makes Assemble() call some partial assembly
+    // functions, and since partial assembly is not supported for simplex
+    // elements, e.g. tetrahedrons, full assembly does not work.
     a.SetAssemblyLevel(AssemblyLevel::FULL);
 #endif
+
     a.Assemble();
     timing::tick(&t1);
     if (verbose >= 2 && rank == 0) {
@@ -227,7 +230,7 @@ int main(int argc, char *argv[])
     // Set program defaults
     opts.mesh_file = NULL;
     opts.output_dir = "./out";
-    opts.time_file = NULL;
+    opts.time_to_file = false;
 
 #if defined(MFEM_USE_HIP)
     opts.device_config = "hip";
@@ -240,6 +243,8 @@ int main(int argc, char *argv[])
     opts.verbose = 0;
     opts.prescribed_apex = Vector(3);
     opts.paraview = false;
+
+    opts.itol = 1e-1;
 
     opts.alpha_endo =  60.0;
     opts.alpha_epi  = -60.0;
@@ -263,7 +268,11 @@ int main(int argc, char *argv[])
     OptionsParser args(argc, argv);
     args.AddOption(&opts.verbose,
             "-v", "--verbose",
-            "Be verbose");
+            "Set verbosity level:\n"
+            "\t1: Simple timing\n"
+            "\t2: More granular timing\n"
+            "\t3: Info markers\n"
+            "\t4: Preconditioner and solver output\n");
     args.AddOption(&opts.mesh_file,
             "-m", "--mesh",
             "Mesh file to use", true);
@@ -273,6 +282,10 @@ int main(int argc, char *argv[])
     args.AddOption(&opts.output_dir,
             "-o", "--out",
             "Directory for output files.");
+    args.AddOption(&opts.time_to_file,
+            "-t", "--time-to-file",
+            "-nt","--no-time-to-file",
+            "Output time log to <out_dir>/time.txt rather than stdout.");
     args.AddOption(&opts.device_config,
             "-d", "--device",
             "Device configuration string, see Device::Configure().");
@@ -280,6 +293,9 @@ int main(int argc, char *argv[])
             "-p",  "--paraview",
             "-np", "--no-paraview",
             "Save data files for ParaView (paraview.org) visualization.");
+    args.AddOption(&opts.itol,
+            "-it", "--interpolation-tolerance",
+            "Tolerance for LDRB interpolations.");
     args.AddOption(&opts.alpha_endo,
             "-ao", "--alpha-endo",
             "Alpha angle in endocardium.");
@@ -309,10 +325,6 @@ int main(int argc, char *argv[])
     args.AddOption(&opts.solver,
             "-s", "--solver",
             "Solver to use. Options are: 0 - HyprePcg, 1 - CGSolver");
-    args.AddOption(&opts.time_file,
-            "-t", "--timing",
-            "Output time logging to the file <filename> in the output directory, "
-            "i.e., <out_dir>/<filename>. Outputs to stdout by default.");
 
 #if defined (MFEM_USE_HIP) || defined (MFEM_USE_CUDA)
     args.AddOption(&opts.gpu_tuned_amg,
@@ -324,16 +336,19 @@ int main(int argc, char *argv[])
     args.Parse();
 
     if (!args.Good()) {
-        if (rank == 0)
+        if (rank == 0) {
             args.PrintUsage(std::cout);
+        }
         exit(1);
     }
 
-    if (rank == 0 && opts.verbose > 2)
+    if (opts.verbose >= 3 && rank == 0) {
         args.PrintOptions(std::cout);
+    }
 
-    if (opts.rv_id == -1)
+    if (opts.rv_id == -1) {
         opts.geom_has_rv = false;
+    }
 
     // Make sure the output directory exists
     fs::mksubdir(opts.output_dir);
@@ -342,7 +357,13 @@ int main(int argc, char *argv[])
     // that uses logging::timestamp and logging::marker to the filename instead
     // of stdout.
     std::ofstream f;
-    std::ostream& tout = opts.time_file ? (f.open(opts.time_file), f) : std::cout;
+    std::string tout_file(opts.output_dir);
+    tout_file += "/time.txt";
+    std::ostream& tout = opts.time_to_file ? (f.open(tout_file.c_str()), f) : std::cout;
+    if (opts.verbose >= 3 && rank == 0) {
+        std::string msg = "Outputing timing log to " + tout_file;
+        logging::info(std::cout, msg);
+    }
 
     struct timespec t0, t1;     // For all intermediate timings
     struct timespec start, end; // Start to finish timing
@@ -351,21 +372,23 @@ int main(int argc, char *argv[])
     // Enable hardware devices such as GPUs, and programming models such as
     // HIP, CUDA, OCCA, RAJA and OpenMP based on command line options.
     Device device(opts.device_config);
-    if (opts.verbose > 2 && rank == 0)
+    if (opts.verbose >= 3 && rank == 0) {
         device.Print();
+    }
 
     // Load the mesh
     timing::tick(&t0);
     Mesh mesh(opts.mesh_file, 1, 1);
     timing::tick(&t1);
 
-    if (opts.verbose > 2 && rank == 0) {
-        std::cout << "Loaded meshfile '" << opts.mesh_file << "' "
-             << "consisting of " << mesh.GetNV() << " vertices "
-             << "and " << mesh.GetNE() << " elements" << std::endl;
+    if (opts.verbose >= 3 && rank == 0) {
+        std::string msg = "Loaded meshfile '" + std::string(opts.mesh_file) + "' "
+             + "consisting of " + std::to_string(mesh.GetNV()) + " vertices "
+             + "and " + std::to_string(mesh.GetNE()) + " elements";
+        logging::info(std::cout, msg);
 
     }
-    if (opts.verbose && rank == 0)
+    if (opts.verbose >= 3 && rank == 0)
         logging::timestamp(tout, "Mesh load", timing::duration(t0, t1));
 
     // Define a parallel mesh by a partitioning of the serial mesh.
@@ -421,7 +444,7 @@ int main(int argc, char *argv[])
     HypreBoomerAMG *prec = NULL;
     {
         prec = new HypreBoomerAMG;
-        prec->SetPrintLevel(opts.verbose > 2 ? 1 : 0);
+        prec->SetPrintLevel(opts.verbose >= 4 ? 1 : 0);
 
 #if defined(MFEM_USE_HIP) || defined(MFEM_USE_CUDA)
         // FIXME (ivhak): Gives wrong solution!
@@ -441,14 +464,14 @@ int main(int argc, char *argv[])
         HyprePCG *cg = new HyprePCG(MPI_COMM_WORLD);
         cg->SetTol(1e-12);
         cg->SetMaxIter(2000);
-        cg->SetPrintLevel(opts.verbose > 2 ? 1 : 0);
+        cg->SetPrintLevel(opts.verbose >= 4 ? 1 : 0);
         if (prec) cg->SetPreconditioner(*prec);
         solver = cg;
     } else if (opts.solver == 1) {
         CGSolver *cg = new CGSolver(MPI_COMM_WORLD);
         cg->SetAbsTol(1e-12);
         cg->SetMaxIter(2000);
-        cg->SetPrintLevel(opts.verbose > 2 ? 1 : 0);
+        cg->SetPrintLevel(opts.verbose >= 4 ? 1 : 0);
         if (prec) cg->SetPreconditioner(*prec);
         solver = cg;
     } else {
@@ -739,7 +762,7 @@ int main(int argc, char *argv[])
             phi_epi, phi_lv, phi_rv,
             grad_phi_epi_vals, grad_phi_lv_vals, grad_phi_rv_vals, grad_psi_ab_vals,
             opts.alpha_endo, opts.alpha_epi, opts.beta_endo, opts.beta_epi,
-            F_vals, S_vals, T_vals
+            F_vals, S_vals, T_vals, opts.itol
     );
 
     util::tracing::roctx_range_pop();

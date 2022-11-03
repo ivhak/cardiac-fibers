@@ -25,9 +25,10 @@ typedef struct {
     std::string mesh_basename;
     const char *output_dir;
     const char *device_config;
-    const char *time_file;
+    bool time_to_file;
     bool paraview;
     mfem::Vector prescribed_apex;
+    double itol;
     double alpha_endo;
     double alpha_epi;
     double beta_endo;

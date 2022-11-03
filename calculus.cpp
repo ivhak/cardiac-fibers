@@ -439,10 +439,8 @@ void orient(mat3x3& Q_out, mat3x3& Q, double a, double b)
 //
 // As defined in Function 4 in the supplementary material of Bayer2012.
 MFEM_HOST_DEVICE
-void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t)
+void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t, double tol)
 {
-    const double tol = 1e-12;
-
     if (t <= tol) {
         matcopy(Qab, Qa);
         return;
@@ -495,7 +493,7 @@ void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t)
     }
 
     // If the angle is very small, i.e. max_dot is very close to one, return Qb.
-    if (max_abs_dot > 1-tol) {
+    if (max_abs_dot > 1-1e-12) {
         matcopy(Qab, Qb);
         return;
     }
@@ -523,10 +521,9 @@ static void calculate_fiber(
     double beta_epi,
     double *F,
     double *S,
-    double *T)
+    double *T,
+    double tol)
 {
-
-    const double tol = 1e-12;
 
     // TODO (ivhak): What to do here? TOLERANCE
     double depth;
@@ -566,7 +563,7 @@ static void calculate_fiber(
 
     mat3x3 Q_endo;
     matzero(Q_endo);
-    bislerp(Q_endo, Q_lv, Q_rv, depth);
+    bislerp(Q_endo, Q_lv, Q_rv, depth, tol);
 
     mat3x3 Q_epi;
     matzero(Q_epi);
@@ -577,7 +574,7 @@ static void calculate_fiber(
     }
 
     mat3x3 FST;
-    bislerp(FST, Q_endo, Q_epi, phi_epi);
+    bislerp(FST, Q_endo, Q_epi, phi_epi, tol);
 
     F[3*i+0] = FST[0][0];
     F[3*i+1] = FST[1][0];
@@ -611,7 +608,8 @@ void define_fibers(
     double beta_epi,
     double *F,
     double *S,
-    double *T)
+    double *T,
+    double tol)
 {
     MFEM_FORALL(i, n,
     {
@@ -642,7 +640,7 @@ void define_fibers(
         calculate_fiber(i, phi_epi_i, phi_lv_i, phi_rv_i,
                         grad_phi_epi_i, grad_phi_lv_i, grad_phi_rv_i, grad_psi_ab_i,
                         alpha_endo, alpha_epi, beta_endo, beta_epi,
-                        F, S, T);
+                        F, S, T, tol);
     });
 }
 
