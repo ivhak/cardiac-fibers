@@ -254,7 +254,10 @@ int main(int argc, char *argv[])
     opts.geom_has_rv = true;
 
     opts.solver = 0;
+
+#if defined(MFEM_USE_HIP) || defined(MFEM_USE_CUDA)
     opts.gpu_tuned_amg = false;
+#endif
 
     // Parse command-line options
     OptionsParser args(argc, argv);
@@ -317,6 +320,7 @@ int main(int argc, char *argv[])
             "-ngamg", "--no-gpu-tuned-amg",
             "Tune the BoomerAmg preconditioner for (hopefully) better GPU performance.");
 #endif
+
     args.Parse();
 
     if (!args.Good()) {
@@ -419,6 +423,7 @@ int main(int argc, char *argv[])
         prec = new HypreBoomerAMG;
         prec->SetPrintLevel(opts.verbose > 2 ? 1 : 0);
 
+#if defined(MFEM_USE_HIP) || defined(MFEM_USE_CUDA)
         // FIXME (ivhak): Gives wrong solution!
         if (opts.gpu_tuned_amg) {
             prec->SetCoarsening(8);           // PMIS
@@ -428,6 +433,7 @@ int main(int argc, char *argv[])
             // prec->SetStrengthThresh(0.5);
             prec->SetRelaxType(7);            // weighted Jacobi
         }
+#endif
     }
 
     Solver *solver;

@@ -38,7 +38,9 @@ typedef struct {
     int rv_id;
     bool geom_has_rv;
     int solver;
+#if defined(MFEM_USE_HIP) || defined(MFEM_USE_CUDA)
     bool gpu_tuned_amg;
+#endif
 } Options;
 
 #define LDRB_GPU_HPP
