@@ -242,7 +242,9 @@ int main(int argc, char *argv[])
 
     opts.verbose = 0;
     opts.prescribed_apex = Vector(3);
-    opts.paraview = false;
+
+    opts.save_mfem = true;
+    opts.save_paraview = false;
 
     opts.itol = 1e-1;
 
@@ -289,10 +291,14 @@ int main(int argc, char *argv[])
     args.AddOption(&opts.device_config,
             "-d", "--device",
             "Device configuration string, see Device::Configure().");
-    args.AddOption(&opts.paraview,
-            "-p",  "--paraview",
-            "-np", "--no-paraview",
+    args.AddOption(&opts.save_paraview,
+            "-p",  "--save-paraview",
+            "-np", "--no-save-paraview",
             "Save data files for ParaView (paraview.org) visualization.");
+    args.AddOption(&opts.save_mfem,
+            "-s",  "--save-mfem",
+            "-ns", "--no-save-mfem",
+            "Save data files in the native MFEM format.");
     args.AddOption(&opts.itol,
             "-it", "--interpolation-tolerance",
             "Tolerance for LDRB interpolations.");
@@ -350,8 +356,10 @@ int main(int argc, char *argv[])
         opts.geom_has_rv = false;
     }
 
-    // Make sure the output directory exists
-    fs::mksubdir(opts.output_dir);
+    // Make sure the output directory exists if we are saving anything
+    if (opts.save_mfem || opts.save_paraview || opts.time_to_file) {
+        fs::mksubdir(opts.output_dir);
+    }
 
     // If a filename has been passed with the -t flag, we output everything
     // that uses logging::timestamp and logging::marker to the filename instead
@@ -781,42 +789,43 @@ int main(int argc, char *argv[])
     S.HostRead();
     T.HostRead();
 
-    timing::tick(&t0);
-    // Save the mesh and solutions
-    {
+    if (opts.save_paraview || opts.save_mfem) {
+        timing::tick(&t0);
+        // Save the mesh and solutions
         // Set the basename of the mesh
         opts.mesh_basename = fs::remove_extension(
                 fs::basename(std::string(opts.mesh_file)));
 
+        if (opts.save_mfem) {
+            // Output the normal solutions in the mfem subdirectory
+            std::string mfem_output_dir(opts.output_dir);
+            mfem_output_dir += "/mfem";
+            fs::mksubdir(mfem_output_dir);
 
-        // Output the normal solutions in the mfem subdirectory
-        std::string mfem_output_dir(opts.output_dir);
-        mfem_output_dir += "/mfem";
-        fs::mksubdir(mfem_output_dir);
-
-        // Save the MFEM mesh
-        save::save_mesh(&pmesh, mfem_output_dir, opts.mesh_basename, rank);
+            // Save the MFEM mesh
+            save::save_mesh(&pmesh, mfem_output_dir, opts.mesh_basename, rank);
 
 #ifdef DEBUG
-        std::string debug_dir = mfem_output_dir + "/debug";
-        save::save_solution(&x_phi_epi, debug_dir, opts.mesh_basename, "_phi_epi.gf", rank);
-        save::save_solution(&x_phi_lv,  debug_dir, opts.mesh_basename, "_phi_lv.gf", rank);
-        save::save_solution(&x_phi_rv,  debug_dir, opts.mesh_basename, "_phi_rv.gf", rank);
-        save::save_solution(&x_psi_ab,  debug_dir, opts.mesh_basename, "_psi_ab.gf", rank);
+            std::string debug_dir = mfem_output_dir + "/debug";
+            save::save_solution(&x_phi_epi, debug_dir, opts.mesh_basename, "_phi_epi.gf", rank);
+            save::save_solution(&x_phi_lv,  debug_dir, opts.mesh_basename, "_phi_lv.gf", rank);
+            save::save_solution(&x_phi_rv,  debug_dir, opts.mesh_basename, "_phi_rv.gf", rank);
+            save::save_solution(&x_psi_ab,  debug_dir, opts.mesh_basename, "_psi_ab.gf", rank);
 
-        save::save_solution(&grad_phi_epi, debug_dir, opts.mesh_basename, "_grad_phi_epi.gf", rank);
-        save::save_solution(&grad_phi_lv,  debug_dir, opts.mesh_basename, "_grad_phi_lv.gf", rank);
-        save::save_solution(&grad_phi_rv,  debug_dir, opts.mesh_basename, "_grad_phi_rv.gf", rank);
-        save::save_solution(&grad_psi_ab,  debug_dir, opts.mesh_basename, "_grad_psi_ab.gf", rank);
+            save::save_solution(&grad_phi_epi, debug_dir, opts.mesh_basename, "_grad_phi_epi.gf", rank);
+            save::save_solution(&grad_phi_lv,  debug_dir, opts.mesh_basename, "_grad_phi_lv.gf", rank);
+            save::save_solution(&grad_phi_rv,  debug_dir, opts.mesh_basename, "_grad_phi_rv.gf", rank);
+            save::save_solution(&grad_psi_ab,  debug_dir, opts.mesh_basename, "_grad_psi_ab.gf", rank);
 #endif
-        // Save the solutions
-        save::save_solution(&F,  mfem_output_dir, opts.mesh_basename, "_F.gf", rank);
-        save::save_solution(&S,  mfem_output_dir, opts.mesh_basename, "_S.gf", rank);
-        save::save_solution(&T,  mfem_output_dir, opts.mesh_basename, "_T.gf", rank);
+            // Save the solutions
+            save::save_solution(&F,  mfem_output_dir, opts.mesh_basename, "_F.gf", rank);
+            save::save_solution(&S,  mfem_output_dir, opts.mesh_basename, "_S.gf", rank);
+            save::save_solution(&T,  mfem_output_dir, opts.mesh_basename, "_T.gf", rank);
+        }
 
         // Save in paraview as well
         ParaViewDataCollection *pd = NULL;
-        if (opts.paraview) {
+        if (opts.save_paraview) {
             std::string paraview_path(opts.output_dir);
             paraview_path += "/paraview";
             fs::mksubdir(paraview_path);
@@ -841,11 +850,10 @@ int main(int argc, char *argv[])
             pd->SetHighOrderOutput(false);
             pd->Save();
         }
-
+        timing::tick(&t1);
+        if (opts.verbose && rank == 0)
+            logging::timestamp(tout, "Save", timing::duration(t0, t1));
     }
-    timing::tick(&t1);
-    if (opts.verbose && rank == 0)
-        logging::timestamp(tout, "Save", timing::duration(t0, t1));
 
     timing::tick(&end);
     if (opts.verbose && rank == 0) {

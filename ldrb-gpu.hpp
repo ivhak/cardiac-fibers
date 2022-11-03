@@ -26,7 +26,8 @@ typedef struct {
     const char *output_dir;
     const char *device_config;
     bool time_to_file;
-    bool paraview;
+    bool save_paraview;
+    bool save_mfem;
     mfem::Vector prescribed_apex;
     double itol;
     double alpha_endo;

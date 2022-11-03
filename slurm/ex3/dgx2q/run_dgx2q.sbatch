@@ -24,7 +24,8 @@ function run {
         --time-to-file \
         --verbose 3 \
         --apex '345 1232 170' \
-        --paraview
+        --no-save-paraview \
+        --no-save-mfem
 }
 
 function main {
