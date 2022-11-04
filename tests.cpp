@@ -1,5 +1,5 @@
 #include "mfem.hpp"
-#include "calculus_gpu.hpp"
+#include "calculus.hpp"
 
 static bool vec3equal(vec3& u, vec3& v) {
     return u[0] == v[0]

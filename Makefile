@@ -73,8 +73,8 @@ all: ldrb-gpu
 ldrb-gpu: check-env $(OBJ)
 	$(CC) -o $@ $(OBJ) $(LFLAGS)
 
-tests: tests.o calculus_gpu.o util.o
-	$(CC) $(CFLAGS) $(IFLAGS) -o $@ $^ $(LFLAGS)
+tests: tests.o calculus.o util.o
+	$(CC) -o $@ $^ $(LFLAGS)
 
 %.o: %.cpp
 	$(CC) -c $(CFLAGS) $(IFLAGS) -o $@ $^
