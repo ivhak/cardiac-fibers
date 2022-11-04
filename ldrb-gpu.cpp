@@ -271,66 +271,89 @@ int main(int argc, char *argv[])
     args.AddOption(&opts.verbose,
             "-v", "--verbose",
             "Set verbosity level:\n"
-            "\t1: Simple timing\n"
-            "\t2: More granular timing\n"
-            "\t3: Info markers\n"
-            "\t4: Preconditioner and solver output\n");
+            "\t    1: Print timestamps for each major computation step.\n"
+            "\t    2: Print more granular timestamps.\n"
+            "\t    3: Print additional info.\n"
+            "\t    4: Print BoomerAmg and solver output.\n"
+            "\tIf the -t (--time-to-file) flag is passed, the output from level 1 and 2\n"
+            "\twill be output to <OUT>/time.txt, where <OUT> is set with the -o (--out) flag.");
+
     args.AddOption(&opts.mesh_file,
             "-m", "--mesh",
-            "Mesh file to use", true);
+            "Mesh file to use.\n"
+            "\tSee https://mfem.org/mesh-formats/ for a list of suppored formats.", true);
+
     args.AddOption(&opts.prescribed_apex,
             "-a", "--apex",
             "Coordinate of apex, space separated list: 'x y z'.", true);
+
     args.AddOption(&opts.output_dir,
             "-o", "--out",
             "Directory for output files.");
+
     args.AddOption(&opts.time_to_file,
             "-t", "--time-to-file",
             "-nt","--no-time-to-file",
-            "Output time log to <out_dir>/time.txt rather than stdout.");
+            "Output time log to <OUT>/time.txt rather than stdout,\n"
+            "\twhere <OUT> is set with the -o (--out) flag.");
+
     args.AddOption(&opts.device_config,
             "-d", "--device",
             "Device configuration string, see Device::Configure().");
+
     args.AddOption(&opts.save_paraview,
             "-p",  "--save-paraview",
             "-np", "--no-save-paraview",
             "Save data files for ParaView (paraview.org) visualization.");
+
     args.AddOption(&opts.save_mfem,
             "-s",  "--save-mfem",
             "-ns", "--no-save-mfem",
             "Save data files in the native MFEM format.");
+
     args.AddOption(&opts.itol,
             "-it", "--interpolation-tolerance",
             "Tolerance for LDRB interpolations.");
+
     args.AddOption(&opts.alpha_endo,
             "-ao", "--alpha-endo",
             "Alpha angle in endocardium.");
+
     args.AddOption(&opts.alpha_epi,
             "-ai", "--alpha-epi",
             "Alpha angle in epicardium.");
+
     args.AddOption(&opts.beta_endo,
             "-bo", "--beta-endo",
             "Beta angle in endocardium.");
+
     args.AddOption(&opts.beta_epi,
             "-bi", "--beta-epi",
             "Beta angle in epicardium.");
+
     args.AddOption(&opts.base_id,
             "-base", "--base-id",
             "Id of the base surface");
+
     args.AddOption(&opts.epi_id,
             "-epi", "--epi-id",
             "Id of the epicardium surface");
+
     args.AddOption(&opts.lv_id,
             "-lv", "--lv-id",
             "Id of the left ventricle endocardium surface.");
+
     args.AddOption(&opts.rv_id,
             "-rv", "--rv-id",
-            "Id of the right ventricle endocardium surface. "
-            "Set to -1 if there is no right ventricle in the geometry, "
-            "e.g. for a single ventricle geometry.");
+            "Id of the right ventricle endocardium surface.\n"
+            "\tSet to -1 if there is no right ventricle in the geometry,\n "
+            "\te.g. for a single ventricle geometry.");
+
     args.AddOption(&opts.solver,
             "-s", "--solver",
-            "Solver to use. Options are: 0 - HyprePcg, 1 - CGSolver");
+            "Solver to use. Options are:\n"
+            "\t    0: HyprePCG (See mfem::HyprePCG)\n"
+            "\t    1: CGSolver (See mfem::CGSolver)");
 
 #if defined (MFEM_USE_HIP) || defined (MFEM_USE_CUDA)
     args.AddOption(&opts.gpu_tuned_amg,
@@ -497,8 +520,10 @@ int main(int argc, char *argv[])
     struct timespec start_fiber, end_fiber;
     timing::tick(&start_fiber);
 
-    if (opts.verbose && rank == 0)
+    if (opts.verbose && rank == 0) {
         logging::marker(tout, "Compute fiber orientation");
+    }
+
 
     // Set up the finite element collection. We use  first order H1-conforming finite elements.
     H1_FECollection fec(1, pmesh.Dimension());
@@ -853,6 +878,10 @@ int main(int argc, char *argv[])
         timing::tick(&t1);
         if (opts.verbose && rank == 0)
             logging::timestamp(tout, "Save", timing::duration(t0, t1));
+    } else if (opts.verbose >= 3 && rank == 0) {
+        logging::info(std::cout,
+                "Both mfem and paraview output is disabled "
+                "(--no-save-mfem and --no-save-paraview)");
     }
 
     timing::tick(&end);
