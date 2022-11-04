@@ -626,7 +626,7 @@ int main(int argc, char *argv[])
     x_phi_rv.UseDevice(true);
     if (opts.geom_has_rv) {
         if (opts.verbose > 1 && rank == 0) {
-            logging::marker(tout, "Compute phi rv", 1);
+            logging::marker(tout, "Compute phi_rv", 1);
         }
         timing::tick(&t0);
 

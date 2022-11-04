@@ -1,3 +1,5 @@
+ldrb-gpu
+*.o
 transfer.sh
 copy_back_data.sh
 data/
