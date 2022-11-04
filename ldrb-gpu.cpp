@@ -419,7 +419,7 @@ int main(int argc, char *argv[])
         logging::info(std::cout, msg);
 
     }
-    if (opts.verbose >= 3 && rank == 0)
+    if (opts.verbose >= 2 && rank == 0)
         logging::timestamp(tout, "Mesh load", timing::duration(t0, t1));
 
     // Define a parallel mesh by a partitioning of the serial mesh.
