@@ -99,12 +99,12 @@ cluster in [envsetup-ex3.sh](envsetup-ex3.sh) for a working example.
 ### GPU builds
 
 To build with GPU support, `ldrb-gpu` additionally needs a CUDA compiler
-(`nvcc`) to run on NVIDIA GPUs, or a HIP compiler (`hipcc`) to run on an AMD
-GPU. Note that the GPU builds require that mfem and hypre are also built with
+(`nvcc`) to run on NVIDIA GPUs, or a HIP compiler (`hipcc`) to run on AMD
+GPUs. Note that the GPU builds require that mfem and hypre are also built with
 GPU support. See https://github.com/mfem/mfem/blob/master/INSTALL and
 https://hypre.readthedocs.io/en/latest/ch-misc.html#building-the-library.
-To compile a CUDA-build of `ldrb-gpu`, set the enviroment varible
-`LDRB_HAS_CUDA=YES`. Similarily, set `LDRB_HAS_HIP=YES` for a HIP-build.
+To compile a CUDA-build of `ldrb-gpu`, set the enviroment variable
+`LDRB_HAS_CUDA=YES`. Similarly, set `LDRB_HAS_HIP=YES` for a HIP-build.
 
 When building for AMD GPUs it is also possible enable tracing markers in the
 code, by running `make HIP_TRACE=YES ldrb-gpu`. This requires the `roctracer` library.
