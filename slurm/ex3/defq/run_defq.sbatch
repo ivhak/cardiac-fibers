@@ -37,7 +37,7 @@ function main {
     BUILD_DIR=${TMPDIR}/ldrb-gpu
     cp -r ${LDRB_DIR} ${BUILD_DIR}
 
-    . ${BUILD_DIR}/envsetup.sh defq
+    . ${BUILD_DIR}/envsetup-ex3.sh defq
 
 
     # Print some diagnostics

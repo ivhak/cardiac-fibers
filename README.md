@@ -66,5 +66,79 @@ Options:
         Tune the BoomerAmg preconditioner for (hopefully) better GPU performance.
 ```
 
+## Building
+
+`ldrb-gpu` relies minimally on the following libraries:
+- [mfem](https://mfem.org), a finite element discretization library.
+- [hypre](https://github.com/hypre-space/hypre), a library of high-performance preconditioners and solvers.
+- METIS, a family of multilevel partitioning algorithms
+- MPI, a message-passing library
+
+The supplied Makefile expects the following variables to be set:
+
+| Variable          | Description                               | Required |
+| ----------------- | ------------------------------------------|----------|
+| `MFEM_ROOT`       | Root of the built mfem package            | Yes      |
+| `MFEM_DBG_ROOT`   | Root of a debug build of the mfem package | No[^1]   |
+| `HYPRE_INCDIR`    | Location of hypre headers                 | Yes      |
+| `HYPRE_LIBDIR`    | Location of hypre library                 | Yes      |
+| `METIS_INCDIR`    | Location of METIS headers                 | Yes      |
+| `METIS_LIBDIR`    | Location of METIS library                 | Yes      |
+| `MPI_INCDIR`      | Location of MPI headers                   | Yes      |
+| `MPI_LIBDIR`      | Location of MPI library                   | Yes      |
+
+[^1]: A debug build of `ldrb-gpu`, which can be compiled by running
+`make DEBUG=YES ldrb-gpu`, requires that the `MFEM_DBG_ROOT` variable is set to
+the location of a debug build of mfem. If you do not have a debug build of
+mfem, this can be circumvented by setting it to the same as `MFEM_ROOT`, for
+example by running `MFEM_DBG_ROOT=$MFEM_ROOT make DEBUG=YES ldrb-gpu`.
+
+See the environment setup script for the [eX3](https://www.ex3.simula.no/)
+cluster in [envsetup-ex3.sh](envsetup-ex3.sh) for a working example.
+
+With the 
+
+### GPU builds
+
+To build with GPU support, `ldrb-gpu` additionally needs a CUDA compiler
+(`nvcc`) to run on NVIDIA GPUs, or a HIP compiler (`hipcc`) to run on an AMD
+GPU. Note that the GPU builds require that mfem and hypre are also built with
+GPU support. See https://github.com/mfem/mfem/blob/master/INSTALL and
+https://hypre.readthedocs.io/en/latest/ch-misc.html#building-the-library.
+To compile a CUDA-build of `ldrb-gpu`, set the enviroment varible
+`LDRB_HAS_CUDA=YES`. Similarily, set `LDRB_HAS_HIP=YES` for a HIP-build.
+
+When building for AMD GPUs it is also possible enable tracing markers in the
+code, by running `make HIP_TRACE=YES ldrb-gpu`. This requires the `roctracer` library.
+
+### Tested versions
+
+The following setups have been tested on the [eX3](https://www.ex3.simula.no/) cluster:
+- A HIP build running on an AMD MI100 GPU on the `mi100q`partition, built with
+    * ROCm 5.1.3
+    * mfem-4.5 built with HIP support
+    * hypre-2.24.0 built with HIP support
+    * metis-5.1.0
+    * openmpi-4.1.4
+
+- A CUDA build running on an NVIDIA V100 GPU on the `dgx2q` partition, built with 
+    * Cuda Toolkit 10.1.243
+    * mfem-4.5 built with CUDA support
+    * hypre-2.24.0 built with CUDA support
+    * metis-5.1.0
+    * openmpi-4.1.4
+
+- A normal CPU build running on the `defq` partition, built with
+    * mfem-4.5
+    * hypre-2.25.0
+    * metis-5.1.0
+    * openmpi-4.1.4,
+
+The builds of mfem used in the tested versions were built using the Slurm
+scripts in [mfem-build-scripts/ex3](mfem-build-scripts/ex3). The environment
+setup for the tested versions can be found in the script
+[envsetup-ex3.sh](envsetup-ex3.sh).
+
+
 ## License
 `ldrb-gpu` is free software, licensed under the GNU GPL version 3 or (at your option) any later version. See the file COPYING for copying conditions.

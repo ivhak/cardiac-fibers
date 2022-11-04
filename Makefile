@@ -52,7 +52,7 @@ LFLAGS += -lhipsparse
 
 ifeq ($(HIP_TRACE), YES)
 CFLAGS += -DHIP_TRACE
-IFLAGS += -I$(ROCm_ROOT)/roctracer/include
+IFLAGS += -I$(shell hipconfig --path)/../roctracer/include
 LFLAGS += -lroctx64
 endif
 endif
@@ -81,6 +81,13 @@ tests: tests.o calculus_gpu.o util.o
 
 # Check that all the needed environment variables are set
 check-env:
+ifndef MFEM_ROOT
+	$(error MPI_ROOT is not set!)
+endif
+ifeq ($(DEBUG), YES)
+ifndef MFEM_DBG_ROOT
+endif
+endif
 ifndef MPI_INCDIR
 	$(error MPI_INCDIR is not set!)
 endif
