@@ -79,7 +79,7 @@ The supplied Makefile expects the following variables to be set:
 | Variable          | Description                               | Required |
 | ----------------- | ------------------------------------------|----------|
 | `MFEM_ROOT`       | Root of the built mfem package            | Yes      |
-| `MFEM_DBG_ROOT`   | Root of a debug build of the mfem package | No[^1]   |
+| `MFEM_DBG_ROOT`   | Root of a debug build of the mfem package | No       |
 | `HYPRE_INCDIR`    | Location of hypre headers                 | Yes      |
 | `HYPRE_LIBDIR`    | Location of hypre library                 | Yes      |
 | `METIS_INCDIR`    | Location of METIS headers                 | Yes      |
@@ -87,16 +87,14 @@ The supplied Makefile expects the following variables to be set:
 | `MPI_INCDIR`      | Location of MPI headers                   | Yes      |
 | `MPI_LIBDIR`      | Location of MPI library                   | Yes      |
 
-[^1]: A debug build of `ldrb-gpu`, which can be compiled by running
-`make DEBUG=YES ldrb-gpu`, requires that the `MFEM_DBG_ROOT` variable is set to
-the location of a debug build of mfem. If you do not have a debug build of
-mfem, this can be circumvented by setting it to the same as `MFEM_ROOT`, for
-example by running `MFEM_DBG_ROOT=$MFEM_ROOT make DEBUG=YES ldrb-gpu`.
+A debug build of `ldrb-gpu`, which can be compiled by running `make DEBUG=YES
+ldrb-gpu`, requires that the `MFEM_DBG_ROOT` variable is set to the location of
+a debug build of mfem. If you do not have a debug build of mfem, this can be
+circumvented by setting it to the same as `MFEM_ROOT`, for example by running
+`MFEM_DBG_ROOT=$MFEM_ROOT make DEBUG=YES ldrb-gpu`.
 
 See the environment setup script for the [eX3](https://www.ex3.simula.no/)
 cluster in [envsetup-ex3.sh](envsetup-ex3.sh) for a working example.
-
-With the 
 
 ### GPU builds
 
