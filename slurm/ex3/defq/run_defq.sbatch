@@ -64,6 +64,8 @@ function main {
     run heart02
     run heart03
     run heart04
+    run heart05
+    run heart06
 }
 
 main
