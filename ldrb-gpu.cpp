@@ -333,11 +333,11 @@ int main(int argc, char *argv[])
 
     args.AddOption(&opts.base_id,
             "-base", "--base-id",
-            "Id of the base surface");
+            "Id of the base surface.");
 
     args.AddOption(&opts.epi_id,
             "-epi", "--epi-id",
-            "Id of the epicardium surface");
+            "Id of the epicardium surface.");
 
     args.AddOption(&opts.lv_id,
             "-lv", "--lv-id",
@@ -352,8 +352,8 @@ int main(int argc, char *argv[])
     args.AddOption(&opts.solver,
             "-s", "--solver",
             "Solver to use. Options are:\n"
-            "\t    0: HyprePCG (See mfem::HyprePCG)\n"
-            "\t    1: CGSolver (See mfem::CGSolver)");
+            "\t    0: HyprePCG (See mfem::HyprePCG).\n"
+            "\t    1: CGSolver (See mfem::CGSolver).");
 
 #if defined (MFEM_USE_HIP) || defined (MFEM_USE_CUDA)
     args.AddOption(&opts.gpu_tuned_amg,

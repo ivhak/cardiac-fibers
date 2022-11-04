@@ -49,9 +49,9 @@ Options:
    -bi <double>, --beta-epi <double>, current value: 60
         Beta angle in epicardium.
    -base <int>, --base-id <int>, current value: 1
-        Id of the base surface
+        Id of the base surface.
    -epi <int>, --epi-id <int>, current value: 2
-        Id of the epicardium surface
+        Id of the epicardium surface.
    -lv <int>, --lv-id <int>, current value: 3
         Id of the left ventricle endocardium surface.
    -rv <int>, --rv-id <int>, current value: 4
@@ -60,8 +60,8 @@ Options:
         e.g. for a single ventricle geometry.
    -s <int>, --solver <int>, current value: 0
         Solver to use. Options are:
-            0: HyprePCG (See mfem::HyprePCG)
-            1: CGSolver (See mfem::CGSolver)
+            0: HyprePCG (See mfem::HyprePCG).
+            1: CGSolver (See mfem::CGSolver).
    -gamg, --gpu-tuned-amg, -ngamg, --no-gpu-tuned-amg, current option: --no-gpu-tuned-amg
         Tune the BoomerAmg preconditioner for (hopefully) better GPU performance.
 ```
