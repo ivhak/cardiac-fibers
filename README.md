@@ -130,7 +130,7 @@ The following setups have been tested on the [eX3](https://www.ex3.simula.no/) c
     * mfem-4.5
     * hypre-2.25.0
     * metis-5.1.0
-    * openmpi-4.1.4,
+    * openmpi-4.1.4
 
 The builds of mfem used in the tested versions were built using the Slurm
 scripts in [mfem-build-scripts/ex3](mfem-build-scripts/ex3). The environment
