@@ -70,8 +70,7 @@ OBJ=$(SRC:.cpp=.o)
 
 all: ldrb-gpu
 
-ldrb-gpu: .check-env
-ldrb-gpu: $(OBJ)
+ldrb-gpu: check-env $(OBJ)
 	$(CC) -o $@ $(OBJ) $(LFLAGS)
 
 tests: tests.o calculus_gpu.o util.o
@@ -81,7 +80,7 @@ tests: tests.o calculus_gpu.o util.o
 	$(CC) -c $(CFLAGS) $(IFLAGS) -o $@ $^
 
 # Check that all the needed environment variables are set
-.check-env:
+check-env:
 ifndef MPI_INCDIR
 	$(error MPI_INCDIR is not set!)
 endif
@@ -104,4 +103,4 @@ endif
 clean:
 	$(RM) ldrb-gpu tests ldrb-gpu.o calculus.o util.o tests.o
 
-.PHONY: .check-env clean
+.PHONY: check-env clean
