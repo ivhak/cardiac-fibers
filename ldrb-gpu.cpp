@@ -391,7 +391,7 @@ int main(int argc, char *argv[])
     std::string tout_file(opts.output_dir);
     tout_file += "/time.txt";
     std::ostream& tout = opts.time_to_file ? (f.open(tout_file.c_str()), f) : std::cout;
-    if (opts.verbose >= 3 && rank == 0) {
+    if (opts.verbose >= 3 && rank == 0 && opts.time_to_file) {
         std::string msg = "Outputing timing log to " + tout_file;
         logging::info(std::cout, msg);
     }
