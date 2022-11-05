@@ -44,6 +44,12 @@ LFLAGS = -L$(MFEM_LIBDIR) -lmfem \
 		 -L$(HYPRE_LIBDIR) -lHYPRE \
 		 -L$(METIS_LIBDIR) -lmetis
 
+# openmp
+ifeq ($(LDRB_HAS_OPENMP), YES)
+CFLAGS += -fopenmp
+LFLAGS += -lgomp
+endif
+
 # HIP
 ifeq ($(LDRB_HAS_HIP), YES)
 CC=hipcc

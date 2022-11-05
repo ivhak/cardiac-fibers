@@ -25,6 +25,7 @@ PKG_ROOT="/global/D1/homes/iverh/packages"
 
 LDRB_HAS_HIP=NO
 LDRB_HAS_CUDA=NO
+LDRB_HAS_OPENMP=NO
 
 if [ "$1" = "mi100q" ] || [ -z "$1" ]; then
     # HIP build, default
@@ -82,8 +83,10 @@ elif [ "$1" = "defq" ]; then
 
     export MFEM_ROOT="${PKG_ROOT}/defq/mfem-4.5"
     export MFEM_DBG_ROOT="${PKG_ROOT}/defq/mfem-dbg-4.5"
+
+    LDRB_HAS_OPENMP=YES
 fi
 
 export LDRB_HAS_HIP
 export LDRB_HAS_CUDA
-
+export LDRB_HAS_OPENMP

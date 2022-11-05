@@ -109,6 +109,14 @@ To compile a CUDA-build of `ldrb-gpu`, set the enviroment variable
 When building for AMD GPUs it is also possible enable tracing markers in the
 code, by running `make HIP_TRACE=YES ldrb-gpu`. This requires the `roctracer` library.
 
+Device execution will be enabled by default when compiling with either CUDA or HIP support.
+
+### OpenMP
+
+If mfem is built with OpenMP (`MFEM_USE_OPENMP=YES`), you can set
+`LDRB_USE_OPENMP=YES` to build `ldrb-gpu` with OpenMP support as well. To run
+with OpenMP, simply set the flag `--device omp`.
+
 ### Tested versions
 
 The following setups have been tested on the [eX3](https://www.ex3.simula.no/) cluster:
@@ -127,7 +135,8 @@ The following setups have been tested on the [eX3](https://www.ex3.simula.no/) c
     * openmpi-4.1.4
 
 - A normal CPU build running on the `defq` partition, built with
-    * mfem-4.5
+    * OpenMP support (`LDRB_HAS_OPENMP=YES`)
+    * mfem-4.5 built with OpenMP support
     * hypre-2.25.0
     * metis-5.1.0
     * openmpi-4.1.4
@@ -137,6 +146,6 @@ scripts in [mfem-build-scripts/ex3](mfem-build-scripts/ex3). The environment
 setup for the tested versions can be found in the script
 [envsetup-ex3.sh](envsetup-ex3.sh).
 
-
 ## License
-`ldrb-gpu` is free software, licensed under the GNU GPL version 3 or (at your option) any later version. See the file COPYING for copying conditions.
+`ldrb-gpu` is free software, licensed under the GNU GPL version 3 or (at your
+option) any later version. See the file COPYING for copying conditions.
