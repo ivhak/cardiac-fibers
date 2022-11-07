@@ -100,8 +100,8 @@ MFEM_HOST_DEVICE
 static void quatnormalize(quat& q)
 {
     double sum = q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3];
+    if (sum == 0.0) return;
     double m = 1.0 / sqrt(sum);
-    // if (sum_sqr == 0.0) return;
     q[0] = q[0] * m;
     q[1] = q[1] * m;
     q[2] = q[2] * m;
@@ -132,8 +132,8 @@ MFEM_HOST_DEVICE
 static void vecnormalize(vec3& a)
 {
     const double sum = a[0]*a[0] + a[1]*a[1] + a[2]*a[2];
+    if (sum == 0.0) return;
     const double m = 1.0 / sqrt(sum);
-    // if (sum == 0.0) return;
     a[0] = a[0] * m;
     a[1] = a[1] * m;
     a[2] = a[2] * m;
