@@ -832,6 +832,7 @@ int main(int argc, char *argv[])
 
 #ifdef DEBUG
             std::string debug_dir = mfem_output_dir + "/debug";
+            fs::mksubdir(debug_dir);
             save::save_solution(&x_phi_epi, debug_dir, opts.mesh_basename, "_phi_epi.gf", rank);
             save::save_solution(&x_phi_lv,  debug_dir, opts.mesh_basename, "_phi_lv.gf", rank);
             save::save_solution(&x_phi_rv,  debug_dir, opts.mesh_basename, "_phi_rv.gf", rank);

@@ -173,6 +173,15 @@ static void vecnegate(vec3& a)
     a[2] = -a[2];
 }
 
+static bool vecisnonzero(vec3& a)
+{
+    const double sum = a[0]*a[0] + a[1]*a[1] + a[2]*a[2];
+    if (sum > 0.0) {
+        return true;
+    }
+    return false;
+}
+
 // Initialize matrix A values to zero
 MFEM_HOST_DEVICE
 static void matzero(mat3x3& A)
@@ -525,9 +534,8 @@ static void calculate_fiber(
     double tol)
 {
 
-    // TODO (ivhak): What to do here? TOLERANCE
     double depth;
-    if (phi_lv + phi_rv < tol) {
+    if (phi_lv + phi_rv < 1e-15) {
         depth = 0.5;
     } else {
         depth = phi_rv / (phi_lv + phi_rv);
@@ -539,42 +547,100 @@ static void calculate_fiber(
     const double alpha_w_epi = alpha_endo*(1.0-phi_epi) + alpha_epi * phi_epi;
     const double beta_w_epi  = beta_endo *(1.0-phi_epi) + beta_epi  * phi_epi;
 
+    const bool grad_phi_epi_nonzero = vecisnonzero(grad_phi_epi);
+    const bool grad_phi_lv_nonzero  = vecisnonzero(grad_phi_lv);
+    const bool grad_phi_rv_nonzero  = vecisnonzero(grad_phi_rv);
 
-    mat3x3 Q_lv;
-    matzero(Q_lv);
-    if (phi_lv > tol) {
-        mat3x3 T;
+
+    mat3x3 Q_lv = {0};
+    if (grad_phi_lv_nonzero) {
         vec3 grad_phi_lv_neg;
         {
             veccopy(grad_phi_lv_neg, grad_phi_lv);
             vecnegate(grad_phi_lv_neg);
         }
+
+        mat3x3 T;
         axis(T, grad_psi_ab, grad_phi_lv_neg);
         orient(Q_lv, T, alpha_s_d, beta_s_d);
     }
 
-    mat3x3 Q_rv;
-    matzero(Q_rv);
-    if (phi_rv > tol) {
+    mat3x3 Q_rv = {0};
+    if (grad_phi_rv_nonzero) {
         mat3x3 T;
         axis(T, grad_psi_ab, grad_phi_rv);
         orient(Q_rv, T, alpha_s_d, beta_s_d);
     }
 
-    mat3x3 Q_endo;
-    matzero(Q_endo);
-    bislerp(Q_endo, Q_lv, Q_rv, depth, tol);
-
-    mat3x3 Q_epi;
-    matzero(Q_epi);
-    if (phi_epi > tol) {
+    mat3x3 Q_epi = {0};
+    if (grad_phi_epi_nonzero) {
         mat3x3 T;
         axis(T, grad_psi_ab, grad_phi_epi);
         orient(Q_epi, T, alpha_w_epi, beta_w_epi);
     }
 
-    mat3x3 FST;
-    bislerp(FST, Q_endo, Q_epi, phi_epi, tol);
+    mat3x3 Q_endo = {0};
+    mat3x3 FST = {0};
+
+    const bool in_rv_outer_wall = !grad_phi_lv_nonzero
+                               &&  grad_phi_rv_nonzero
+                               &&  grad_phi_epi_nonzero;
+
+    const bool in_lv_outer_wall =  grad_phi_lv_nonzero
+                               && !grad_phi_rv_nonzero
+                               &&  grad_phi_epi_nonzero;
+
+    const bool in_septum        =  grad_phi_lv_nonzero
+                               &&  grad_phi_rv_nonzero
+                               && !grad_phi_epi_nonzero;
+
+    if (in_rv_outer_wall) {
+        // Since the gradient of phi_lv is zero, we know that we are somewhere
+        // in the outer wall of the right ventricle. phi_lv should also be zero here.
+        MFEM_ASSERT_KERNEL(phi_lv < 1e-15, "phi_lv is not zero.");
+
+        // As phi_lv is zero and we can skip the first bislerp because we
+        // already know that it will result in Q_rv.
+
+        bislerp(FST, Q_rv, Q_epi, phi_epi, tol);
+
+    } else if (in_lv_outer_wall) {
+        // Since the gradient of phi_rv is zero, we know that we are somewhere
+        // in the outer wall of the left ventricle. phi_rv should also be zero here.
+        MFEM_ASSERT_KERNEL(phi_rv < 1e-15, "phi_rv is not zero.");
+
+        bislerp(FST, Q_lv, Q_epi, phi_epi, tol);
+    } else if (in_septum) {
+        // phi_epi should be approximately zero in the septum
+        MFEM_ASSERT_KERNEL(phi_epi < 1e-15, "phi_epi is not zero.");
+
+        // As phi_epi is zero, we can skip the second bislerp, because we know
+        // it will results in Q_endo.
+        bislerp(FST, Q_lv, Q_rv, depth, tol);
+
+    } else if (grad_phi_lv_nonzero && grad_phi_rv_nonzero && grad_phi_epi_nonzero) {
+
+        // All the gradients are nonzero; use the algorithm in the paper
+        bislerp(Q_endo, Q_lv, Q_rv, depth, tol);
+        bislerp(FST, Q_endo, Q_epi, phi_epi, tol);
+    } else {
+        // TODO: Eigenvector
+#ifdef DEBUG
+        std::cout << "\ti=" << i << "\tEIGEN" << std::endl;
+#endif
+        F[3*i+0] = 1.0;
+        F[3*i+1] = 0.0;
+        F[3*i+2] = 0.0;
+
+        S[3*i+0] = 0.0;
+        S[3*i+1] = 1.0;
+        S[3*i+2] = 0.0;
+
+        T[3*i+0] = 0.0;
+        T[3*i+1] = 0.0;
+        T[3*i+2] = 1.0;
+    }
+
 
     F[3*i+0] = FST[0][0];
     F[3*i+1] = FST[1][0];
