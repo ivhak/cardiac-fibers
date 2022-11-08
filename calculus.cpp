@@ -182,15 +182,6 @@ static bool vecisnonzero(vec3& a)
     return false;
 }
 
-// Initialize matrix A values to zero
-MFEM_HOST_DEVICE
-static void matzero(mat3x3& A)
-{
-    A[0][0] = 0.0; A[0][1] = 0.0; A[0][2] = 0.0;
-    A[1][0] = 0.0; A[1][1] = 0.0; A[1][2] = 0.0;
-    A[2][0] = 0.0; A[2][1] = 0.0; A[2][2] = 0.0;
-}
-
 // Copy matrix B into A
 MFEM_HOST_DEVICE
 static void matcopy(mat3x3& A, mat3x3& B)
