@@ -96,6 +96,9 @@ circumvented by setting it to the same as `MFEM_ROOT`, for example by running
 See the environment setup script for the [eX3](https://www.ex3.simula.no/)
 cluster in [envsetup-ex3.sh](envsetup-ex3.sh) for a working example.
 
+By default (for non-GPU build), the compiler  is set to `mpiCC`. This can be
+overwritten with the environment variable `CC`.
+
 ### GPU builds
 
 To build with GPU support, `ldrb-gpu` additionally needs a CUDA compiler
@@ -105,6 +108,10 @@ GPU support. See https://github.com/mfem/mfem/blob/master/INSTALL and
 https://hypre.readthedocs.io/en/latest/ch-misc.html#building-the-library.
 To compile a CUDA-build of `ldrb-gpu`, set the enviroment variable
 `LDRB_HAS_CUDA=YES`. Similarly, set `LDRB_HAS_HIP=YES` for a HIP-build.
+
+By default, the compiler is set to `nvcc` when `LDRB_HAS_CUDA=YES`, and
+`hipcc` when `LDRB_HAS_HIP=YES`. These can be overwritten with the `CUDA_CXX`
+and `HIP_CXX` environment variables, respectively.
 
 When building for AMD GPUs it is also possible enable tracing markers in the
 code, by running `make HIP_TRACE=YES ldrb-gpu`. This requires the `roctracer` library.

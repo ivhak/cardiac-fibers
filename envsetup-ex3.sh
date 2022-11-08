@@ -47,6 +47,30 @@ if [ "$1" = "mi100q" ] || [ -z "$1" ]; then
 
     LDRB_HAS_HIP=YES
 
+elif [ "$1" = "mi210q" ]; then
+    # HIP build
+    echo "Setting up environment for mi210q (HIP)"
+
+    module use /global/D1/homes/james/ex3modules/mi210q/20221107/modulefiles
+
+    module load amd/rocm/5.1.3
+    module load hypre-32-2.25.0
+    module load openmpi-4.1.4
+    module load metis-32-5.1.0
+    module load gcc-10.1.0
+
+    # The openmpi-4.1.4 module does not properly export MPI_INCDIR and MPI_LIBDIR
+    export MPI_INCDIR=${MPI_HOME}/include
+    export MPI_LIBDIR=${MPI_HOME}/lib
+
+    export MFEM_ROOT="${PKG_ROOT}/mi210q/mfem-4.5"
+    export MFEM_DBG_ROOT="${PKG_ROOT}/mi210q/mfem-dbg-4.5"
+
+    LDRB_HAS_HIP=YES
+
+    # Some issues with the c++-headers on n015 and n016. Set the gcc toolchain manually.
+    export HIP_CXX="hipcc --gcc-toolchain=${GCC_ROOT}"
+
 elif [ "$1" = "dgx2q" ]; then
     # CUDA build
     echo "Setting up environment for dgx2q (CUDA)"

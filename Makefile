@@ -23,7 +23,7 @@ else
 CFLAGS += -O0 -DDEBUG -g3 -Wall
 endif
 
-CC=mpiCC
+CC ?= mpiCC
 
 # MFEM
 ifeq ($(DEBUG), YES)
@@ -52,7 +52,8 @@ endif
 
 # HIP
 ifeq ($(LDRB_HAS_HIP), YES)
-CC=hipcc
+HIP_CXX ?= hipcc
+CC=$(HIP_CXX)
 CFLAGS += $(shell hipconfig -C)
 LFLAGS += -lhipsparse
 
@@ -65,7 +66,8 @@ endif
 
 # CUDA
 ifeq ($(LDRB_HAS_CUDA), YES)
-CC=nvcc
+CUDA_CXX ?= nvcc
+CC=$(CUDA_CXX)
 # Wrap the old CFLAGS into --compiler-options, and set the needed nvcc specific flags
 CFLAGS := -ccbin=mpiCC -x=cu --expt-extended-lambda --compiler-options="$(CFLAGS)"
 LFLAGS += -lcusparse -lrt
