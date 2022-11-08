@@ -11,10 +11,10 @@
 # $ tar -xzvf mfem-4.5.tgz
 # $ cd mfem-4.5
 # $ # Copy this script in here
-# $ sbatch build_mfem_mi210q.sbatch
+# $ sbatch build_mfem_mi210q_dbg.sbatch
 
-MFEM_BUILD_DIR=./build-mi210q
-MFEM_INSTALL_DIR=/global/D1/homes/iverh/packages/mi210q/mfem-4.5
+MFEM_BUILD_DIR=./build-mi210q-dbg
+MFEM_INSTALL_DIR=/global/D1/homes/iverh/packages/mi210q/mfem-dbg-4.5
 
 set -e
 module purge
@@ -26,6 +26,7 @@ module load openmpi-4.1.4
 module load metis-32-5.1.0
 
 make BUILD_DIR=${MFEM_BUILD_DIR} config \
+    MFEM_DEBUG=YES \
     MFEM_USE_MPI=YES \
     MPICXX=mpiCC \
     MFEM_USE_HIP=YES \
