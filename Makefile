@@ -23,7 +23,8 @@ else
 CFLAGS += -O0 -DDEBUG -g3 -Wall
 endif
 
-CC ?= mpiCC
+MPI_CXX ?= mpiCC
+CXX = $(MPI_CXX)
 
 # MFEM
 ifeq ($(DEBUG), YES)
@@ -53,7 +54,7 @@ endif
 # HIP
 ifeq ($(LDRB_HAS_HIP), YES)
 HIP_CXX ?= hipcc
-CC=$(HIP_CXX)
+CXX=$(HIP_CXX)
 CFLAGS += $(shell hipconfig -C)
 LFLAGS += -lhipsparse
 
@@ -67,7 +68,7 @@ endif
 # CUDA
 ifeq ($(LDRB_HAS_CUDA), YES)
 CUDA_CXX ?= nvcc
-CC=$(CUDA_CXX)
+CXX=$(CUDA_CXX)
 # Wrap the old CFLAGS into --compiler-options, and set the needed nvcc specific flags
 CFLAGS := -ccbin=mpiCC -x=cu --expt-extended-lambda --compiler-options="$(CFLAGS)"
 LFLAGS += -lcusparse -lrt
@@ -79,13 +80,13 @@ OBJ=$(SRC:.cpp=.o)
 all: ldrb-gpu
 
 ldrb-gpu: check-env $(OBJ)
-	$(CC) -o $@ $(OBJ) $(LFLAGS)
+	$(CXX) -o $@ $(OBJ) $(LFLAGS)
 
 tests: tests.o calculus.o util.o
-	$(CC) -o $@ $^ $(LFLAGS)
+	$(CXX) -o $@ $^ $(LFLAGS)
 
 %.o: %.cpp
-	$(CC) -c $(CFLAGS) $(IFLAGS) -o $@ $^
+	$(CXX) -c $(CFLAGS) $(IFLAGS) -o $@ $^
 
 # Check that all the needed environment variables are set
 check-env:
