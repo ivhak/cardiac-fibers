@@ -75,16 +75,6 @@ static void quatmul(quat& q, double a)
     q[3] *= a;
 }
 
-// Elementwise multiplication q2 into q1
-MFEM_HOST_DEVICE
-static void quatelemmul(quat& q1, quat& q2)
-{
-    q1[0] *= q2[0];
-    q1[1] *= q2[1];
-    q1[2] *= q2[2];
-    q1[3] *= q2[3];
-}
-
 // Add quaternion q2 to q1
 MFEM_HOST_DEVICE
 static void quatadd(quat& q1, quat& q2)
@@ -458,35 +448,47 @@ void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t, double tol)
 
     // Find qm in { ±qa, ±i*qa, ±j*qa, ±k*qa} that maximizes ||qm*qb||
 
-    quat i = {0}; i[1] = 1.0;
-    quat j = {0}; j[2] = 1.0;
-    quat k = {0}; k[3] = 1.0;
+    const double a = qa[0], b = qa[1], c = qa[2], d = qa[3];
 
-    quat i_qa = {0}; quatcopy(i_qa, i); quatelemmul(i_qa, qa);
-    quat j_qa = {0}; quatcopy(j_qa, j); quatelemmul(j_qa, qa);
-    quat k_qa = {0}; quatcopy(k_qa, k); quatelemmul(k_qa, qa);
+    quat i_qa = {0};
+    i_qa[0] = -b;
+    i_qa[1] =  a;
+    i_qa[2] = -d;
+    i_qa[3] =  c;
 
-    quat qa_minus;   quatcopy(qa_minus,   qa);   quatmul(qa_minus, -1.0);
-    quat i_qa_minus; quatcopy(i_qa_minus, i_qa); quatmul(i_qa_minus, -1.0);
-    quat j_qa_minus; quatcopy(j_qa_minus, j_qa); quatmul(j_qa_minus, -1.0);
-    quat k_qa_minus; quatcopy(k_qa_minus, k_qa); quatmul(k_qa_minus, -1.0);
+    quat j_qa = {0};
+    j_qa[0] = -c;
+    j_qa[1] =  d;
+    j_qa[2] =  a;
+    j_qa[3] = -b;
 
-    quat *quat_array[8];
-    quat_array[0] = &qa;
-    quat_array[1] = &qa_minus;
-    quat_array[2] = &i_qa;
-    quat_array[3] = &i_qa_minus;
-    quat_array[4] = &j_qa;
-    quat_array[5] = &j_qa_minus;
-    quat_array[6] = &k_qa;
-    quat_array[7] = &k_qa_minus;
+    quat k_qa = {0};
+    k_qa[0] = -d;
+    k_qa[1] = -c;
+    k_qa[2] =  b;
+    k_qa[3] =  a;
 
-    double max_abs_dot  = 0.0;
+    quat minus_qa, minus_i_qa, minus_j_qa, minus_k_qa;
+
+    quatcopy(minus_qa,   qa);   quatnegate(minus_qa);
+    quatcopy(minus_i_qa, i_qa); quatnegate(minus_i_qa);
+    quatcopy(minus_j_qa, j_qa); quatnegate(minus_j_qa);
+    quatcopy(minus_k_qa, k_qa); quatnegate(minus_k_qa);
+
+
+    quat *quat_array[8] = {
+        &qa,   &minus_qa,
+        &i_qa, &minus_i_qa,
+        &j_qa, &minus_j_qa,
+        &k_qa, &minus_k_qa,
+    };
+
+    double max_abs_dot  = -1.0;
     quat qm = {0};
     for (int i = 0; i < 8; i++) {
         quat *v = quat_array[i];
         const double abs_dot = abs(quatdot(qb, (*v)));
-        if (abs_dot > max_abs_dot) {
+        if (abs_dot >= max_abs_dot) {
             max_abs_dot = abs_dot;
             quatcopy(qm, (*v)) ;
         }
@@ -570,7 +572,6 @@ static void calculate_fiber(
         orient(Q_epi, T, alpha_w_epi, beta_w_epi);
     }
 
-    mat3x3 Q_endo = {0};
     mat3x3 FST = {0};
 
     const bool in_rv_outer_wall = !grad_phi_lv_nonzero
@@ -609,27 +610,12 @@ static void calculate_fiber(
         // it will results in Q_endo.
         bislerp(FST, Q_lv, Q_rv, depth, tol);
 
-    } else if (grad_phi_lv_nonzero && grad_phi_rv_nonzero && grad_phi_epi_nonzero) {
+    } else {
 
-        // All the gradients are nonzero; use the algorithm in the paper
+        // Use the algorithm in the paper
+        mat3x3 Q_endo = {0};
         bislerp(Q_endo, Q_lv, Q_rv, depth, tol);
         bislerp(FST, Q_endo, Q_epi, phi_epi, tol);
-    } else {
-        // TODO: Eigenvector
-#ifdef DEBUG
-        std::cout << "\ti=" << i << "\tEIGEN" << std::endl;
-#endif
-        F[3*i+0] = 1.0;
-        F[3*i+1] = 0.0;
-        F[3*i+2] = 0.0;
-
-        S[3*i+0] = 0.0;
-        S[3*i+1] = 1.0;
-        S[3*i+2] = 0.0;
-
-        T[3*i+0] = 0.0;
-        T[3*i+1] = 0.0;
-        T[3*i+2] = 1.0;
     }
 
 
