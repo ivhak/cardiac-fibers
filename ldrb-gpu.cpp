@@ -219,7 +219,7 @@ void laplace(
 
 int main(int argc, char *argv[])
 {
-    // 1. Initialize MPI and HYPRE
+    // Initialize MPI and HYPRE
     Mpi::Init();
     int rank = Mpi::WorldRank();
     int nranks = Mpi::WorldSize();
@@ -258,9 +258,9 @@ int main(int argc, char *argv[])
     opts.lv_id   = 3;
     opts.rv_id   = 4;
 
-    opts.geom_has_rv = true;
-
     opts.solver = 0;
+
+    opts.uniform_refinement = 0;
 
 #if defined(MFEM_USE_HIP) || defined(MFEM_USE_CUDA)
     opts.gpu_tuned_amg = false;
@@ -355,6 +355,10 @@ int main(int argc, char *argv[])
             "\t    0: HyprePCG (See mfem::HyprePCG).\n"
             "\t    1: CGSolver (See mfem::CGSolver).");
 
+    args.AddOption(&opts.uniform_refinement,
+            "-u", "--uniform-refinement",
+            "Use uniform refinement");
+
 #if defined (MFEM_USE_HIP) || defined (MFEM_USE_CUDA)
     args.AddOption(&opts.gpu_tuned_amg,
             "-gamg",  "--gpu-tuned-amg",
@@ -375,9 +379,7 @@ int main(int argc, char *argv[])
         args.PrintOptions(std::cout);
     }
 
-    if (opts.rv_id == -1) {
-        opts.geom_has_rv = false;
-    }
+    bool mesh_has_right_ventricle = opts.rv_id != -1;
 
     // Make sure the output directory exists if we are saving anything
     if (opts.save_mfem || opts.save_paraview || opts.time_to_file) {
@@ -430,12 +432,24 @@ int main(int argc, char *argv[])
     if (opts.verbose && rank == 0)
         logging::timestamp(tout, "Partition mesh", timing::duration(t0, t1));
 
+    // Uniform refinement of the mesh
+    if (opts.uniform_refinement > 0) {
+        struct timespec uf0, uf1;
+        timing::tick(&uf0);
+        for (int i = 0; i < opts.uniform_refinement; i++)
+            pmesh.UniformRefinement();
+        timing::tick(&uf1);
+        std::string msg = "Uniform refinement ("
+                        + std::to_string(opts.uniform_refinement)
+                        + ")";
+        logging::timestamp(tout, msg, timing::duration(uf0, uf1));
+    }
+
+
 
     // Each rank finds the vertex in its submesh that is closest to the
     // prescribed apex. The rank with the closest one sets up the boundary
     // conditions in that vertex.
-    //
-    // XXX (ivhak): What if the apex vertex is in multiple submeshes?
     int apex = -1;
     {
         timing::tick(&t0);
@@ -467,10 +481,7 @@ int main(int argc, char *argv[])
     }
 
 
-    // TODO (ivhak): Test different solvers + preconditioners.
-    //
-    // Setup the linear solver.
-
+    // Setup the linear solver and preconditioner.
     timing::tick(&t0);
     HypreBoomerAMG *prec = NULL;
     {
@@ -549,7 +560,7 @@ int main(int argc, char *argv[])
         ess_bdr = 0;
         ess_bdr[opts.epi_id-1] = 1;
         ess_bdr[opts.lv_id -1] = 1;
-        if (opts.geom_has_rv)
+        if (mesh_has_right_ventricle)
             ess_bdr[opts.rv_id-1] = 1;
 
         nonzero_ess_bdr = 0;
@@ -557,7 +568,7 @@ int main(int argc, char *argv[])
 
         zero_ess_bdr = 0;
         zero_ess_bdr[opts.lv_id-1] = 1;
-        if (opts.geom_has_rv)
+        if (mesh_has_right_ventricle)
             zero_ess_bdr[opts.rv_id-1] = 1;
 
         tracing::roctx_range_push("laplace x_phi_epi");
@@ -591,7 +602,7 @@ int main(int argc, char *argv[])
         ess_bdr = 0;
         ess_bdr[opts.epi_id-1] = 1;
         ess_bdr[opts.lv_id -1] = 1;
-        if (opts.geom_has_rv)
+        if (mesh_has_right_ventricle)
             ess_bdr[opts.rv_id-1] = 1;
 
         nonzero_ess_bdr = 0;
@@ -599,7 +610,7 @@ int main(int argc, char *argv[])
 
         zero_ess_bdr = 0;
         zero_ess_bdr[opts.epi_id-1] = 1;
-        if (opts.geom_has_rv)
+        if (mesh_has_right_ventricle)
             zero_ess_bdr[opts.rv_id-1] = 1;
 
         tracing::roctx_range_push("laplace x_phi_lv");
@@ -624,7 +635,7 @@ int main(int argc, char *argv[])
     // Solve the Laplace equation from RV_ENDO (1.0) to (LV_ENDO union EPI) (0.0)
     ParGridFunction x_phi_rv(&fespace_scalar_h1);
     x_phi_rv.UseDevice(true);
-    if (opts.geom_has_rv) {
+    if (mesh_has_right_ventricle) {
         if (opts.verbose > 1 && rank == 0) {
             logging::marker(tout, "Compute phi_rv", 1);
         }
@@ -733,7 +744,7 @@ int main(int argc, char *argv[])
 
     ParGridFunction grad_phi_rv(&fespace_vector_h1);
     grad_phi_rv.UseDevice(true);
-    if (opts.geom_has_rv) {
+    if (mesh_has_right_ventricle) {
         timing::tick(&t0);
         tracing::roctx_range_push("grad_phi_rv");
 
@@ -818,7 +829,7 @@ int main(int argc, char *argv[])
         timing::tick(&t0);
         // Save the mesh and solutions
         // Set the basename of the mesh
-        opts.mesh_basename = fs::remove_extension(
+        std::string mesh_basename = fs::remove_extension(
                 fs::basename(std::string(opts.mesh_file)));
 
         if (opts.save_mfem) {
@@ -828,25 +839,25 @@ int main(int argc, char *argv[])
             fs::mksubdir(mfem_output_dir);
 
             // Save the MFEM mesh
-            save::save_mesh(&pmesh, mfem_output_dir, opts.mesh_basename, rank);
+            save::save_mesh(&pmesh, mfem_output_dir, mesh_basename, rank);
 
 #ifdef DEBUG
             std::string debug_dir = mfem_output_dir + "/debug";
             fs::mksubdir(debug_dir);
-            save::save_solution(&x_phi_epi, debug_dir, opts.mesh_basename, "_phi_epi.gf", rank);
-            save::save_solution(&x_phi_lv,  debug_dir, opts.mesh_basename, "_phi_lv.gf", rank);
-            save::save_solution(&x_phi_rv,  debug_dir, opts.mesh_basename, "_phi_rv.gf", rank);
-            save::save_solution(&x_psi_ab,  debug_dir, opts.mesh_basename, "_psi_ab.gf", rank);
+            save::save_solution(&x_phi_epi, debug_dir, mesh_basename, "_phi_epi.gf", rank);
+            save::save_solution(&x_phi_lv,  debug_dir, mesh_basename, "_phi_lv.gf", rank);
+            save::save_solution(&x_phi_rv,  debug_dir, mesh_basename, "_phi_rv.gf", rank);
+            save::save_solution(&x_psi_ab,  debug_dir, mesh_basename, "_psi_ab.gf", rank);
 
-            save::save_solution(&grad_phi_epi, debug_dir, opts.mesh_basename, "_grad_phi_epi.gf", rank);
-            save::save_solution(&grad_phi_lv,  debug_dir, opts.mesh_basename, "_grad_phi_lv.gf", rank);
-            save::save_solution(&grad_phi_rv,  debug_dir, opts.mesh_basename, "_grad_phi_rv.gf", rank);
-            save::save_solution(&grad_psi_ab,  debug_dir, opts.mesh_basename, "_grad_psi_ab.gf", rank);
+            save::save_solution(&grad_phi_epi, debug_dir, mesh_basename, "_grad_phi_epi.gf", rank);
+            save::save_solution(&grad_phi_lv,  debug_dir, mesh_basename, "_grad_phi_lv.gf", rank);
+            save::save_solution(&grad_phi_rv,  debug_dir, mesh_basename, "_grad_phi_rv.gf", rank);
+            save::save_solution(&grad_psi_ab,  debug_dir, mesh_basename, "_grad_psi_ab.gf", rank);
 #endif
             // Save the solutions
-            save::save_solution(&F,  mfem_output_dir, opts.mesh_basename, "_F.gf", rank);
-            save::save_solution(&S,  mfem_output_dir, opts.mesh_basename, "_S.gf", rank);
-            save::save_solution(&T,  mfem_output_dir, opts.mesh_basename, "_T.gf", rank);
+            save::save_solution(&F,  mfem_output_dir, mesh_basename, "_F.gf", rank);
+            save::save_solution(&S,  mfem_output_dir, mesh_basename, "_S.gf", rank);
+            save::save_solution(&T,  mfem_output_dir, mesh_basename, "_T.gf", rank);
         }
 
         // Save in paraview as well
@@ -856,7 +867,7 @@ int main(int argc, char *argv[])
             paraview_path += "/paraview";
             fs::mksubdir(paraview_path);
 
-            pd = new ParaViewDataCollection(opts.mesh_basename, &pmesh);
+            pd = new ParaViewDataCollection(mesh_basename, &pmesh);
             pd->SetPrefixPath(paraview_path);
 #ifdef DEBUG
             pd->RegisterField("grad phi epi", &grad_phi_epi);

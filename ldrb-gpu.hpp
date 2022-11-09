@@ -22,7 +22,6 @@
 typedef struct {
     int verbose;
     const char *mesh_file;
-    std::string mesh_basename;
     const char *output_dir;
     const char *device_config;
     bool time_to_file;
@@ -38,8 +37,8 @@ typedef struct {
     int epi_id;
     int lv_id;
     int rv_id;
-    bool geom_has_rv;
     int solver;
+    int uniform_refinement;
 #if defined(MFEM_USE_HIP) || defined(MFEM_USE_CUDA)
     bool gpu_tuned_amg;
 #endif
