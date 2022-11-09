@@ -163,6 +163,7 @@ static void vecnegate(vec3& a)
     a[2] = -a[2];
 }
 
+MFEM_HOST_DEVICE
 static bool vecisnonzero(vec3& a)
 {
     const double sum = a[0]*a[0] + a[1]*a[1] + a[2]*a[2];
@@ -545,7 +546,7 @@ static void calculate_fiber(
     const bool grad_phi_rv_nonzero  = vecisnonzero(grad_phi_rv);
 
 
-    mat3x3 Q_lv = {0};
+    mat3x3 Q_lv = {{{0}}};
     if (grad_phi_lv_nonzero) {
         vec3 grad_phi_lv_neg;
         {
@@ -558,21 +559,21 @@ static void calculate_fiber(
         orient(Q_lv, T, alpha_s_d, beta_s_d);
     }
 
-    mat3x3 Q_rv = {0};
+    mat3x3 Q_rv = {{{0}}};
     if (grad_phi_rv_nonzero) {
         mat3x3 T;
         axis(T, grad_psi_ab, grad_phi_rv);
         orient(Q_rv, T, alpha_s_d, beta_s_d);
     }
 
-    mat3x3 Q_epi = {0};
+    mat3x3 Q_epi = {{{0}}};
     if (grad_phi_epi_nonzero) {
         mat3x3 T;
         axis(T, grad_psi_ab, grad_phi_epi);
         orient(Q_epi, T, alpha_w_epi, beta_w_epi);
     }
 
-    mat3x3 FST = {0};
+    mat3x3 FST = {{{0}}};
 
     const bool in_rv_outer_wall = !grad_phi_lv_nonzero
                                &&  grad_phi_rv_nonzero
@@ -613,7 +614,7 @@ static void calculate_fiber(
     } else {
 
         // Use the algorithm in the paper
-        mat3x3 Q_endo = {0};
+        mat3x3 Q_endo = {{{0}}};
         bislerp(Q_endo, Q_lv, Q_rv, depth, tol);
         bislerp(FST, Q_endo, Q_epi, phi_epi, tol);
     }
