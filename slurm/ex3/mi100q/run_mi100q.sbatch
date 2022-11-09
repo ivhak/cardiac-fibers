@@ -3,16 +3,16 @@
 #SBATCH --partition=mi100q
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --time=03:00:00
-#SBATCH --nodelist=n004
-#SBATCH --output=jobs/%x-mi100q-%j-out.txt
-#SBATCH --error=jobs/%x-mi100q-%j-err.txt
+#SBATCH --time=10:00:00
+#SBATCH --gres=rsmi:1
+#SBATCH --output=jobs/%x-%j.out
+#SBATCH --error=jobs/%x-%j.err
 
 LDRB_DIR="${HOME}/master/ldrb-gpu"
 
 DATA_DIR="/global/D1/homes/iverh/data/meshes/martinez-navarro-etal/mesh/gmsh"
 
-JOB_DIR="./jobs/${SLURM_JOB_NAME}-mi100q-${SLURM_JOB_ID}"
+JOB_DIR="./jobs/${SLURM_JOB_NAME}-${SLURM_JOB_ID}"
 
 BUILD_DIR=
 
@@ -31,10 +31,8 @@ function run {
 function main {
     set -o errexit
 
-    TMPDIR=$(mktemp -d)
+    BUILD_DIR=/global/D1/homes/iverh/ldrb-gpu-${SLURM_JOB_ID}
 
-
-    BUILD_DIR=${TMPDIR}/ldrb-gpu
     cp -r ${LDRB_DIR} ${BUILD_DIR}
 
     . ${BUILD_DIR}/envsetup-ex3.sh mi100q
@@ -47,7 +45,6 @@ function main {
     echo "SLURM_SUBMIT_DIR=${SLURM_SUBMIT_DIR}"
     echo "SLURM_JOB_NODELIST=${SLURM_JOB_NODELIST}"
     echo "SLURM_JOB_CPUS_PER_NODE=${SLURM_JOB_CPUS_PER_NODE}"
-    echo "TMPDIR=${TMPDIR}"
     echo "BUILD_DIR=${BUILD_DIR}"
     set -x
     uname -a
@@ -66,7 +63,6 @@ function main {
     run heart03
     run heart04
     run heart05
-    run heart06
 }
 
 main

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #SBATCH --job-name=ldrb-gpu
-#SBATCH --partition=dgx2q
+#SBATCH --partition=mi210q
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --time=10:00:00
-#SBATCH --gres=gpu:1
+#SBATCH --gres=rsmi:1
 #SBATCH --output=jobs/%x-%j.out
 #SBATCH --error=jobs/%x-%j.err
 
@@ -35,7 +35,7 @@ function main {
 
     cp -r ${LDRB_DIR} ${BUILD_DIR}
 
-    . ${BUILD_DIR}/envsetup-ex3.sh dgx2q
+    . ${BUILD_DIR}/envsetup-ex3.sh mi210q
 
 
     # Print some diagnostics
@@ -50,7 +50,7 @@ function main {
     uname -a
     lscpu
     numactl -H
-    nvidia-smi
+    rocminfo
     git -C "${BUILD_DIR}" describe --always --abbrev=40 --dirty
     git -C "${BUILD_DIR}" log --oneline --decorate=short | head -n 10
 

@@ -3,10 +3,9 @@
 #SBATCH --partition=defq
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --time=03:00:00
-#SBATCH --nodelist=n004
-#SBATCH --output=jobs/%x-defq-%j-out.txt
-#SBATCH --error=jobs/%x-defq-%j-err.txt
+#SBATCH --time=10:00:00
+#SBATCH --output=jobs/%x-%j.err
+#SBATCH --error=jobs/%x-%j.err
 
 LDRB_DIR="${HOME}/master/ldrb-gpu"
 
@@ -31,10 +30,8 @@ function run {
 function main {
     set -o errexit
 
-    TMPDIR=$(mktemp -d)
+    BUILD_DIR=/global/D1/homes/iverh/ldrb-gpu-${SLURM_JOB_ID}
 
-
-    BUILD_DIR=${TMPDIR}/ldrb-gpu
     cp -r ${LDRB_DIR} ${BUILD_DIR}
 
     . ${BUILD_DIR}/envsetup-ex3.sh defq
@@ -47,7 +44,6 @@ function main {
     echo "SLURM_SUBMIT_DIR=${SLURM_SUBMIT_DIR}"
     echo "SLURM_JOB_NODELIST=${SLURM_JOB_NODELIST}"
     echo "SLURM_JOB_CPUS_PER_NODE=${SLURM_JOB_CPUS_PER_NODE}"
-    echo "TMPDIR=${TMPDIR}"
     echo "BUILD_DIR=${BUILD_DIR}"
     set -x
     uname -a
