@@ -163,16 +163,6 @@ static void vecnegate(vec3& a)
     a[2] = -a[2];
 }
 
-MFEM_HOST_DEVICE
-static bool vecisnonzero(vec3& a)
-{
-    const double sum = a[0]*a[0] + a[1]*a[1] + a[2]*a[2];
-    if (sum > 0.0) {
-        return true;
-    }
-    return false;
-}
-
 // Copy matrix B into A
 MFEM_HOST_DEVICE
 static void matcopy(mat3x3& A, mat3x3& B)
@@ -343,6 +333,7 @@ MFEM_HOST_DEVICE
 void axis(mat3x3& Q, vec3& u, vec3& v)
 {
 
+
     vec3 e0, e1, e2;
 
     // e1 = u / ||u||
@@ -355,7 +346,6 @@ void axis(mat3x3& Q, vec3& u, vec3& v)
     // Normalize v as an initial guess for e0
     veccopy(e2, v);
     vecnormalize(e2);
-
 
     vec3 e1_dot_e2_e1;
     {
@@ -469,27 +459,19 @@ void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t, double tol)
     k_qa[2] =  b;
     k_qa[3] =  a;
 
-    quat minus_qa, minus_i_qa, minus_j_qa, minus_k_qa;
-
-    quatcopy(minus_qa,   qa);   quatnegate(minus_qa);
-    quatcopy(minus_i_qa, i_qa); quatnegate(minus_i_qa);
-    quatcopy(minus_j_qa, j_qa); quatnegate(minus_j_qa);
-    quatcopy(minus_k_qa, k_qa); quatnegate(minus_k_qa);
-
-
-    quat *quat_array[8] = {
-        &qa,   &minus_qa,
-        &i_qa, &minus_i_qa,
-        &j_qa, &minus_j_qa,
-        &k_qa, &minus_k_qa,
+    quat *quat_array[4] = {
+        &qa,
+        &i_qa,
+        &j_qa,
+        &k_qa,
     };
 
     double max_abs_dot  = -1.0;
     quat qm = {0};
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < 4; i++) {
         quat *v = quat_array[i];
         const double abs_dot = abs(quatdot(qb, (*v)));
-        if (abs_dot >= max_abs_dot) {
+        if (abs_dot > max_abs_dot) {
             max_abs_dot = abs_dot;
             quatcopy(qm, (*v)) ;
         }
@@ -535,19 +517,18 @@ static void calculate_fiber(
         depth = phi_rv / (phi_lv + phi_rv);
     }
 
+    MFEM_ASSERT_KERNEL(depth >= 0.0 && depth <= 1.0, "depth not in range [0,1]");
+
     const double alpha_s_d = alpha_endo*(1.0-depth) - alpha_endo*depth;
     const double beta_s_d  = beta_endo *(1.0-depth) - beta_endo *depth;
 
     const double alpha_w_epi = alpha_endo*(1.0-phi_epi) + alpha_epi * phi_epi;
     const double beta_w_epi  = beta_endo *(1.0-phi_epi) + beta_epi  * phi_epi;
 
-    const bool grad_phi_epi_nonzero = vecisnonzero(grad_phi_epi);
-    const bool grad_phi_lv_nonzero  = vecisnonzero(grad_phi_lv);
-    const bool grad_phi_rv_nonzero  = vecisnonzero(grad_phi_rv);
 
 
     mat3x3 Q_lv = {{{0}}};
-    if (grad_phi_lv_nonzero) {
+    if (phi_lv > tol) {
         vec3 grad_phi_lv_neg;
         {
             veccopy(grad_phi_lv_neg, grad_phi_lv);
@@ -560,14 +541,14 @@ static void calculate_fiber(
     }
 
     mat3x3 Q_rv = {{{0}}};
-    if (grad_phi_rv_nonzero) {
+    if (phi_rv > tol) {
         mat3x3 T;
         axis(T, grad_psi_ab, grad_phi_rv);
         orient(Q_rv, T, alpha_s_d, beta_s_d);
     }
 
     mat3x3 Q_epi = {{{0}}};
-    if (grad_phi_epi_nonzero) {
+    if (phi_epi > tol) {
         mat3x3 T;
         axis(T, grad_psi_ab, grad_phi_epi);
         orient(Q_epi, T, alpha_w_epi, beta_w_epi);
@@ -575,48 +556,22 @@ static void calculate_fiber(
 
     mat3x3 FST = {{{0}}};
 
-    const bool in_rv_outer_wall = !grad_phi_lv_nonzero
-                               &&  grad_phi_rv_nonzero
-                               &&  grad_phi_epi_nonzero;
+    // Use the algorithm in the paper
+    mat3x3 Q_endo = {{{0}}};
+    bislerp(Q_endo, Q_lv, Q_rv, depth, tol);
+    bislerp(FST, Q_endo, Q_epi, phi_epi, tol);
 
-    const bool in_lv_outer_wall =  grad_phi_lv_nonzero
-                               && !grad_phi_rv_nonzero
-                               &&  grad_phi_epi_nonzero;
+    vec3 a;
+    a[0] = FST[0][0];
+    a[1] = FST[1][0];
+    a[2] = FST[2][0];
 
-    const bool in_septum        =  grad_phi_lv_nonzero
-                               &&  grad_phi_rv_nonzero
-                               && !grad_phi_epi_nonzero;
-
-    if (in_rv_outer_wall) {
-        // Since the gradient of phi_lv is zero, we know that we are somewhere
-        // in the outer wall of the right ventricle. phi_lv should also be zero here.
-        MFEM_ASSERT_KERNEL(phi_lv < 1e-15, "phi_lv is not zero.");
-
-        // As phi_lv is zero and we can skip the first bislerp because we
-        // already know that it will result in Q_rv.
-
-        bislerp(FST, Q_rv, Q_epi, phi_epi, tol);
-
-    } else if (in_lv_outer_wall) {
-        // Since the gradient of phi_rv is zero, we know that we are somewhere
-        // in the outer wall of the left ventricle. phi_rv should also be zero here.
-        MFEM_ASSERT_KERNEL(phi_rv < 1e-15, "phi_rv is not zero.");
-
-        bislerp(FST, Q_lv, Q_epi, phi_epi, tol);
-    } else if (in_septum) {
-        // phi_epi should be approximately zero in the septum
-        MFEM_ASSERT_KERNEL(phi_epi < 1e-15, "phi_epi is not zero.");
-
-        // As phi_epi is zero, we can skip the second bislerp, because we know
-        // it will results in Q_endo.
-        bislerp(FST, Q_lv, Q_rv, depth, tol);
-
-    } else {
-
-        // Use the algorithm in the paper
-        mat3x3 Q_endo = {{{0}}};
-        bislerp(Q_endo, Q_lv, Q_rv, depth, tol);
-        bislerp(FST, Q_endo, Q_epi, phi_epi, tol);
+    // Make sure the fibers are pointing "downwards"
+    if (vecdot(a, grad_psi_ab) > 0.0) {
+        vecnegate(a);
+        FST[0][0] = a[0];
+        FST[1][0] = a[1];
+        FST[2][0] = a[2];
     }
 
 

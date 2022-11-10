@@ -504,7 +504,7 @@ int main(int argc, char *argv[])
     Solver *solver;
     if (opts.solver == 0) {
         HyprePCG *cg = new HyprePCG(MPI_COMM_WORLD);
-        cg->SetTol(1e-12);
+        cg->SetTol(1e-20);
         cg->SetMaxIter(2000);
         cg->SetPrintLevel(opts.verbose >= 4 ? 1 : 0);
         if (prec) cg->SetPreconditioner(*prec);
