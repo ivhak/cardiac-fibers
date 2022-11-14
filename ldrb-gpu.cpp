@@ -266,6 +266,8 @@ int main(int argc, char *argv[])
     opts.gpu_tuned_amg = false;
 #endif
 
+    opts.use_dg = false;
+
     // Parse command-line options
     OptionsParser args(argc, argv);
     args.AddOption(&opts.verbose,
@@ -358,6 +360,12 @@ int main(int argc, char *argv[])
     args.AddOption(&opts.uniform_refinement,
             "-u", "--uniform-refinement",
             "Use uniform refinement");
+
+    args.AddOption(&opts.use_dg,
+            "-dg",  "--discontinuous-galerkin",
+            "-ndg", "--no-discontinuous-galerkin",
+            "Calculate fibers in the DG0 (one fiber per element) "
+            "space rather than H1 (one fiber per vertex).");
 
 #if defined (MFEM_USE_HIP) || defined (MFEM_USE_CUDA)
     args.AddOption(&opts.gpu_tuned_amg,
@@ -537,11 +545,12 @@ int main(int argc, char *argv[])
 
 
     // Set up the finite element collection. We use  first order H1-conforming finite elements.
-    H1_FECollection fec(1, pmesh.Dimension());
+    H1_FECollection h1_fec(1, pmesh.Dimension());
 
     // Set up two finite element spaces: one for scalar values (1D) , and one for 3d vectors
-    ParFiniteElementSpace fespace_scalar_h1(&pmesh, &fec);
-    ParFiniteElementSpace fespace_vector_h1(&pmesh, &fec, 3, mfem::Ordering::byVDIM);
+    ParFiniteElementSpace fespace_scalar_h1(&pmesh, &h1_fec);
+    ParFiniteElementSpace fespace_vector_h1(&pmesh, &h1_fec, 3, Ordering::byVDIM);
+
 
     int nattr = pmesh.bdr_attributes.Max();
     Array<int> ess_bdr(nattr);          // Essential boundaries
@@ -549,8 +558,8 @@ int main(int argc, char *argv[])
     Array<int> zero_ess_bdr(nattr);     // Essential boundaries with value 0.0
 
     // Solve the Laplace equation from EPI (1.0) to (LV_ENDO union RV_ENDO) (0.0)
-    ParGridFunction x_phi_epi(&fespace_scalar_h1);
-    x_phi_epi.UseDevice(true);
+    ParGridFunction *x_phi_epi = new ParGridFunction(&fespace_scalar_h1);
+    x_phi_epi->UseDevice(true);
     {
         if (opts.verbose > 1 && rank == 0) {
             logging::marker(tout, "Compute phi_epi", 1);
@@ -573,7 +582,7 @@ int main(int argc, char *argv[])
 
         tracing::roctx_range_push("laplace x_phi_epi");
 
-        laplace(&x_phi_epi, solver,
+        laplace(x_phi_epi, solver,
                 ess_bdr, nonzero_ess_bdr, zero_ess_bdr,
                 -1, opts.verbose, tout, rank);
 
@@ -591,8 +600,8 @@ int main(int argc, char *argv[])
 
 
     // Solve the Laplace equation from LV_ENDO (1.0) to (RV_ENDO union EPI) (0.0)
-    ParGridFunction x_phi_lv(&fespace_scalar_h1);
-    x_phi_lv.UseDevice(true);
+    ParGridFunction *x_phi_lv = new ParGridFunction(&fespace_scalar_h1);
+    x_phi_lv->UseDevice(true);
     {
         if (opts.verbose > 1 && rank == 0) {
             logging::marker(tout, "Compute phi_lv", 1);
@@ -615,7 +624,7 @@ int main(int argc, char *argv[])
 
         tracing::roctx_range_push("laplace x_phi_lv");
 
-        laplace(&x_phi_lv, solver,
+        laplace(x_phi_lv, solver,
                 ess_bdr, nonzero_ess_bdr, zero_ess_bdr,
                 -1, opts.verbose, tout, rank);
 
@@ -633,8 +642,8 @@ int main(int argc, char *argv[])
 
 
     // Solve the Laplace equation from RV_ENDO (1.0) to (LV_ENDO union EPI) (0.0)
-    ParGridFunction x_phi_rv(&fespace_scalar_h1);
-    x_phi_rv.UseDevice(true);
+    ParGridFunction *x_phi_rv = new ParGridFunction(&fespace_scalar_h1);
+    x_phi_rv->UseDevice(true);
     if (mesh_has_right_ventricle) {
         if (opts.verbose > 1 && rank == 0) {
             logging::marker(tout, "Compute phi_rv", 1);
@@ -655,7 +664,7 @@ int main(int argc, char *argv[])
 
         tracing::roctx_range_push("laplace x_phi_rv");
 
-        laplace(&x_phi_rv, solver,
+        laplace(x_phi_rv, solver,
                 ess_bdr, nonzero_ess_bdr, zero_ess_bdr,
                 -1, opts.verbose, tout, rank);
 
@@ -669,13 +678,13 @@ int main(int argc, char *argv[])
             }
         }
     } else {
-        x_phi_rv = 0.0;
+        *x_phi_rv = 0.0;
     }
 
 
     // Solve the Laplace equation from BASE (1.0) to APEX (0.0)
-    ParGridFunction x_psi_ab(&fespace_scalar_h1);
-    x_psi_ab.UseDevice(true);
+    ParGridFunction *x_psi_ab = new ParGridFunction(&fespace_scalar_h1);
+    x_psi_ab->UseDevice(true);
     {
         if (opts.verbose > 1 && rank == 0) {
             logging::marker(tout, "Compute psi_ab", 1);
@@ -692,7 +701,7 @@ int main(int argc, char *argv[])
 
         tracing::roctx_range_push("laplace x_psi_ab");
 
-        laplace(&x_psi_ab, solver,
+        laplace(x_psi_ab, solver,
                 ess_bdr, nonzero_ess_bdr, zero_ess_bdr,
                 apex, opts.verbose, tout, rank);
 
@@ -708,16 +717,48 @@ int main(int argc, char *argv[])
         }
     }
 
+    // Use we want the fibers to be in DG0, we first have to project the
+    // laplacians from H1 to DG0. Then we can compute the gradients in DG0.
+
+    DG_FECollection dg0_fec(0, pmesh.Dimension());
+
+    ParFiniteElementSpace fespace_vector_dg0(&pmesh, &dg0_fec, 3, Ordering::byVDIM);
+
+    ParFiniteElementSpace *gradient_space;
+    if (opts.use_dg) {
+        gradient_space = &fespace_vector_dg0;
+    } else {
+        gradient_space = &fespace_vector_h1;
+    }
 
     // Compute gradients for phi_epi, phi_lv, phi_rv and psi_ab
-    ParGridFunction grad_phi_epi(&fespace_vector_h1);
+    ParGridFunction grad_phi_epi(gradient_space);
     grad_phi_epi.UseDevice(true);
     {
         timing::tick(&t0);
         tracing::roctx_range_push("grad_phi_epi");
 
-        GradientGridFunctionCoefficient ggfc(&x_phi_epi);
+#if 0
+        if (opts.use_dg) {
+            // Calculate the gradient of the H1 space in DG0
+            GradientGridFunctionCoefficient ggfc(x_phi_epi);
+            grad_phi_epi.ProjectCoefficient(ggfc);
+
+        } else {
+            // Calculate the gradient of the H1 space in DG0, then project it back down to H1
+            ParGridFunction intermediate(&fespace_vector_dg0);
+
+            GradientGridFunctionCoefficient ggfc(x_phi_epi);
+            intermediate.ProjectCoefficient(ggfc);
+
+            GridFunctionCoefficient gfc(&intermediate);
+            grad_phi_epi.ProjectCoefficient(gfc);
+
+        }
+#else
+        GradientGridFunctionCoefficient ggfc(x_phi_epi);
         grad_phi_epi.ProjectCoefficient(ggfc);
+#endif
 
         tracing::roctx_range_pop();
         timing::tick(&t1);
@@ -726,13 +767,13 @@ int main(int argc, char *argv[])
         }
     }
 
-    ParGridFunction grad_phi_lv(&fespace_vector_h1);
+    ParGridFunction grad_phi_lv(gradient_space);
     grad_phi_lv.UseDevice(true);
     {
         timing::tick(&t0);
         tracing::roctx_range_push("grad_phi_lv");
 
-        GradientGridFunctionCoefficient ggfc(&x_phi_lv);
+        GradientGridFunctionCoefficient ggfc(x_phi_lv);
         grad_phi_lv.ProjectCoefficient(ggfc);
 
         tracing::roctx_range_pop();
@@ -742,13 +783,13 @@ int main(int argc, char *argv[])
         }
     }
 
-    ParGridFunction grad_phi_rv(&fespace_vector_h1);
+    ParGridFunction grad_phi_rv(gradient_space);
     grad_phi_rv.UseDevice(true);
     if (mesh_has_right_ventricle) {
         timing::tick(&t0);
         tracing::roctx_range_push("grad_phi_rv");
 
-        GradientGridFunctionCoefficient ggfc(&x_phi_rv);
+        GradientGridFunctionCoefficient ggfc(x_phi_rv);
         grad_phi_rv.ProjectCoefficient(ggfc);
 
         tracing::roctx_range_pop();
@@ -760,13 +801,13 @@ int main(int argc, char *argv[])
         grad_phi_rv = 0.0;
     }
 
-    ParGridFunction grad_psi_ab(&fespace_vector_h1);
+    ParGridFunction grad_psi_ab(gradient_space);
     grad_psi_ab.UseDevice(true);
     {
         timing::tick(&t0);
         tracing::roctx_range_push("grad_psi_ab");
 
-        GradientGridFunctionCoefficient ggfc(&x_psi_ab);
+        GradientGridFunctionCoefficient ggfc(x_psi_ab);
         grad_psi_ab.ProjectCoefficient(ggfc);
 
         tracing::roctx_range_pop();
@@ -776,10 +817,62 @@ int main(int argc, char *argv[])
         }
     }
 
+    if (opts.use_dg) {
+        timing::tick(&t0);
+
+        ParFiniteElementSpace *fespace_scalar_dg0 = new ParFiniteElementSpace(&pmesh, &dg0_fec);
+
+        ParGridFunction *x_phi_epi_dg0 = new ParGridFunction(fespace_scalar_dg0);
+        {
+            GridFunctionCoefficient gfc(x_phi_epi);
+            x_phi_epi_dg0->ProjectCoefficient(gfc);
+        }
+        delete x_phi_epi;
+        x_phi_epi = x_phi_epi_dg0;
+
+        ParGridFunction *x_phi_lv_dg0 = new ParGridFunction(fespace_scalar_dg0);
+        {
+            GridFunctionCoefficient gfc(x_phi_lv);
+            x_phi_lv_dg0->ProjectCoefficient(gfc);
+        }
+        delete x_phi_rv;
+        x_phi_rv = x_phi_rv_dg0;
+
+        ParGridFunction *x_phi_rv_dg0 = new ParGridFunction(fespace_scalar_dg0);
+        {
+            GridFunctionCoefficient gfc(x_phi_rv);
+            x_phi_rv_dg0->ProjectCoefficient(gfc);
+        }
+        delete x_phi_lv;
+        x_phi_lv = x_phi_lv_dg0;
+
+#ifdef DEBUG
+        // We really don't need to project x_psi_ab into DG0, because the
+        // gradient is computed from H1 to DG0 already, and x_psi_ab is not
+        // needed for more than its gradient.
+        ParGridFunction *x_psi_ab_dg0 = new ParGridFunction(fespace_scalar_dg0);
+        {
+            GridFunctionCoefficient gfc(x_psi_ab);
+            x_psi_ab_dg0->ProjectCoefficient(gfc);
+        }
+        delete x_psi_ab;
+        x_psi_ab = x_psi_ab_dg0;
+#else
+        delete x_psi_ab;
+#endif
+
+
+        timing::tick(&t1);
+        if (opts.verbose && rank == 0 ) {
+            logging::timestamp(tout, "Project from H1 to DG0", timing::duration(t0, t1), 1);
+        }
+
+    }
+
     // Get read-only pointers to the internal arrays of the laplacian solutions
-    const double *phi_epi = x_phi_epi.Read();
-    const double *phi_lv  = x_phi_lv.Read();
-    const double *phi_rv  = x_phi_rv.Read();
+    const double *phi_epi = x_phi_epi->Read();
+    const double *phi_lv  = x_phi_lv->Read();
+    const double *phi_rv  = x_phi_rv->Read();
 
     // Get read-only pointers to the internal arrays of the gradients
     const double *grad_phi_epi_vals = grad_phi_epi.Read();
@@ -788,9 +881,9 @@ int main(int argc, char *argv[])
     const double *grad_psi_ab_vals  = grad_psi_ab.Read();
 
     // Setup GridFunctions to store the fibre directions in
-    ParGridFunction F(&fespace_vector_h1);
-    ParGridFunction S(&fespace_vector_h1);
-    ParGridFunction T(&fespace_vector_h1);
+    ParGridFunction F(gradient_space);
+    ParGridFunction S(gradient_space);
+    ParGridFunction T(gradient_space);
 
     // Get write-only pointers to the internal arrays
     double *F_vals = F.Write();
@@ -802,7 +895,7 @@ int main(int argc, char *argv[])
     timing::tick(&t0);
     util::tracing::roctx_range_push("define_fibers");
     define_fibers(
-            pmesh.GetNV(),
+            x_phi_epi->Size(),
             phi_epi, phi_lv, phi_rv,
             grad_phi_epi_vals, grad_phi_lv_vals, grad_phi_rv_vals, grad_psi_ab_vals,
             opts.alpha_endo, opts.alpha_epi, opts.beta_endo, opts.beta_epi,
@@ -844,10 +937,10 @@ int main(int argc, char *argv[])
 #ifdef DEBUG
             std::string debug_dir = mfem_output_dir + "/debug";
             fs::mksubdir(debug_dir);
-            save::save_solution(&x_phi_epi, debug_dir, mesh_basename, "_phi_epi.gf", rank);
-            save::save_solution(&x_phi_lv,  debug_dir, mesh_basename, "_phi_lv.gf", rank);
-            save::save_solution(&x_phi_rv,  debug_dir, mesh_basename, "_phi_rv.gf", rank);
-            save::save_solution(&x_psi_ab,  debug_dir, mesh_basename, "_psi_ab.gf", rank);
+            save::save_solution(x_phi_epi, debug_dir, mesh_basename, "_phi_epi.gf", rank);
+            save::save_solution(x_phi_lv,  debug_dir, mesh_basename, "_phi_lv.gf", rank);
+            save::save_solution(x_phi_rv,  debug_dir, mesh_basename, "_phi_rv.gf", rank);
+            save::save_solution(x_psi_ab,  debug_dir, mesh_basename, "_psi_ab.gf", rank);
 
             save::save_solution(&grad_phi_epi, debug_dir, mesh_basename, "_grad_phi_epi.gf", rank);
             save::save_solution(&grad_phi_lv,  debug_dir, mesh_basename, "_grad_phi_lv.gf", rank);
@@ -874,10 +967,10 @@ int main(int argc, char *argv[])
             pd->RegisterField("grad phi lv",  &grad_phi_lv);
             pd->RegisterField("grad phi rv",  &grad_phi_rv);
             pd->RegisterField("grad psi ab",  &grad_psi_ab);
-            pd->RegisterField("phi epi", &x_phi_epi);
-            pd->RegisterField("phi lv",  &x_phi_lv);
-            pd->RegisterField("phi rv",  &x_phi_rv);
-            pd->RegisterField("psi ab",  &x_psi_ab);
+            pd->RegisterField("phi epi", x_phi_epi);
+            pd->RegisterField("phi lv",  x_phi_lv);
+            pd->RegisterField("phi rv",  x_phi_rv);
+            pd->RegisterField("psi ab",  x_psi_ab);
 #endif
             pd->RegisterField("F", &F);
             pd->RegisterField("S", &S);

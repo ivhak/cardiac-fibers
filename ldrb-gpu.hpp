@@ -42,6 +42,7 @@ typedef struct {
 #if defined(MFEM_USE_HIP) || defined(MFEM_USE_CUDA)
     bool gpu_tuned_amg;
 #endif
+    bool use_dg;
 } Options;
 
 #define LDRB_GPU_HPP
