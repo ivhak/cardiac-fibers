@@ -835,16 +835,16 @@ int main(int argc, char *argv[])
             GridFunctionCoefficient gfc(x_phi_lv);
             x_phi_lv_dg0->ProjectCoefficient(gfc);
         }
-        delete x_phi_rv;
-        x_phi_rv = x_phi_rv_dg0;
+        delete x_phi_lv;
+        x_phi_lv = x_phi_lv_dg0;
 
         ParGridFunction *x_phi_rv_dg0 = new ParGridFunction(fespace_scalar_dg0);
         {
             GridFunctionCoefficient gfc(x_phi_rv);
             x_phi_rv_dg0->ProjectCoefficient(gfc);
         }
-        delete x_phi_lv;
-        x_phi_lv = x_phi_lv_dg0;
+        delete x_phi_rv;
+        x_phi_rv = x_phi_rv_dg0;
 
 #ifdef DEBUG
         // We really don't need to project x_psi_ab into DG0, because the
