@@ -19,7 +19,7 @@
 #define CACLULUS_HPP
 #include "mfem.hpp"
 
-const double PI=3.14159265;
+const double PI=3.14159265358979323846;
 
 typedef struct vec3 {
     double data[3];
@@ -50,7 +50,7 @@ MFEM_HOST_DEVICE void quat2rot(mat3x3& Q, quat& q);
 MFEM_HOST_DEVICE void rot2quat(quat& q, mat3x3& Q);
 MFEM_HOST_DEVICE void orient(mat3x3& Q_out, mat3x3& Q, double a, double b);
 MFEM_HOST_DEVICE void axis(mat3x3& Q, vec3& psi, vec3& phi);
-MFEM_HOST_DEVICE void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t, double tol);
+MFEM_HOST_DEVICE void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t);
 
 void define_fibers(
     int n,

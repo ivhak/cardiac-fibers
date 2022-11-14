@@ -172,6 +172,21 @@ static void matcopy(mat3x3& A, mat3x3& B)
     A[2][0] = B[2][0]; A[2][1] = B[2][1]; A[2][2] = B[2][2];
 }
 
+// Copy matrix B into A
+MFEM_HOST_DEVICE
+static bool matiszero(mat3x3& A)
+{
+    return A[0][0] == 0.0
+        && A[0][1] == 0.0
+        && A[0][2] == 0.0
+        && A[1][0] == 0.0
+        && A[1][1] == 0.0
+        && A[1][2] == 0.0
+        && A[2][0] == 0.0
+        && A[2][1] == 0.0
+        && A[2][2] == 0.0;
+}
+
 // Set matrix C to the matrix multiplication of A and B; C = A x B
 MFEM_HOST_DEVICE
 static void matmul(mat3x3& C, mat3x3& A, mat3x3& B )
@@ -299,28 +314,15 @@ static void slerp(quat& q, quat& q1, quat& q2, double t)
 
     // Slerp(q1, q2, t) = ((sin(1-t)*theta)/sin(theta))q1 + ((sin(t)*theta)/sin(theta))q2
     // where theta = acos(q1 dot q2)
-    if (dot < 1.0 - 1e-4) {
-        const double angle = acos(dot);
-        const double a = sin(angle * (1-t))/sin(angle);
-        const double b = sin(angle * t)/sin(angle);
+    const double angle = acos(dot);
+    const double a = sin(angle * (1-t))/sin(angle);
+    const double b = sin(angle * t)/sin(angle);
 
-        quat q1a = {0};
-        quatcopy(q1a, q1);
-        quatmul(q1a, a);
-        quatmul(q, b);
-        quatadd(q, q1a);
-    } else {
-        // Linear interpolation: q = q1(1-t) + q2*t
-
-        quatcopy(q, q1);
-        quatmul(q, (1-t));
-
-        quat qt;
-        quatcopy(qt, q2);
-        quatmul(qt, t);
-
-        quatadd(q, qt);
-    }
+    quat q1a = {0};
+    quatcopy(q1a, q1);
+    quatmul(q1a, a);
+    quatmul(q, b);
+    quatadd(q, q1a);
 }
 
 // Given two vectors u and v, u being a vector pointing in
@@ -420,15 +422,17 @@ void orient(mat3x3& Q_out, mat3x3& Q, double a, double b)
 //
 // As defined in Function 4 in the supplementary material of Bayer2012.
 MFEM_HOST_DEVICE
-void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t, double tol)
+void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t)
 {
-    if (t <= tol) {
-        matcopy(Qab, Qa);
-        return;
-    }
 
-    if (t >= 1.0 - tol) {
+    if (matiszero(Qa) && matiszero(Qb)) {
+        // Assume that Qab is already zero
+        return;
+    } else if (matiszero(Qa)) {
         matcopy(Qab, Qb);
+        return;
+    } else if (matiszero(Qb)) {
+        matcopy(Qab, Qa);
         return;
     }
 
@@ -440,6 +444,12 @@ void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t, double tol)
     // Find qm in { ±qa, ±i*qa, ±j*qa, ±k*qa} that maximizes ||qm*qb||
 
     const double a = qa[0], b = qa[1], c = qa[2], d = qa[3];
+
+    quat qa_minus = {0};
+    qa_minus[0] = -a;
+    qa_minus[1] = -b;
+    qa_minus[2] = -c;
+    qa_minus[3] = -d;
 
     quat i_qa = {0};
     i_qa[0] = -b;
@@ -459,16 +469,40 @@ void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t, double tol)
     k_qa[2] =  b;
     k_qa[3] =  a;
 
-    quat *quat_array[4] = {
+    quat i_qa_minus = {0};
+    i_qa_minus[0] = -i_qa[0];
+    i_qa_minus[1] = -i_qa[1];
+    i_qa_minus[2] = -i_qa[2];
+    i_qa_minus[3] = -i_qa[3];
+
+
+    quat j_qa_minus = {0};
+    j_qa_minus[0] = -j_qa[0];
+    j_qa_minus[1] = -j_qa[1];
+    j_qa_minus[2] = -j_qa[2];
+    j_qa_minus[3] = -j_qa[3];
+
+
+    quat k_qa_minus = {0};
+    k_qa_minus[0] = -k_qa[0];
+    k_qa_minus[1] = -k_qa[1];
+    k_qa_minus[2] = -k_qa[2];
+    k_qa_minus[3] = -k_qa[3];
+
+    quat *quat_array[8] = {
         &qa,
+        &qa_minus,
         &i_qa,
+        &i_qa_minus,
         &j_qa,
+        &j_qa_minus,
         &k_qa,
+        &k_qa_minus,
     };
 
     double max_abs_dot  = -1.0;
     quat qm = {0};
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 8; i++) {
         quat *v = quat_array[i];
         const double abs_dot = abs(quatdot(qb, (*v)));
         if (abs_dot > max_abs_dot) {
@@ -493,13 +527,13 @@ void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t, double tol)
 MFEM_HOST_DEVICE
 static void calculate_fiber(
     int i,
-    const double phi_epi,
-    const double phi_lv,
-    const double phi_rv,
-    vec3& grad_phi_epi,
-    vec3& grad_phi_lv,
-    vec3& grad_phi_rv,
-    vec3& grad_psi_ab,
+    const double epi,
+    const double lv,
+    const double rv,
+    vec3& grad_epi,
+    vec3& grad_lv,
+    vec3& grad_rv,
+    vec3& grad_ab,
     double alpha_endo,
     double alpha_epi,
     double beta_endo,
@@ -511,81 +545,63 @@ static void calculate_fiber(
 {
 
     double depth;
-    if (phi_lv + phi_rv < 1e-15) {
+    if (lv + rv < tol) {
         depth = 0.5;
     } else {
-        depth = phi_rv / (phi_lv + phi_rv);
+        depth = rv / (lv + rv);
     }
 
     MFEM_ASSERT_KERNEL(depth >= 0.0 && depth <= 1.0, "depth not in range [0,1]");
 
-    const double alpha_s_d = alpha_endo*(1.0-depth) - alpha_endo*depth;
-    const double beta_s_d  = beta_endo *(1.0-depth) - beta_endo *depth;
+    const double alpha_s = alpha_endo*(1.0-depth) - alpha_endo*depth;
+    const double alpha_w = alpha_endo*(1.0-epi)   + alpha_epi*epi;
 
-    const double alpha_w_epi = alpha_endo*(1.0-phi_epi) + alpha_epi * phi_epi;
-    const double beta_w_epi  = beta_endo *(1.0-phi_epi) + beta_epi  * phi_epi;
-
-
+    const double beta_s  = beta_endo*(1.0-depth) - beta_endo*depth;
+    const double beta_w  = beta_endo*(1.0-epi)   + beta_epi*epi;
 
     mat3x3 Q_lv = {{{0}}};
-    if (phi_lv > tol) {
-        vec3 grad_phi_lv_neg;
-        {
-            veccopy(grad_phi_lv_neg, grad_phi_lv);
-            vecnegate(grad_phi_lv_neg);
-        }
+    if (lv > tol) {
+        vec3 grad_lv_neg = {0};
+        veccopy(grad_lv_neg, grad_lv);
+        vecnegate(grad_lv_neg);
 
-        mat3x3 T;
-        axis(T, grad_psi_ab, grad_phi_lv_neg);
-        orient(Q_lv, T, alpha_s_d, beta_s_d);
+        mat3x3 T = {{{0}}};
+        axis(T, grad_ab, grad_lv_neg);
+        orient(Q_lv, T, alpha_s, beta_s);
     }
 
     mat3x3 Q_rv = {{{0}}};
-    if (phi_rv > tol) {
-        mat3x3 T;
-        axis(T, grad_psi_ab, grad_phi_rv);
-        orient(Q_rv, T, alpha_s_d, beta_s_d);
+    if (rv > tol) {
+        mat3x3 T = {{{0}}};
+        axis(T, grad_ab, grad_rv);
+        orient(Q_rv, T, alpha_s, beta_s);
     }
+
+    mat3x3 Q_endo = {{{0}}};
+    bislerp(Q_endo, Q_lv, Q_rv, depth);
 
     mat3x3 Q_epi = {{{0}}};
-    if (phi_epi > tol) {
-        mat3x3 T;
-        axis(T, grad_psi_ab, grad_phi_epi);
-        orient(Q_epi, T, alpha_w_epi, beta_w_epi);
+    if (epi > tol) {
+        mat3x3 T = {{{0}}};
+        axis(T, grad_ab, grad_epi);
+        orient(Q_epi, T, alpha_w, beta_w);
     }
 
-    mat3x3 FST = {{{0}}};
+    mat3x3 Q_fiber = {{{0}}};
 
-    // Use the algorithm in the paper
-    mat3x3 Q_endo = {{{0}}};
-    bislerp(Q_endo, Q_lv, Q_rv, depth, tol);
-    bislerp(FST, Q_endo, Q_epi, phi_epi, tol);
+    bislerp(Q_fiber, Q_endo, Q_epi, epi);
 
-    vec3 a;
-    a[0] = FST[0][0];
-    a[1] = FST[1][0];
-    a[2] = FST[2][0];
+    F[3*i+0] = Q_fiber[0][0];
+    F[3*i+1] = Q_fiber[1][0];
+    F[3*i+2] = Q_fiber[2][0];
 
-    // Make sure the fibers are pointing "downwards"
-    if (vecdot(a, grad_psi_ab) > 0.0) {
-        vecnegate(a);
-        FST[0][0] = a[0];
-        FST[1][0] = a[1];
-        FST[2][0] = a[2];
-    }
+    S[3*i+0] = Q_fiber[0][1];
+    S[3*i+1] = Q_fiber[1][1];
+    S[3*i+2] = Q_fiber[2][1];
 
-
-    F[3*i+0] = FST[0][0];
-    F[3*i+1] = FST[1][0];
-    F[3*i+2] = FST[2][0];
-
-    S[3*i+0] = FST[0][1];
-    S[3*i+1] = FST[1][1];
-    S[3*i+2] = FST[2][1];
-
-    T[3*i+0] = FST[0][2];
-    T[3*i+1] = FST[1][2];
-    T[3*i+2] = FST[2][2];
+    T[3*i+0] = Q_fiber[0][2];
+    T[3*i+1] = Q_fiber[1][2];
+    T[3*i+2] = Q_fiber[2][2];
 
 }
 
