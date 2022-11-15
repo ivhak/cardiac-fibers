@@ -246,7 +246,7 @@ int main(int argc, char *argv[])
     opts.save_mfem = true;
     opts.save_paraview = false;
 
-    opts.itol = 1e-1;
+    opts.itol = 1e-12;
 
     opts.alpha_endo =  60.0;
     opts.alpha_epi  = -60.0;
