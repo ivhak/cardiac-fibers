@@ -133,7 +133,7 @@ void laplace(
     }
     timing::tick(&t1);
     if (verbose >= 2 && rank == 0) {
-        logging::timestamp(tout, "Setup boundary cond.", timing::duration(t0, t1), 2);
+        logging::timestamp(tout, "Setup boundary cond.", timing::duration(t0, t1), 3);
     }
     tracing::roctx_range_pop(); // Setup boundary conditions
 
@@ -158,7 +158,7 @@ void laplace(
     b.Assemble();
     timing::tick(&t1);
     if (verbose >= 2 && rank == 0) {
-        logging::timestamp(tout, "Assemble RHS", timing::duration(t0, t1), 2);
+        logging::timestamp(tout, "Assemble RHS", timing::duration(t0, t1), 3);
     }
     tracing::roctx_range_pop(); // Assemble RHS
 
@@ -183,7 +183,7 @@ void laplace(
     a.Assemble();
     timing::tick(&t1);
     if (verbose >= 2 && rank == 0) {
-        logging::timestamp(tout, "Assemble LHS", timing::duration(t0, t1), 2);
+        logging::timestamp(tout, "Assemble LHS", timing::duration(t0, t1), 3);
     }
     tracing::roctx_range_pop(); // Assemble LHS
 
@@ -196,7 +196,7 @@ void laplace(
     a.FormLinearSystem(ess_tdof_list, *x, b, A, X, B);
     timing::tick(&t1);
     if (verbose >= 2 && rank == 0) {
-        logging::timestamp(tout, "Form linear system", timing::duration(t0, t1), 2);
+        logging::timestamp(tout, "Form linear system", timing::duration(t0, t1), 3);
     }
     tracing::roctx_range_pop(); // Form linear system
 
@@ -208,7 +208,7 @@ void laplace(
     solver->Mult(B, X);
     timing::tick(&t1);
     if (verbose >= 2 && rank == 0) {
-        logging::timestamp(tout, "Solve", timing::duration(t0, t1), 2);
+        logging::timestamp(tout, "Solve", timing::duration(t0, t1), 3);
     }
     tracing::roctx_range_pop(); // Solve
 
@@ -536,13 +536,18 @@ int main(int argc, char *argv[])
     }
 
     // Time the fiber orientation calculations
-    struct timespec start_fiber, end_fiber;
-    timing::tick(&start_fiber);
+    struct timespec begin_fiber, end_fiber;
+    timing::tick(&begin_fiber);
 
     if (opts.verbose && rank == 0) {
         logging::marker(tout, "Compute fiber orientation");
     }
 
+    struct timespec begin_laplace, end_laplace;
+    timing::tick(&begin_laplace);
+    if (opts.verbose >= 2 && rank == 0) {
+        logging::marker(tout, "Compute laplacians", 1);
+    }
 
     // Set up the finite element collection. We use  first order H1-conforming finite elements.
     H1_FECollection h1_fec(1, pmesh.Dimension());
@@ -561,8 +566,8 @@ int main(int argc, char *argv[])
     ParGridFunction *x_phi_epi = new ParGridFunction(&fespace_scalar_h1);
     x_phi_epi->UseDevice(true);
     {
-        if (opts.verbose > 1 && rank == 0) {
-            logging::marker(tout, "Compute phi_epi", 1);
+        if (opts.verbose >= 2 && rank == 0) {
+            logging::marker(tout, "phi_epi", 2);
         }
         timing::tick(&t0);
 
@@ -589,12 +594,8 @@ int main(int argc, char *argv[])
         tracing::roctx_range_pop();
 
         timing::tick(&t1);
-        if (opts.verbose && rank == 0) {
-            if (opts.verbose > 1) {
-                logging::timestamp(tout, "Total", timing::duration(t0, t1), 2, '=');
-            } else {
-                logging::timestamp(tout, "Compute phi_epi", timing::duration(t0, t1), 1);
-            }
+        if (opts.verbose >= 2 && rank == 0) {
+            logging::timestamp(tout, "Total", timing::duration(t0, t1), 3, '=');
         }
     }
 
@@ -603,8 +604,8 @@ int main(int argc, char *argv[])
     ParGridFunction *x_phi_lv = new ParGridFunction(&fespace_scalar_h1);
     x_phi_lv->UseDevice(true);
     {
-        if (opts.verbose > 1 && rank == 0) {
-            logging::marker(tout, "Compute phi_lv", 1);
+        if (opts.verbose >= 2 && rank == 0) {
+            logging::marker(tout, "phi_lv", 2);
         }
         timing::tick(&t0);
 
@@ -631,12 +632,8 @@ int main(int argc, char *argv[])
         tracing::roctx_range_pop();
 
         timing::tick(&t1);
-        if (opts.verbose && rank == 0) {
-            if (opts.verbose > 1) {
-                logging::timestamp(tout, "Total", timing::duration(t0, t1), 2, '=');
-            } else {
-                logging::timestamp(tout, "Compute phi_lv", timing::duration(t0, t1), 1);
-            }
+        if (opts.verbose >= 2 && rank == 0) {
+            logging::timestamp(tout, "Total", timing::duration(t0, t1), 3, '=');
         }
     }
 
@@ -645,8 +642,8 @@ int main(int argc, char *argv[])
     ParGridFunction *x_phi_rv = new ParGridFunction(&fespace_scalar_h1);
     x_phi_rv->UseDevice(true);
     if (mesh_has_right_ventricle) {
-        if (opts.verbose > 1 && rank == 0) {
-            logging::marker(tout, "Compute phi_rv", 1);
+        if (opts.verbose >= 2 && rank == 0) {
+            logging::marker(tout, "phi_rv", 2);
         }
         timing::tick(&t0);
 
@@ -670,12 +667,8 @@ int main(int argc, char *argv[])
 
         tracing::roctx_range_pop();
         timing::tick(&t1);
-        if (opts.verbose && rank == 0) {
-            if (opts.verbose > 1) {
-                logging::timestamp(tout, "Total", timing::duration(t0, t1), 2, '=');
-            } else {
-                logging::timestamp(tout, "Compute phi_rv", timing::duration(t0, t1), 1);
-            }
+        if (opts.verbose >= 2 && rank == 0) {
+            logging::timestamp(tout, "Total", timing::duration(t0, t1), 3, '=');
         }
     } else {
         *x_phi_rv = 0.0;
@@ -686,8 +679,8 @@ int main(int argc, char *argv[])
     ParGridFunction *x_psi_ab = new ParGridFunction(&fespace_scalar_h1);
     x_psi_ab->UseDevice(true);
     {
-        if (opts.verbose > 1 && rank == 0) {
-            logging::marker(tout, "Compute psi_ab", 1);
+        if (opts.verbose >= 2 && rank == 0) {
+            logging::marker(tout, "psi_ab", 2);
         }
         timing::tick(&t0);
 
@@ -708,13 +701,16 @@ int main(int argc, char *argv[])
         tracing::roctx_range_pop();
 
         timing::tick(&t1);
-        if (opts.verbose && rank == 0 ) {
-            if (opts.verbose > 1) {
-                logging::timestamp(tout, "Total", timing::duration(t0, t1), 2, '=');
-            } else {
-                logging::timestamp(tout, "Compute psi_epi", timing::duration(t0, t1), 1);
-            }
+        if (opts.verbose >= 2 && rank == 0 ) {
+            logging::timestamp(tout, "Total", timing::duration(t0, t1), 3, '=');
         }
+    }
+
+    timing::tick(&end_laplace);
+    if (opts.verbose >= 2 && rank == 0) {
+        logging::timestamp(tout, "Total", timing::duration(begin_laplace, end_laplace), 2, '=');
+    } else if (opts.verbose && rank == 0) {
+        logging::timestamp(tout, "Compute laplacians", timing::duration(begin_laplace, end_laplace), 1);
     }
 
     // Use we want the fibers to be in DG0, we first have to project the
@@ -729,6 +725,12 @@ int main(int argc, char *argv[])
         gradient_space = &fespace_vector_dg0;
     } else {
         gradient_space = &fespace_vector_h1;
+    }
+
+    struct timespec begin_grad, end_grad;
+    timing::tick(&begin_grad);
+    if (opts.verbose >= 2 && rank == 0) {
+        logging::marker(tout, "Compute gradients", 1);
     }
 
     // Compute gradients for phi_epi, phi_lv, phi_rv and psi_ab
@@ -762,8 +764,8 @@ int main(int argc, char *argv[])
 
         tracing::roctx_range_pop();
         timing::tick(&t1);
-        if (opts.verbose && rank == 0) {
-            logging::timestamp(tout, "Compute grad_phi_epi", timing::duration(t0, t1), 1);
+        if (opts.verbose >= 2 && rank == 0) {
+            logging::timestamp(tout, "grad_phi_epi", timing::duration(t0, t1), 2);
         }
     }
 
@@ -778,8 +780,8 @@ int main(int argc, char *argv[])
 
         tracing::roctx_range_pop();
         timing::tick(&t1);
-        if (opts.verbose && rank == 0) {
-            logging::timestamp(tout, "Compute grad_phi_lv", timing::duration(t0, t1), 1);
+        if (opts.verbose >= 2&& rank == 0) {
+            logging::timestamp(tout, "grad_phi_lv", timing::duration(t0, t1), 2);
         }
     }
 
@@ -794,8 +796,8 @@ int main(int argc, char *argv[])
 
         tracing::roctx_range_pop();
         timing::tick(&t1);
-        if (opts.verbose && rank == 0) {
-            logging::timestamp(tout, "Compute grad_phi_rv", timing::duration(t0, t1), 1);
+        if (opts.verbose >= 2&& rank == 0) {
+            logging::timestamp(tout, "grad_phi_rv", timing::duration(t0, t1), 2);
         }
     } else {
         grad_phi_rv = 0.0;
@@ -812,59 +814,85 @@ int main(int argc, char *argv[])
 
         tracing::roctx_range_pop();
         timing::tick(&t1);
-        if (opts.verbose && rank == 0) {
-            logging::timestamp(tout, "Compute grad_psi_ab", timing::duration(t0, t1), 1);
+        if (opts.verbose >= 2&& rank == 0) {
+            logging::timestamp(tout, "grad_psi_ab", timing::duration(t0, t1), 2);
         }
     }
+    timing::tick(&end_grad);
+    if (opts.verbose >= 2 && rank == 0) {
+        logging::timestamp(tout, "Total", timing::duration(begin_grad, end_grad), 2, '=');
+    } else if (opts.verbose && rank == 0) {
+        logging::timestamp(tout, "Compute gradients", timing::duration(begin_grad, end_grad), 1);
+    }
 
+    // We only need the gradients of the apex to base solution.
+    delete x_psi_ab;
+
+    // If the fiber orientations are to be calculated in the DG0 space, i.e. on
+    // fiber per element rather than per vertex, the solutions need to be
+    // projected into said space.
     if (opts.use_dg) {
-        timing::tick(&t0);
+        if (opts.verbose >= 2 && rank == 0) {
+            logging::marker(tout, "Project laplacians H1 -> DG0", 1);
+        }
+        struct timespec begin_proj, end_proj;
+        timing::tick(&begin_proj);
+        tracing::roctx_range_push("Project laplacians H1 -> DG0");
 
         ParFiniteElementSpace *fespace_scalar_dg0 = new ParFiniteElementSpace(&pmesh, &dg0_fec);
 
+        // Epicardium
+        timing::tick(&t0);
         ParGridFunction *x_phi_epi_dg0 = new ParGridFunction(fespace_scalar_dg0);
+        x_phi_epi_dg0->UseDevice(true);
         {
             GridFunctionCoefficient gfc(x_phi_epi);
             x_phi_epi_dg0->ProjectCoefficient(gfc);
         }
         delete x_phi_epi;
         x_phi_epi = x_phi_epi_dg0;
+        timing::tick(&t1);
+        if (opts.verbose >= 2 && rank == 0) {
+            logging::timestamp(tout, "x_phi_epi", timing::duration(t0, t1), 2);
+        }
 
+        // Left ventricle
+        timing::tick(&t0);
         ParGridFunction *x_phi_lv_dg0 = new ParGridFunction(fespace_scalar_dg0);
+        x_phi_lv_dg0->UseDevice(true);
         {
             GridFunctionCoefficient gfc(x_phi_lv);
             x_phi_lv_dg0->ProjectCoefficient(gfc);
         }
         delete x_phi_lv;
         x_phi_lv = x_phi_lv_dg0;
-
-        ParGridFunction *x_phi_rv_dg0 = new ParGridFunction(fespace_scalar_dg0);
-        {
-            GridFunctionCoefficient gfc(x_phi_rv);
-            x_phi_rv_dg0->ProjectCoefficient(gfc);
-        }
-        delete x_phi_rv;
-        x_phi_rv = x_phi_rv_dg0;
-
-#ifdef DEBUG
-        // We really don't need to project x_psi_ab into DG0, because the
-        // gradient is computed from H1 to DG0 already, and x_psi_ab is not
-        // needed for more than its gradient.
-        ParGridFunction *x_psi_ab_dg0 = new ParGridFunction(fespace_scalar_dg0);
-        {
-            GridFunctionCoefficient gfc(x_psi_ab);
-            x_psi_ab_dg0->ProjectCoefficient(gfc);
-        }
-        delete x_psi_ab;
-        x_psi_ab = x_psi_ab_dg0;
-#else
-        delete x_psi_ab;
-#endif
-
-
         timing::tick(&t1);
-        if (opts.verbose && rank == 0 ) {
-            logging::timestamp(tout, "Project from H1 to DG0", timing::duration(t0, t1), 1);
+        if (opts.verbose >= 2 && rank == 0) {
+            logging::timestamp(tout, "x_phi_lv", timing::duration(t0, t1), 2);
+        }
+
+        if (mesh_has_right_ventricle) {
+            timing::tick(&t0);
+            ParGridFunction *x_phi_rv_dg0 = new ParGridFunction(fespace_scalar_dg0);
+            x_phi_rv_dg0->UseDevice(true);
+            {
+                GridFunctionCoefficient gfc(x_phi_rv);
+                x_phi_rv_dg0->ProjectCoefficient(gfc);
+            }
+            delete x_phi_rv;
+            x_phi_rv = x_phi_rv_dg0;
+            timing::tick(&t1);
+            if (opts.verbose >= 2 && rank == 0) {
+                logging::timestamp(tout, "x_phi_rv", timing::duration(t0, t1), 2);
+            }
+
+        }
+        tracing::roctx_range_pop();
+        timing::tick(&end_proj);
+        if (opts.verbose >= 2 && rank == 0) {
+            logging::timestamp(tout, "Total", timing::duration(begin_proj, end_proj), 2, '=');
+        } else if (opts.verbose && rank == 0) {
+            logging::timestamp(tout, "Project laplacians from H1 -> DG0", timing::duration(begin_proj, end_proj), 1);
         }
 
     }
@@ -909,7 +937,7 @@ int main(int argc, char *argv[])
 
     timing::tick(&end_fiber);
     if (opts.verbose && rank == 0) {
-        logging::timestamp(tout, "Total (fiber)", timing::duration(start_fiber, end_fiber), 1, '=');
+        logging::timestamp(tout, "Total (fiber)", timing::duration(begin_fiber, end_fiber), 1, '=');
     }
 
     // Make sure the fiber directions are read back to the host before saving

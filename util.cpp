@@ -37,9 +37,9 @@ void util::tracing::roctx_range_pop(void) {
 #endif
 }
 
-static const char level_markers[] = {'-', '*', '+'};
+static const char level_markers[] = {'#', '-', '*', '+'};
 #define INDENT_WIDTH 2
-#define LOG_LEFT_COL_WIDTH 30
+#define LOG_LEFT_COL_WIDTH 40
 
 void util::logging::timestamp(
     std::ostream& out,
@@ -48,7 +48,7 @@ void util::logging::timestamp(
     const int indent,
     char override_marker)
 {
-    assert(indent >= 0 && indent <= 2);
+    assert(indent >= 0 && indent <= 3);
     char level_marker = level_markers[indent];
 
     if (override_marker)
@@ -69,7 +69,7 @@ void util::logging::marker(
     const int indent,
     char override_marker)
 {
-    assert(indent >= 0 && indent <= 2);
+    assert(indent >= 0 && indent <= 3);
     char level_marker = level_markers[indent];
 
     std::string indent_chars = std::string(INDENT_WIDTH*indent, ' ');
