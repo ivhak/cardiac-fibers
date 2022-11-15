@@ -25,16 +25,6 @@
 
 using namespace mfem;
 
-// Cross product of two 3D vectors a and b, store in c.
-MFEM_HOST_DEVICE
-static void cross(vec3& c, vec3& a, vec3& b)
-{
-    // c = a x b
-    c[0] = a[1]*b[2] - a[2]*b[1];
-    c[1] = a[2]*b[0] - a[0]*b[2];
-    c[2] = a[0]*b[1] - a[1]*b[0];
-}
-
 // Dot product of two quaternions
 MFEM_HOST_DEVICE
 static double quatdot(quat& q1, quat& q2)
@@ -96,6 +86,16 @@ static void quatnormalize(quat& q)
     q[1] = q[1] * m;
     q[2] = q[2] * m;
     q[3] = q[3] * m;
+}
+
+// Cross product of two 3D vectors a and b, store in c.
+MFEM_HOST_DEVICE
+static void cross(vec3& c, vec3& a, vec3& b)
+{
+    // c = a x b
+    c[0] = a[1]*b[2] - a[2]*b[1];
+    c[1] = a[2]*b[0] - a[0]*b[2];
+    c[2] = a[0]*b[1] - a[1]*b[0];
 }
 
 // Set vector a = b
