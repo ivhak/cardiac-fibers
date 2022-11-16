@@ -3,8 +3,9 @@
 #SBATCH --partition=mi100q
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --time=10:00:00
+#SBATCH --time=4-00:00:00
 #SBATCH --gres=rsmi:1
+#SBATCH --cpus-per-task=1
 #SBATCH --output=jobs/%x-%j.out
 #SBATCH --error=jobs/%x-%j.err
 
@@ -63,6 +64,14 @@ function main {
     run heart03
     run heart04
     run heart05
+    run heart06
+    run heart07
+    run heart08
+    run heart09
+    run heart10
+    run heart11
+    run heart12
+    run heart13
 }
 
 main
