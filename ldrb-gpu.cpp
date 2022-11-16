@@ -447,10 +447,33 @@ int main(int argc, char *argv[])
         for (int i = 0; i < opts.uniform_refinement; i++)
             pmesh.UniformRefinement();
         timing::tick(&uf1);
-        std::string msg = "Uniform refinement ("
-                        + std::to_string(opts.uniform_refinement)
-                        + ")";
+        std::string msg = "Uniform refinement (" + std::to_string(opts.uniform_refinement) + ")";
         logging::timestamp(tout, msg, timing::duration(uf0, uf1));
+
+        if (opts.verbose >= 3) {
+            int num_verts = pmesh.GetNV();
+            std::vector<int> verts(nranks, 0);
+            MPI_Allgather(&num_verts,    1, MPI_INT,
+                           verts.data(), 1, MPI_INT, MPI_COMM_WORLD);
+
+            int num_elems = pmesh.GetNE();
+            std::vector<int> elems(nranks, 0);
+            MPI_Allgather(&num_elems,   1, MPI_INT,
+                          elems.data(), 1, MPI_INT, MPI_COMM_WORLD);
+
+            if (rank == 0) {
+                int sum_verts = std::accumulate(verts.begin(), verts.end(), 0);
+                int sum_elems = std::accumulate(elems.begin(), elems.end(), 0);
+
+                std::string msg =
+                    "Performed " + std::to_string(opts.uniform_refinement)
+                  + " rounds of uniform refinement on the mesh. Mesh now consists"
+                  + " of " + std::to_string(sum_verts) + " vertices"
+                  + " and " + std::to_string(sum_elems) + " elements.";
+
+                logging::info(std::cout, msg);
+            }
+        }
     }
 
 
