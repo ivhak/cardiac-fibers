@@ -439,8 +439,12 @@ int main(int argc, char *argv[])
         for (int i = 0; i < opts.uniform_refinement; i++)
             pmesh.UniformRefinement();
         timing::tick(&uf1);
-        std::string msg = "Uniform refinement (" + std::to_string(opts.uniform_refinement) + ")";
-        logging::timestamp(tout, msg, timing::duration(uf0, uf1));
+        if (rank == 0) {
+            std::string msg = "Uniform refinement ("
+                             + std::to_string(opts.uniform_refinement)
+                             + ")";
+            logging::timestamp(tout, msg, timing::duration(uf0, uf1));
+        }
 
         if (opts.verbose >= 3) {
             int num_verts = pmesh.GetNV();
@@ -1040,11 +1044,10 @@ int main(int argc, char *argv[])
             pd->RegisterField("grad phi lv",  &grad_phi_lv);
             pd->RegisterField("grad phi rv",  &grad_phi_rv);
             pd->RegisterField("grad psi ab",  &grad_psi_ab);
+#endif
             pd->RegisterField("phi epi", x_phi_epi);
             pd->RegisterField("phi lv",  x_phi_lv);
             pd->RegisterField("phi rv",  x_phi_rv);
-            pd->RegisterField("psi ab",  x_psi_ab);
-#endif
             pd->RegisterField("F", &F);
             pd->RegisterField("S", &S);
             pd->RegisterField("T", &T);
