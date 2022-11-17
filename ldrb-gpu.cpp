@@ -439,7 +439,7 @@ int main(int argc, char *argv[])
         for (int i = 0; i < opts.uniform_refinement; i++)
             pmesh.UniformRefinement();
         timing::tick(&uf1);
-        if (rank == 0) {
+        if (opts.verbose && rank == 0) {
             std::string msg = "Uniform refinement ("
                              + std::to_string(opts.uniform_refinement)
                              + ")";
