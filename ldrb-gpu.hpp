@@ -37,7 +37,6 @@ typedef struct {
     int epi_id;
     int lv_id;
     int rv_id;
-    int solver;
     int uniform_refinement;
 #if defined(MFEM_USE_HIP) || defined(MFEM_USE_CUDA)
     bool gpu_tuned_amg;
