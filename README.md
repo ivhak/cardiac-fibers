@@ -63,6 +63,61 @@ Options:
         Tune the BoomerAmg preconditioner for (hopefully) better GPU performance.
 ```
 
+### Example: Idealized left ventricle
+
+This example uses the mesh [lv_ellipsoid.msh](mesh/gmsh/lv_ellipsoid.msh),
+which was generated using the
+[cardiac_geometries](https://github.com/ComputationalPhysiology/cardiac_geometries)
+tool. The `PhysicalNames` section of mesh file shows the id numbers we need:
+```sh
+$ head -n 15 mesh/gmsh/lv_ellipsoid.msh
+$MeshFormat
+2.2 0 8
+$EndMeshFormat
+$PhysicalNames
+8
+0 1 "ENDOPT"
+0 2 "EPIPT"
+1 3 "EPIRING"
+1 4 "ENDORING"
+2 5 "BASE"
+2 6 "ENDO"
+2 7 "EPI"
+3 8 "MYOCARDIUM"
+$EndPhysicalNames
+$Nodes
+```
+
+Inspection of the mesh in [gmsh](https://gmsh.info/) also shows that the apex
+of the epicardium is somewhere in the along the $x$ axis, so we set the
+prescribed apex coordiantes to `[-100 0 0 ]`. Note that since we are working
+with a single ventricle geometry, we explicitly mark the right ventricle as non
+existent by passing the `--rv-id -1` flag. The mesh itself is quite coarse, so
+we can refine it using the `--uniform-refinement` flag. Here we choose to do
+two levels of uniform refinement, which refines the original mesh from
+consisting of 770 vertices 2818 elements, to consisting of 34569 vertices and
+180352 elements. With all the information we need, we can finally run the following command
+
+```sh
+$ ./ldrb-gpu --mesh mesh/gmsh/lv_ellipsoid.msh \
+             --apex '-100 0 0' \
+             --lv-id 6 \
+             --base-id 5 \
+             --epi-id 7 \
+             --rv-id -1 \
+             --uniform-refinement 2 \
+             --out out/lv_ellipsoid \
+             --save-paraview 
+
+```
+
+Opening the resulting solution
+`./out/lv_ellipsoid/paraview/lv_ellipsoid/lv_ellipsoid.pvd` in paraview gives
+the following results:
+
+![Rendering of the fiber directions on `mesh/gmsh/lv_ellipsoid.msh`](docs/figures/lv_ellipsoid.png)
+
+
 ## Building
 
 `ldrb-gpu` relies minimally on the following libraries:
