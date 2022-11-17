@@ -103,16 +103,17 @@ part, we can set the `--verbose` flag to 2 .With all the information we need,
 we can finally run the following command
 
 ```sh
-$ ./cardiac-fibers --mesh mesh/gmsh/lv_ellipsoid.msh \
-                   --apex '-100 0 0' \
-                   --lv-id 6 \
-                   --base-id 5 \
-                   --epi-id 7 \
-                   --rv-id -1 \
-                   --uniform-refinement 2 \
-                   --out out/lv_ellipsoid \
-                   --save-paraview \
-                   --verbose 2
+$ ./cardiac-fibers \
+        --mesh mesh/gmsh/lv_ellipsoid.msh \
+        --apex '-100 0 0' \
+        --lv-id 6 \
+        --base-id 5 \
+        --epi-id 7 \
+        --rv-id -1 \
+        --uniform-refinement 2 \
+        --out out/lv_ellipsoid \
+        --save-paraview \
+        --verbose 2
 
 ```
 
@@ -153,16 +154,19 @@ do this we pass the `--discontinuous-galerkin` (or `-dg` for short) flag, to
 generate fibers in the `DG_0` space rather than in `H_1`. For this mesh we
 happen to know that the apex is somewhere close to `[346.35 1233.74 169.79]`.
 By setting the `--verbose` flag to 3 we get the time of each step, as well as
-some additional information. The full command for generating the fiber
-orientations for `heart02` is then
+some additional information. In addition, we can run in parallel to speed
+things up, by setting the number of processes to use with `mpirun`. The full
+command for generating the fiber orientations for `heart02`, running in
+parallel with two processes is then
 
 ```sh
-$ ./cardiac-fibers --mesh mesh/gmsh/heart02.msh \
-                   --apex '346.35 1233.74 169.79' \
-                   --out out/heart02 \
-                   --save-paraview \
-                   --discontinuous-galerkin \
-                   --verbose 3
+$ mpirun -np 2 ./cardiac-fibers \
+        --mesh mesh/gmsh/heart02.msh \
+        --apex '346.35 1233.74 169.79' \
+        --out out/heart02 \
+        --save-paraview \
+        --discontinuous-galerkin \
+        --verbose 3
 
 ```
 
