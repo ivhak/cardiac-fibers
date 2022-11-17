@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 #SBATCH --job-name=ldrb-gpu
 #SBATCH --partition=defq
-#SBATCH --exclusive
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
@@ -19,7 +18,7 @@ BUILD_DIR=
 
 
 function run {
-    mpirun -np ${SLURM_NTASKS} ${BUILD_DIR}/ldrb-gpu \
+    mpirun --bind-to core -np ${SLURM_NTASKS} ${BUILD_DIR}/ldrb-gpu \
         --mesh ${DATA_DIR}/"$1".msh \
         --out ${JOB_DIR}/"$1" \
         --device omp \
