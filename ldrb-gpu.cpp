@@ -258,8 +258,6 @@ int main(int argc, char *argv[])
     opts.lv_id   = 3;
     opts.rv_id   = 4;
 
-    opts.solver = 0;
-
     opts.uniform_refinement = 0;
 
 #if defined(MFEM_USE_HIP) || defined(MFEM_USE_CUDA)
@@ -282,8 +280,8 @@ int main(int argc, char *argv[])
 
     args.AddOption(&opts.mesh_file,
             "-m", "--mesh",
-            "Mesh file to use.\n"
-            "\tSee https://mfem.org/mesh-formats/ for a list of suppored formats.", true);
+            "Mesh file to use. "
+            "See https://mfem.org/mesh-formats/ for a list of suppored formats.", true);
 
     args.AddOption(&opts.prescribed_apex,
             "-a", "--apex",
@@ -296,8 +294,8 @@ int main(int argc, char *argv[])
     args.AddOption(&opts.time_to_file,
             "-t", "--time-to-file",
             "-nt","--no-time-to-file",
-            "Output time log to <OUT>/time.txt rather than stdout,\n"
-            "\twhere <OUT> is set with the -o (--out) flag.");
+            "Output time log to <OUT>/time.txt rather than stdout, "
+            "where <OUT> is set with the -o (--out) flag.");
 
     args.AddOption(&opts.device_config,
             "-d", "--device",
@@ -348,24 +346,18 @@ int main(int argc, char *argv[])
     args.AddOption(&opts.rv_id,
             "-rv", "--rv-id",
             "Id of the right ventricle endocardium surface.\n"
-            "\tSet to -1 if there is no right ventricle in the geometry,\n "
-            "\te.g. for a single ventricle geometry.");
-
-    args.AddOption(&opts.solver,
-            "-s", "--solver",
-            "Solver to use. Options are:\n"
-            "\t    0: HyprePCG (See mfem::HyprePCG).\n"
-            "\t    1: CGSolver (See mfem::CGSolver).");
+            "\tSet to -1 if there is no right ventricle in the geometry, "
+            "e.g. for a single ventricle geometry.");
 
     args.AddOption(&opts.uniform_refinement,
             "-u", "--uniform-refinement",
-            "Use uniform refinement");
+            "Perform n levels of uniform refinement on the mesh.");
 
     args.AddOption(&opts.use_dg,
             "-dg",  "--discontinuous-galerkin",
             "-ndg", "--no-discontinuous-galerkin",
-            "Calculate fibers in the DG0 (one fiber per element) "
-            "space rather than H1 (one fiber per vertex).");
+            "Calculate fibers in the DG0 space (one fiber per element) "
+            "rather than H1 (one fiber per vertex).");
 
 #if defined (MFEM_USE_HIP) || defined (MFEM_USE_CUDA)
     args.AddOption(&opts.gpu_tuned_amg,
@@ -533,24 +525,12 @@ int main(int argc, char *argv[])
     }
 
     Solver *solver;
-    if (opts.solver == 0) {
-        HyprePCG *cg = new HyprePCG(MPI_COMM_WORLD);
-        cg->SetTol(1e-20);
-        cg->SetMaxIter(2000);
-        cg->SetPrintLevel(opts.verbose >= 4 ? 1 : 0);
-        if (prec) cg->SetPreconditioner(*prec);
-        solver = cg;
-    } else if (opts.solver == 1) {
-        CGSolver *cg = new CGSolver(MPI_COMM_WORLD);
-        cg->SetAbsTol(1e-12);
-        cg->SetMaxIter(2000);
-        cg->SetPrintLevel(opts.verbose >= 4 ? 1 : 0);
-        if (prec) cg->SetPreconditioner(*prec);
-        solver = cg;
-    } else {
-        std::cerr << "Invalid solver: " << opts.solver << std::endl;
-        exit(1);
-    }
+    HyprePCG *cg = new HyprePCG(MPI_COMM_WORLD);
+    cg->SetTol(1e-20);
+    cg->SetMaxIter(2000);
+    cg->SetPrintLevel(opts.verbose >= 4 ? 1 : 0);
+    if (prec) cg->SetPreconditioner(*prec);
+    solver = cg;
 
 
     timing::tick(&t1);

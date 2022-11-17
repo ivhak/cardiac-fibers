@@ -23,22 +23,20 @@ Options:
         If the -t (--time-to-file) flag is passed, the output from level 1 and 2
         will be output to <OUT>/time.txt, where <OUT> is set with the -o (--out) flag.
    -m <string>, --mesh <string>, (required)
-        Mesh file to use.
-        See https://mfem.org/mesh-formats/ for a list of suppored formats.
+        Mesh file to use. See https://mfem.org/mesh-formats/ for a list of suppored formats.
    -a '<double>...', --apex '<double>...', (required)
         Coordinate of apex, space separated list: 'x y z'.
    -o <string>, --out <string>, current value: ./out
         Directory for output files.
    -t, --time-to-file, -nt, --no-time-to-file, current option: --no-time-to-file
-        Output time log to <OUT>/time.txt rather than stdout,
-        where <OUT> is set with the -o (--out) flag.
-   -d <string>, --device <string>, current value: hip
+        Output time log to <OUT>/time.txt rather than stdout, where <OUT> is set with the -o (--out) flag.
+   -d <string>, --device <string>, current value: cpu
         Device configuration string, see Device::Configure().
    -p, --save-paraview, -np, --no-save-paraview, current option: --no-save-paraview
         Save data files for ParaView (paraview.org) visualization.
    -s, --save-mfem, -ns, --no-save-mfem, current option: --save-mfem
         Save data files in the native MFEM format.
-   -it <double>, --interpolation-tolerance <double>, current value: 0.1
+   -it <double>, --interpolation-tolerance <double>, current value: 1e-12
         Tolerance for LDRB interpolations.
    -ao <double>, --alpha-endo <double>, current value: 60
         Alpha angle in endocardium.
@@ -56,12 +54,11 @@ Options:
         Id of the left ventricle endocardium surface.
    -rv <int>, --rv-id <int>, current value: 4
         Id of the right ventricle endocardium surface.
-        Set to -1 if there is no right ventricle in the geometry,
-        e.g. for a single ventricle geometry.
-   -s <int>, --solver <int>, current value: 0
-        Solver to use. Options are:
-            0: HyprePCG (See mfem::HyprePCG).
-            1: CGSolver (See mfem::CGSolver).
+        Set to -1 if there is no right ventricle in the geometry, e.g. for a single ventricle geometry.
+   -u <int>, --uniform-refinement <int>, current value: 0
+        Perform n levels of uniform refinement on the mesh.
+   -dg, --discontinuous-galerkin, -ndg, --no-discontinuous-galerkin, current option: --no-discontinuous-galerkin
+        Calculate fibers in the DG0 space (one fiber per element) rather than H1 (one fiber per vertex).
    -gamg, --gpu-tuned-amg, -ngamg, --no-gpu-tuned-amg, current option: --no-gpu-tuned-amg
         Tune the BoomerAmg preconditioner for (hopefully) better GPU performance.
 ```
