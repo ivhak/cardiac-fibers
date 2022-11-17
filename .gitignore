@@ -1,4 +1,4 @@
-ldrb-gpu
+cardiac-fibers
 *.o
 transfer.sh
 copy_back_data.sh

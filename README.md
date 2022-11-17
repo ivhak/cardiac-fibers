@@ -1,6 +1,8 @@
-# A GPU-based implementation of the Laplace-Dirichlet Rule-Based (LDRB) algorithm for assigning myocardial fiber orientations
+# cardiac-fibers
 
-A GPU-based implementation of the LDRB algorithm using the MFEM library (https://mfem.org/).
+`cardiac-fibers` is an implementation of the Laplace-Dirichlet Rule-Based
+algorithm (LDRB) for assigning myocardial fiber orientations, based on the MFEM
+finite-element library.
 
 > Bayer, J.D., Blake, R.C., Plank, G. and Trayanova, N.A., 2012.
 > A novel rule-based algorithm for assigning myocardial fiber orientation
@@ -10,7 +12,7 @@ pp.2243-2254.(https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3518842/)
 ## Usage
 
 ```
-Usage: ldrb-gpu [options] ...
+Usage: cardiac-fibers [options] ...
 Options:
    -h, --help
         Print this help message and exit.
@@ -101,16 +103,16 @@ part, we can set the `--verbose` flag to 2 .With all the information we need,
 we can finally run the following command
 
 ```sh
-$ ./ldrb-gpu --mesh mesh/gmsh/lv_ellipsoid.msh \
-             --apex '-100 0 0' \
-             --lv-id 6 \
-             --base-id 5 \
-             --epi-id 7 \
-             --rv-id -1 \
-             --uniform-refinement 2 \
-             --out out/lv_ellipsoid \
-             --save-paraview \
-             --verbose 2
+$ ./cardiac-fibers --mesh mesh/gmsh/lv_ellipsoid.msh \
+                   --apex '-100 0 0' \
+                   --lv-id 6 \
+                   --base-id 5 \
+                   --epi-id 7 \
+                   --rv-id -1 \
+                   --uniform-refinement 2 \
+                   --out out/lv_ellipsoid \
+                   --save-paraview \
+                   --verbose 2
 
 ```
 
@@ -155,12 +157,12 @@ some additional information. The full command for generating the fiber
 orientations for `heart02` is then
 
 ```sh
-$ ./ldrb-gpu --mesh mesh/gmsh/heart02.msh \
-             --apex '346.35 1233.74 169.79' \
-             --out out/heart02 \
-             --save-paraview \
-             --discontinuous-galerkin \
-             --verbose 3
+$ ./cardiac-fibers --mesh mesh/gmsh/heart02.msh \
+                   --apex '346.35 1233.74 169.79' \
+                   --out out/heart02 \
+                   --save-paraview \
+                   --discontinuous-galerkin \
+                   --verbose 3
 
 ```
 
@@ -168,7 +170,7 @@ $ ./ldrb-gpu --mesh mesh/gmsh/heart02.msh \
 
 ## Building
 
-`ldrb-gpu` relies minimally on the following libraries:
+`cardiac-fibers` relies minimally on the following libraries:
 - [mfem](https://mfem.org), a finite element discretization library.
 - [hypre](https://github.com/hypre-space/hypre), a library of high-performance preconditioners and solvers.
 - METIS, a family of multilevel partitioning algorithms
@@ -187,11 +189,11 @@ The supplied Makefile expects the following variables to be set:
 | `MPI_INCDIR`      | Location of MPI headers                   | Yes      |
 | `MPI_LIBDIR`      | Location of MPI library                   | Yes      |
 
-A debug build of `ldrb-gpu`, which can be compiled by running `make DEBUG=YES
-ldrb-gpu`, requires that the `MFEM_DBG_ROOT` variable is set to the location of
+A debug build of `cardiac-fibers`, which can be compiled by running `make DEBUG=YES
+cardiac-fibers`, requires that the `MFEM_DBG_ROOT` variable is set to the location of
 a debug build of mfem. If you do not have a debug build of mfem, this can be
 circumvented by setting it to the same as `MFEM_ROOT`, for example by running
-`MFEM_DBG_ROOT=$MFEM_ROOT make DEBUG=YES ldrb-gpu`.
+`MFEM_DBG_ROOT=$MFEM_ROOT make DEBUG=YES cardiac-fibers`.
 
 See the environment setup script for the [eX3](https://www.ex3.simula.no/)
 cluster in [envsetup-ex3.sh](envsetup-ex3.sh) for a working example.
@@ -201,27 +203,27 @@ overwritten with the environment variable `MPI_CXX`.
 
 ### GPU builds
 
-To build with GPU support, `ldrb-gpu` additionally needs a CUDA compiler
+To build with GPU support, `cardiac-fibers` additionally needs a CUDA compiler
 (`nvcc`) to run on NVIDIA GPUs, or a HIP compiler (`hipcc`) to run on AMD
 GPUs. Note that the GPU builds require that mfem and hypre are also built with
 GPU support. See https://github.com/mfem/mfem/blob/master/INSTALL and
 https://hypre.readthedocs.io/en/latest/ch-misc.html#building-the-library.
-To compile a CUDA-build of `ldrb-gpu`, set the enviroment variable
-`LDRB_HAS_CUDA=YES`. Similarly, set `LDRB_HAS_HIP=YES` for a HIP-build.
+To compile a CUDA-build of `cardiac-fibers`, set the enviroment variable
+`CARDIAC_FIBERS_HAS_CUDA=YES`. Similarly, set `CARDIAC_FIBERS_HAS_HIP=YES` for a HIP-build.
 
-By default, the compiler is set to `nvcc` when `LDRB_HAS_CUDA=YES`, and
-`hipcc` when `LDRB_HAS_HIP=YES`. These can be overwritten with the `CUDA_CXX`
+By default, the compiler is set to `nvcc` when `CARDIAC_FIBERS_HAS_CUDA=YES`, and
+`hipcc` when `CARDIAC_FIBERS_HAS_HIP=YES`. These can be overwritten with the `CUDA_CXX`
 and `HIP_CXX` environment variables, respectively.
 
 When building for AMD GPUs it is also possible enable tracing markers in the
-code, by running `make HIP_TRACE=YES ldrb-gpu`. This requires the `roctracer` library.
+code, by running `make HIP_TRACE=YES cardiac-fibers`. This requires the `roctracer` library.
 
 Device execution will be enabled by default when compiling with either CUDA or HIP support.
 
 ### OpenMP
 
 If mfem is built with OpenMP (`MFEM_USE_OPENMP=YES`), you can set
-`LDRB_USE_OPENMP=YES` to build `ldrb-gpu` with OpenMP support as well. To run
+`CARDIAC_FIBERS_USE_OPENMP=YES` to build `cardiac-fibers` with OpenMP support as well. To run
 with OpenMP, simply set the flag `--device omp`.
 
 ### Tested versions
@@ -242,7 +244,7 @@ The following setups have been tested on the [eX3](https://www.ex3.simula.no/) c
     * openmpi-4.1.4
 
 - A normal CPU build running on the `defq` partition, built with
-    * OpenMP support (`LDRB_HAS_OPENMP=YES`)
+    * OpenMP support (`CARDIAC_FIBERS_HAS_OPENMP=YES`)
     * mfem-4.5 built with OpenMP support
     * hypre-2.25.0
     * metis-5.1.0
@@ -254,5 +256,5 @@ setup for the tested versions can be found in the script
 [envsetup-ex3.sh](envsetup-ex3.sh).
 
 ## License
-`ldrb-gpu` is free software, licensed under the GNU GPL version 3 or (at your
+`cardiac-fibers` is free software, licensed under the GNU GPL version 3 or (at your
 option) any later version. See the file COPYING for copying conditions.

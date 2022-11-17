@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#SBATCH --job-name=ldrb-gpu
+#SBATCH --job-name=cardiac-fibers
 #SBATCH --partition=defq
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -8,7 +8,7 @@
 #SBATCH --output=jobs/%x-%j.err
 #SBATCH --error=jobs/%x-%j.err
 
-LDRB_DIR="${HOME}/master/ldrb-gpu"
+LDRB_DIR="${HOME}/master/cardiac-fibers"
 
 DATA_DIR="/global/D1/homes/iverh/data/meshes/martinez-navarro-etal/mesh/gmsh"
 
@@ -18,7 +18,7 @@ BUILD_DIR=
 
 
 function run {
-    mpirun --bind-to core -np ${SLURM_NTASKS} ${BUILD_DIR}/ldrb-gpu \
+    mpirun --bind-to core -np ${SLURM_NTASKS} ${BUILD_DIR}/cardiac-fibers \
         --mesh ${DATA_DIR}/"$1".msh \
         --out ${JOB_DIR}/"$1" \
         --device omp \
@@ -32,7 +32,7 @@ function run {
 function main {
     set -o errexit
 
-    BUILD_DIR=/global/D1/homes/iverh/ldrb-gpu-${SLURM_JOB_ID}
+    BUILD_DIR=/global/D1/homes/iverh/cardiac-fibers-${SLURM_JOB_ID}
 
     cp -r ${LDRB_DIR} ${BUILD_DIR}
 
@@ -54,7 +54,7 @@ function main {
     git -C "${BUILD_DIR}" describe --always --abbrev=40 --dirty
     git -C "${BUILD_DIR}" log --oneline --decorate=short | head -n 10
 
-    make -C ${BUILD_DIR} clean ldrb-gpu
+    make -C ${BUILD_DIR} clean cardiac-fibers
 
     mkdir -p ${JOB_DIR}
 

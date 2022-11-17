@@ -1,17 +1,17 @@
 // Copyright (C) 2022 Iver Håkonsen
 //
-// ldrb-gpu is free software: you can redistribute it and/or modify it
-// under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
+// cardiac-fibers is free software: you can redistribute it and/or modify it
+// under the terms of the GNU General Public License as published by the Free
+// Software Foundation, either version 3 of the License, or (at your option) any
+// later version.
 //
-// ldrb-gpu is distributed in the hope that it will be useful, but
-// WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-// General Public License for more details.
+// cardiac-fibers is distributed in the hope that it will be useful, but WITHOUT
+// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+// FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+// details.
 //
-// You should have received a copy of the GNU General Public License
-// along with ldrb-gpu.  If not, see <https://www.gnu.org/licenses/>.
+// You should have received a copy of the GNU General Public License along with
+// cardiac-fibers.  If not, see <https://www.gnu.org/licenses/>.
 //
 // Authors: Iver Håkonsen <hakonseniver@yahoo.no
 
@@ -21,7 +21,7 @@
 #include "mfem.hpp"
 #include "mfem/general/forall.hpp"
 #include "util.hpp"
-#include "ldrb-gpu.hpp"
+#include "cardiac-fibers.hpp"
 #include "calculus.hpp"
 
 using namespace mfem;

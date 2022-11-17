@@ -1,17 +1,17 @@
 # Copyright (C) 2022 Iver Håkonsen
 #
-# ldrb-gpu is free software: you can redistribute it and/or modify it
-# under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
+# cardiac-fibers is free software: you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the Free
+# Software Foundation, either version 3 of the License, or (at your option) any
+# later version.
 #
-# ldrb-gpu is distributed in the hope that it will be useful, but
-# WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-# General Public License for more details.
+# cardiac-fibers is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+# details.
 #
-# You should have received a copy of the GNU General Public License
-# along with ldrb-gpu.  If not, see <https://www.gnu.org/licenses/>.
+# You should have received a copy of the GNU General Public License along with
+# cardiac-fibers.  If not, see <https://www.gnu.org/licenses/>.
 #
 # Authors: Iver Håkonsen <hakonseniver@yahoo.no
 
@@ -46,13 +46,13 @@ LFLAGS = -L$(MFEM_LIBDIR) -lmfem \
 		 -L$(METIS_LIBDIR) -lmetis
 
 # openmp
-ifeq ($(LDRB_HAS_OPENMP), YES)
+ifeq ($(CARDIAC_FIBERS_HAS_OPENMP), YES)
 CFLAGS += -fopenmp
 LFLAGS += -lgomp
 endif
 
 # HIP
-ifeq ($(LDRB_HAS_HIP), YES)
+ifeq ($(CARDIAC_FIBERS_HAS_HIP), YES)
 HIP_CXX ?= hipcc
 CXX=$(HIP_CXX)
 CFLAGS += $(shell hipconfig -C)
@@ -66,7 +66,7 @@ endif
 endif
 
 # CUDA
-ifeq ($(LDRB_HAS_CUDA), YES)
+ifeq ($(CARDIAC_FIBERS_HAS_CUDA), YES)
 CUDA_CXX ?= nvcc
 CXX=$(CUDA_CXX)
 # Wrap the old CFLAGS into --compiler-options, and set the needed nvcc specific flags
@@ -74,12 +74,12 @@ CFLAGS := -ccbin=mpiCC -x=cu --expt-extended-lambda --compiler-options="$(CFLAGS
 LFLAGS += -lcusparse -lrt
 endif
 
-SRC = ldrb-gpu.cpp util.cpp calculus.cpp
+SRC = cardiac-fibers.cpp util.cpp calculus.cpp
 OBJ=$(SRC:.cpp=.o)
 
-all: ldrb-gpu
+all: cardiac-fibers
 
-ldrb-gpu: check-env $(OBJ)
+cardiac-fibers: check-env $(OBJ)
 	$(CXX) -o $@ $(OBJ) $(LFLAGS)
 
 tests: tests.o calculus.o util.o
@@ -117,6 +117,6 @@ ifndef METIS_LIBDIR
 endif
 
 clean:
-	$(RM) ldrb-gpu tests ldrb-gpu.o calculus.o util.o tests.o
+	$(RM) cardiac-fibers tests cardiac-fibers.o calculus.o util.o tests.o
 
 .PHONY: check-env clean
