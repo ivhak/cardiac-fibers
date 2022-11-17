@@ -119,7 +119,8 @@ $ ./ldrb-gpu --mesh mesh/gmsh/lv_ellipsoid.msh \
 ### Example 2: Patient specific bi ventricle geometry
 
 This example uses the mesh [heart02](mesh/gmsh/heart02.msh), which has been
-generated from the data published alongside the following study:
+generated from the data published alongside the
+[following study](https://www.nature.com/articles/s41598-019-53221-2).
 
 > Martinez-Navarro, Hector, et al. "High arrhythmic risk in antero-septal acute
 > myocardial ischemia is explained by increased transmural reentry occurrence."
@@ -127,7 +128,7 @@ generated from the data published alongside the following study:
 
 The data is published at <https://ora.ox.ac.uk/objects/uuid:951b086c-c4ba-41ef-b967-c2106d87ee06>.
 
-Again, we can look at the `PhysicalName` section to find the correct surface id numbers:
+Just as in Example 1, we can look at the `PhysicalNames` section to find the correct surface id numbers:
 
 ```sh
 $ head -n 11 mesh/gmsh/heart02.msh
