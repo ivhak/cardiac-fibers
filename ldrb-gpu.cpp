@@ -476,31 +476,73 @@ int main(int argc, char *argv[])
     int apex = -1;
     {
         timing::tick(&t0);
-        std::vector<double> min_buffer(nranks, -1);
+        Vector vertices;
+        pmesh.GetVertices(vertices);
+        const double *vertices_vals = vertices.Read();
+        int n = pmesh.GetNV();
+        double *distances = (double *) malloc(n * sizeof(double));
+
+        // The vertices are in SOA format: xxx...yyy...zzz...
+        // x
+        MFEM_FORALL(i, n, {
+                distances[i]  = (vertices_vals[0*n+i]-opts.prescribed_apex[0])
+                               *(vertices_vals[0*n+i]-opts.prescribed_apex[0]);
+        });
+
+        // y
+        MFEM_FORALL(i, n, {
+                distances[i] += (vertices_vals[1*n+i]-opts.prescribed_apex[1])
+                              * (vertices_vals[1*n+i]-opts.prescribed_apex[1]);
+        });
+
+        // z
+        MFEM_FORALL(i, n, {
+                distances[i] += (vertices_vals[2*n+i]-opts.prescribed_apex[2])
+                              * (vertices_vals[2*n+i]-opts.prescribed_apex[2]);
+        });
+
         double min_distance = std::numeric_limits<double>::max();
+
         for (int i = 0; i < pmesh.GetNV(); i++) {
-            double *vertices = pmesh.GetVertex(i);
-            double this_distance =
-                (vertices[0]-opts.prescribed_apex[0]) * (vertices[0]-opts.prescribed_apex[0])
-              + (vertices[1]-opts.prescribed_apex[1]) * (vertices[1]-opts.prescribed_apex[1])
-              + (vertices[2]-opts.prescribed_apex[2]) * (vertices[2]-opts.prescribed_apex[2]);
-            if (this_distance < min_distance) {
+            if (distances[i] < min_distance) {
                 apex = i;
-                min_distance = this_distance;
+                min_distance = distances[i];
             }
         }
 
+
+        std::vector<double> min_buffer(nranks, -1);
         MPI_Allgather(&min_distance,     1, MPI_DOUBLE,
                       min_buffer.data(), 1, MPI_DOUBLE, MPI_COMM_WORLD);
         auto result = std::min_element(min_buffer.begin(), min_buffer.end());
         auto target_rank = result - min_buffer.begin();
         if (target_rank != rank) {
             apex = -1;
+        } else if (opts.verbose >= 3) {
+            double found_apex[3] = {
+                (double) vertices_vals[0*n+apex],
+                (double) vertices_vals[1*n+apex],
+                (double) vertices_vals[2*n+apex]
+            };
+            std::string msg = "Rank " + std::to_string(rank)
+                            + " found the vertex closest to the prescribed apex ("
+                            + std::to_string(opts.prescribed_apex[0]) +", "
+                            + std::to_string(opts.prescribed_apex[1]) +", "
+                            + std::to_string(opts.prescribed_apex[2]) +") at ("
+                            + std::to_string(found_apex[0]) + ", "
+                            + std::to_string(found_apex[1]) + ", "
+                            + std::to_string(found_apex[2]) + ")";
+            logging::info(std::cout, msg);
+
+
         }
 
         timing::tick(&t1);
-        if (opts.verbose && rank == 0)
+        if (opts.verbose && rank == 0) {
             logging::timestamp(tout, "Find apex", timing::duration(t0, t1));
+        }
+
+        free(distances);
     }
 
 
