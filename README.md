@@ -63,7 +63,7 @@ Options:
         Tune the BoomerAmg preconditioner for (hopefully) better GPU performance.
 ```
 
-### Example: Idealized left ventricle
+### Example 1: Idealized left ventricle
 
 This example uses the mesh [lv_ellipsoid.msh](mesh/gmsh/lv_ellipsoid.msh),
 which was generated using the
@@ -96,7 +96,9 @@ existent by passing the `--rv-id -1` flag. The mesh itself is quite coarse, so
 we can refine it using the `--uniform-refinement` flag. Here we choose to do
 two levels of uniform refinement, which refines the original mesh from
 consisting of 770 vertices 2818 elements, to consisting of 34569 vertices and
-180352 elements. With all the information we need, we can finally run the following command
+180352 elements. To output some information about how much time is spent each
+part, we can set the `--verbose` flag to 2 .With all the information we need,
+we can finally run the following command
 
 ```sh
 $ ./ldrb-gpu --mesh mesh/gmsh/lv_ellipsoid.msh \
@@ -107,16 +109,61 @@ $ ./ldrb-gpu --mesh mesh/gmsh/lv_ellipsoid.msh \
              --rv-id -1 \
              --uniform-refinement 2 \
              --out out/lv_ellipsoid \
-             --save-paraview 
+             --save-paraview \
+             --verbose 2
 
 ```
 
-Opening the resulting solution
-`./out/lv_ellipsoid/paraview/lv_ellipsoid/lv_ellipsoid.pvd` in paraview gives
-the following results:
-
 ![Rendering of the fiber directions on `mesh/gmsh/lv_ellipsoid.msh`](docs/figures/lv_ellipsoid.png)
 
+### Example 2: Patient specific bi ventricle geometry
+
+This example uses the mesh [heart02](mesh/gmsh/heart02.msh), which has been
+generated from the data published alongside the following study:
+
+> Martinez-Navarro, Hector, et al. "High arrhythmic risk in antero-septal acute
+> myocardial ischemia is explained by increased transmural reentry occurrence."
+> Scientific reports 9.1 (2019): 1-12.
+
+The data is published at <https://ora.ox.ac.uk/objects/uuid:951b086c-c4ba-41ef-b967-c2106d87ee06>.
+
+Again, we can look at the `PhysicalName` section to find the correct surface id numbers:
+
+```sh
+$ head -n 11 mesh/gmsh/heart02.msh
+$MeshFormat
+2.2 0 8
+$EndMeshFormat
+$PhysicalNames
+5
+2 1 "base"
+2 2 "epicardium"
+2 3 "left ventricle endocardium"
+2 4 "right ventricle endocardium"
+3 1 "myocardium"
+$EndPhysicalNames
+```
+
+Here, the id numbers happen to be the same as the default ones. This time we
+choose to generate the fibers on a per-element basis rather than per vertex. To
+do this we pass the `--discontinuous-galerkin` (or `-dg` for short) flag, to
+generate fibers in the `DG_0` space rather than in `H_1`. For this mesh we
+happen to know that the apex is somewhere close to `[346.35 1233.74 169.79]`.
+By setting the `--verbose` flag to 3 we get the time of each step, as well as
+some additional information. The full command for generating the fiber
+orientations for `heart02` is then
+
+```sh
+$ ./ldrb-gpu --mesh mesh/gmsh/heart02.msh \
+             --apex '346.35 1233.74 169.79' \
+             --out out/heart02 \
+             --save-paraview \
+             --discontinuous-galerkin \
+             --verbose 3
+
+```
+
+![Rendering of the fiber directions on `mesh/gmsh/heart02.msh`](docs/figures/heart02.png)
 
 ## Building
 
