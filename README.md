@@ -6,8 +6,8 @@ finite-element library.
 
 > Bayer, J.D., Blake, R.C., Plank, G. and Trayanova, N.A., 2012.
 > A novel rule-based algorithm for assigning myocardial fiber orientation
->to computational heart models. Annals of biomedical engineering, 40(10),
-pp.2243-2254.(https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3518842/)
+> to computational heart models. Annals of biomedical engineering, 40(10),
+> pp.2243-2254.(https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3518842/)
 
 ## Usage
 
@@ -92,7 +92,7 @@ $Nodes
 
 Inspection of the mesh in [gmsh](https://gmsh.info/) also shows that the apex
 of the epicardium is somewhere in the along the $x$ axis, so we set the
-prescribed apex coordiantes to `[-100 0 0 ]`. Note that since we are working
+prescribed apex coordiantes to `[ -100 0 0 ]`. Note that since we are working
 with a single ventricle geometry, we explicitly mark the right ventricle as non
 existent by passing the `--rv-id -1` flag. The mesh itself is quite coarse, so
 we can refine it using the `--uniform-refinement` flag. Here we choose to do
@@ -122,12 +122,11 @@ $ ./cardiac-fibers \
 ### Example 2: Patient specific bi ventricle geometry
 
 This example uses the mesh [heart02](mesh/gmsh/heart02.msh), which has been
-generated from the data published alongside the
-[following study](https://www.nature.com/articles/s41598-019-53221-2).
+generated from the data published alongside the following study:
 
 > Martinez-Navarro, Hector, et al. "High arrhythmic risk in antero-septal acute
 > myocardial ischemia is explained by increased transmural reentry occurrence."
-> Scientific reports 9.1 (2019): 1-12.
+> Scientific reports 9.1 (2019): 1-12.(https://www.nature.com/articles/s41598-019-53221-2)
 
 The data is published at <https://ora.ox.ac.uk/objects/uuid:951b086c-c4ba-41ef-b967-c2106d87ee06>.
 
