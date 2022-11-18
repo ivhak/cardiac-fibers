@@ -174,6 +174,7 @@ $ mpirun -np 2 ./cardiac-fibers \
 ## Building
 
 [Build instructions for MacOS](docs/build-darwin.md)
+[Build instructions for the eX3 cluster](docs/build-ex3.md)
 
 `cardiac-fibers` relies minimally on the following libraries:
 - [mfem](https://mfem.org), a finite element discretization library.
@@ -232,41 +233,6 @@ If mfem is built with OpenMP (`MFEM_USE_OPENMP=YES`), you can set
 `CARDIAC_FIBERS_USE_OPENMP=YES` to build `cardiac-fibers` with OpenMP support as well. To run
 with OpenMP, simply set the flag `--device omp`.
 
-### Tested versions
-
-The following setups have been tested on the [eX3](https://www.ex3.simula.no/) cluster:
-- A HIP build running on an AMD MI100 GPU on the `mi100q`partition, built with
-    * ROCm 5.1.3
-    * mfem-4.5 built with HIP support
-    * hypre-2.24.0 built with HIP support
-    * metis-5.1.0
-    * openmpi-4.1.4
-
-- A HIP build running on an AMD MI210 GPU on the `mi210q` partition, built with
-    * ROCm 5.1.3
-    * mfem-4.5 built with HIP support
-    * hypre-2.25.0 built with HIP support
-    * metis-5.1.0
-    * openmpi-4.1.4
-
-- A CUDA build running on an NVIDIA V100 GPU on the `dgx2q` partition, built with 
-    * Cuda Toolkit 10.1.243
-    * mfem-4.5 built with CUDA support
-    * hypre-2.24.0 built with CUDA support
-    * metis-5.1.0
-    * openmpi-4.1.4
-
-- A normal CPU build running on the `defq` partition, built with
-    * OpenMP support (`CARDIAC_FIBERS_HAS_OPENMP=YES`)
-    * mfem-4.5 built with OpenMP support
-    * hypre-2.25.0
-    * metis-5.1.0
-    * openmpi-4.1.4
-
-The builds of mfem used in the tested versions were built using the Slurm
-scripts in [mfem-build-scripts/ex3](mfem-build-scripts/ex3). The environment
-setup for the tested versions can be found in the script
-[envsetup-ex3.sh](envsetup-ex3.sh).
 
 ## License
 `cardiac-fibers` is free software, licensed under the GNU GPL version 3 or (at your
