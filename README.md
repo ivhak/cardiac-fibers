@@ -206,7 +206,7 @@ circumvented by setting it to the same as `MFEM_ROOT`, for example by running
 See the environment setup script for the [eX3](https://www.ex3.simula.no/)
 cluster in [envsetup-ex3.sh](envsetup-ex3.sh) for a working example.
 
-By default (for non-GPU build), the compiler  is set to `mpiCC`. This can be
+By default (for non-GPU build), the compiler  is set to `mpic++`. This can be
 overwritten with the environment variable `MPI_CXX`.
 
 ### GPU builds
