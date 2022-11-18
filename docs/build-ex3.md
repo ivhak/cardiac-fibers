@@ -35,11 +35,13 @@ make clean cardiac-fibers
 
 Note that the HIP builds (`mi100q` and `mi210q`) currently have to be built on
 one of the nodes that has access to the AMD GPU. For example, to build for
-`mi210q`, you can simply do the following:
+`mi210q`, you can simply do the following (assuming the `cardiac-fibers` source
+is in `${HOME}/src/cardiac-fibers`):
 
 ```sh
 salloc -p mi210q --ntasks=1 --gres=rsmi:1
-cd <the-cardiac-fibers-directory>
+srun --pty bash --login
+cd ~/src/cardiac-fibers
 source envsetup-ex3 mi210q
 make clean cardiac-fibers
 ```
