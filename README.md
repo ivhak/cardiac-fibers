@@ -173,8 +173,9 @@ $ mpirun -np 2 ./cardiac-fibers \
 
 ## Building
 
-[Build instructions for MacOS](docs/build-darwin.md)
-[Build instructions for the eX3 cluster](docs/build-ex3.md)
+* [Build instructions for MacOS](docs/build-darwin.md)
+
+* [Build instructions for the eX3 cluster](docs/build-ex3.md)
 
 `cardiac-fibers` relies minimally on the following libraries:
 - [mfem](https://mfem.org), a finite element discretization library.
