@@ -16,14 +16,14 @@
 # Authors: Iver Håkonsen <hakonseniver@yahoo.no
 
 
-CFLAGS =
+CFLAGS = -std=c++11
 ifneq ($(DEBUG), YES)
 CFLAGS += -O3 -Wall
 else
 CFLAGS += -O0 -DDEBUG -g3 -Wall
 endif
 
-MPI_CXX ?= mpiCC
+MPI_CXX ?= mpic++
 CXX = $(MPI_CXX)
 
 # MFEM
@@ -41,7 +41,7 @@ IFLAGS = -I$(MFEM_INCDIR) \
 		 -I$(METIS_INCDIR)
 
 LFLAGS = -L$(MFEM_LIBDIR) -lmfem \
-		 -L$(MPI_LIBDIR) -lmpi -lmpi_cxx \
+		 -L$(MPI_LIBDIR) -lmpi \
 		 -L$(HYPRE_LIBDIR) -lHYPRE \
 		 -L$(METIS_LIBDIR) -lmetis
 
