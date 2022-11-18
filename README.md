@@ -119,13 +119,13 @@ $ ./cardiac-fibers \
 
 Then we can visualize the generated fibers using [ParaView](https://www.paraview.org/). 
 1. In ParaView, open the generated file `out/lv_ellipsoid/paraview/lv_ellipsoid/lv_ellipsoid.pvd`.
-2. Click on `Apply` to visualize the mesh.
-3. With the mesh applied, click on the `Glyph` button. In the menu that pops
-   up, select `Orientation Array > F` and `Scale Array > No scale array`. To
-   increase the number of fibers being rendered, change the number under
-   `Maximum Number of Sample Points`.
-4. Click on  `Apply` to visualize the fibres.
-5. Select `phi epi` on the color menu to color the fibers according their wall depth.
+2. Click on `'Apply'` to visualize the mesh.
+3. With the mesh applied, click on the `'Glyph'` button. 
+   1. In the menu that pops up, select `'Orientation Array' > 'F'` and `'Scale Array' > 'No scale array'`.
+   2. To increase the number of fibers being rendered, change the number under
+      `'Maximum Number of Sample Points'`.
+4. Click on  `'Apply'` to visualize the fibers.
+5. Select `'phi epi'` on the color menu to color the fibers according their wall depth.
 
 The result should hopefully be something close to this:
 
