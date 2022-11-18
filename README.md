@@ -242,6 +242,13 @@ The following setups have been tested on the [eX3](https://www.ex3.simula.no/) c
     * metis-5.1.0
     * openmpi-4.1.4
 
+- A HIP build running on an AMD MI210 GPU on the `mi210q` partition, built with
+    * ROCm 5.1.3
+    * mfem-4.5 built with HIP support
+    * hypre-2.25.0 built with HIP support
+    * metis-5.1.0
+    * openmpi-4.1.4
+
 - A CUDA build running on an NVIDIA V100 GPU on the `dgx2q` partition, built with 
     * Cuda Toolkit 10.1.243
     * mfem-4.5 built with CUDA support
