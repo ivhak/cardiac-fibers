@@ -30,6 +30,7 @@ To build `cardiac-fibers` for the wanted partition, it should be as simple as ru
 
 ```sh
 source envsetup-ex3.sh <partition_name>
+make clean cardiac-fibers
 ```
 
 Note that the HIP builds (`mi100q` and `mi210q`) currently have to be built on
