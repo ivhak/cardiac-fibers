@@ -174,11 +174,14 @@ $ mpirun -np 2 ./cardiac-fibers \
 
 ## Building
 
+[Build instructions for MacOS](docs/build-darwin.md)
+
 `cardiac-fibers` relies minimally on the following libraries:
 - [mfem](https://mfem.org), a finite element discretization library.
 - [hypre](https://github.com/hypre-space/hypre), a library of high-performance preconditioners and solvers.
 - METIS, a family of multilevel partitioning algorithms
 - MPI, a message-passing library
+
 
 The supplied Makefile expects the following variables to be set:
 
