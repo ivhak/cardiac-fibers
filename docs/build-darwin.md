@@ -25,9 +25,8 @@ cd mfem-4.5
 ```
 
 Then we can build mfem, either by copying and running the  [build
-script](../mfem-build-scripts/build_mfem_darwin.sh), which will install mfem
-into `${HOME}/.local/packages/mfem-4.5`, or by following the following
-commands:
+script](../mfem-build-scripts/build_mfem_darwin.sh) which will install mfem
+into `${HOME}/.local/packages/mfem-4.5`, or by running the following commands:
 
 ```sh
 
@@ -42,7 +41,7 @@ make BUILD_DIR=${MFEM_BUILD_DIR} config \
     HYPRE_LIB="-L/usr/local/lib -lHYPRE" \
     HYPRE_OPT="-L/usr/local/include" \
     METIS_LIB="-L/usr/local/lib -lmetis" \
-    METIS_OPT="-L/usr/local/include" \
+    METIS_OPT="-L/usr/local/include"
 
 # Build mfem, using 4 processes to speed things up. Tailor to your system.
 make BUILD_DIR=${MFEM_BUILD_DIR} -j 4
@@ -61,7 +60,7 @@ make BUILD_DIR=${MFEM_BUILD_DIR} install PREFIX=${MFEM_INSTALL_DIR}
 With mfem installed, we can finally build `cardiac-fibers`. To do so, we need
 to set up the required environment variables. If you followed this guide, you
 can (hopefully) just run the following command from the root of the
-`cardiac-fibers` repo.
+`cardiac-fibers` repo:
 
 ```sh
 source envsetup-darwin.sh
