@@ -65,12 +65,80 @@ Options:
         Tune the BoomerAmg preconditioner for (hopefully) better GPU performance.
 ```
 
-### Example 1: Idealized left ventricle
+### Example 1: Patient specific bi-ventricle geometry
 
-This example uses the mesh [lv_ellipsoid.msh](mesh/gmsh/lv_ellipsoid.msh),
-which was generated using the
+This example uses the mesh [heart02](mesh/gmsh/heart02.msh), which has been
+generated from the data published alongside the following study:
+
+> Martinez-Navarro, Hector, et al. "High arrhythmic risk in antero-septal acute
+> myocardial ischemia is explained by increased transmural reentry occurrence."
+> Scientific reports 9.1 (2019): 1-12.(https://www.nature.com/articles/s41598-019-53221-2)
+
+The data is published at <https://ora.ox.ac.uk/objects/uuid:951b086c-c4ba-41ef-b967-c2106d87ee06>.
+
+To calculate the fiber orientations we need the id numbers for the base
+surface, the epicardium surface, and the left and right ventricle endocardium
+surfaces. These can be found in the `PhysicalNames` section of the mesh:
+
+```sh
+$ head -n 11 mesh/gmsh/heart02.msh
+$MeshFormat
+2.2 0 8
+$EndMeshFormat
+$PhysicalNames
+5
+2 1 "base"
+2 2 "epicardium"
+2 3 "left ventricle endocardium"
+2 4 "right ventricle endocardium"
+3 1 "myocardium"
+$EndPhysicalNames
+```
+
+Here, the id numbers happen to be the same as the default ones. The second
+piece of information we need is where the apex of the epicardium lies. This is
+the vertex that is furthest from the base plane. For this mesh, we happen to
+know that the apex lies roughly at `[346.35 1233.74 169.79]`.
+
+With the id numbers of the surfaces set (here with the defaults) and the
+location of the apex, we can calculate the fiber orientations. We pass the
+`--save-paraview` flag to save the solution in a format that can be opened in
+the visualization program [ParaView](https://www.paraview.org/). We also pass
+the `--verbose` flag with a value of 3 to print some useful information along
+the way.
+
+```sh
+$ ./cardiac-fibers \
+        --mesh mesh/gmsh/heart02.msh \
+        --out out/heart02 \
+        --apex '346.35 1233.74 169.79' \
+        --save-paraview \
+        --verbose 3
+```
+
+We can visualize the generated fibers in ParaView :
+1. In ParaView, open the generated file `out/heart02/paraview/heart02/heart02.pvd`.
+2. Click on `'Apply'` to visualize the mesh.
+3. With the mesh applied, click on the `'Glyph'` button. 
+   1. In the menu that pops up, select `'Orientation Array' > 'F'` and `'Scale Array' > 'No scale array'`.
+   2. To increase the number of fibers being rendered, change the number under
+      `'Maximum Number of Sample Points'`.
+4. Click on  `'Apply'` to visualize the fibers.
+5. Select `'phi epi'` on the color menu to color the fibers according their wall depth.
+
+The result should hopefully be something close to this:
+
+![Rendering of the fiber directions on `mesh/gmsh/heart02.msh`](docs/figures/heart02.png)
+
+### Example 2: Idealized left ventricle
+
+It is also possible to generate fibers for a single ventricle. This example
+uses the mesh [lv_ellipsoid.msh](mesh/gmsh/lv_ellipsoid.msh), which was
+generated using the
 [cardiac_geometries](https://github.com/ComputationalPhysiology/cardiac_geometries)
-tool. The `PhysicalNames` section of mesh file shows the id numbers we need:
+tool.
+
+The `PhysicalNames` section of mesh file shows the id numbers we need:
 ```sh
 $ head -n 15 mesh/gmsh/lv_ellipsoid.msh
 $MeshFormat
@@ -94,95 +162,36 @@ Inspection of the mesh in [gmsh](https://gmsh.info/) also shows that the apex
 of the epicardium is somewhere in the along the $x$ axis, so we set the
 prescribed apex coordiantes to `[ -100 0 0 ]`. Note that since we are working
 with a single ventricle geometry, we explicitly mark the right ventricle as non
-existent by passing the `--rv-id -1` flag. The mesh itself is quite coarse, so
-we can refine it using the `--uniform-refinement` flag. Here we choose to do
-two levels of uniform refinement, which refines the original mesh from
-consisting of 770 vertices 2818 elements, to consisting of 34569 vertices and
-180352 elements. To output some information about how much time is spent each
-part, we can set the `--verbose` flag to 2 .With all the information we need,
-we can finally run the following command
+existent by passing the `--rv-id -1` flag.
+
+The mesh itself is quite coarse, so we can refine it using the
+`--uniform-refinement` flag. Here we choose to do two levels of uniform
+refinement, which refines the original mesh from consisting of 770 vertices
+2818 elements, to  4909 vertices and 22544 elements.
+
+This time we choose to generate the fibers on a per-element basis rather than
+per vertex. To do this we pass the `--discontinuous-galerkin` (or `-dg` for
+short) flag, to generate fibers in the `DG_0` space rather than in `H_1`.
 
 ```sh
 $ ./cardiac-fibers \
         --mesh mesh/gmsh/lv_ellipsoid.msh \
+        --out out/lv_ellipsoid \
         --apex '-100 0 0' \
         --lv-id 6 \
         --base-id 5 \
         --epi-id 7 \
         --rv-id -1 \
-        --uniform-refinement 2 \
-        --out out/lv_ellipsoid \
-        --save-paraview \
-        --verbose 2
-
-```
-
-Then we can visualize the generated fibers using [ParaView](https://www.paraview.org/). 
-1. In ParaView, open the generated file `out/lv_ellipsoid/paraview/lv_ellipsoid/lv_ellipsoid.pvd`.
-2. Click on `'Apply'` to visualize the mesh.
-3. With the mesh applied, click on the `'Glyph'` button. 
-   1. In the menu that pops up, select `'Orientation Array' > 'F'` and `'Scale Array' > 'No scale array'`.
-   2. To increase the number of fibers being rendered, change the number under
-      `'Maximum Number of Sample Points'`.
-4. Click on  `'Apply'` to visualize the fibers.
-5. Select `'phi epi'` on the color menu to color the fibers according their wall depth.
-
-The result should hopefully be something close to this:
-
-![Rendering of the fiber directions on `mesh/gmsh/lv_ellipsoid.msh`](docs/figures/lv_ellipsoid.png)
-
-### Example 2: Patient specific bi-ventricle geometry
-
-This example uses the mesh [heart02](mesh/gmsh/heart02.msh), which has been
-generated from the data published alongside the following study:
-
-> Martinez-Navarro, Hector, et al. "High arrhythmic risk in antero-septal acute
-> myocardial ischemia is explained by increased transmural reentry occurrence."
-> Scientific reports 9.1 (2019): 1-12.(https://www.nature.com/articles/s41598-019-53221-2)
-
-The data is published at <https://ora.ox.ac.uk/objects/uuid:951b086c-c4ba-41ef-b967-c2106d87ee06>.
-
-Just as in Example 1, we can look at the `PhysicalNames` section to find the
-correct surface id numbers:
-
-```sh
-$ head -n 11 mesh/gmsh/heart02.msh
-$MeshFormat
-2.2 0 8
-$EndMeshFormat
-$PhysicalNames
-5
-2 1 "base"
-2 2 "epicardium"
-2 3 "left ventricle endocardium"
-2 4 "right ventricle endocardium"
-3 1 "myocardium"
-$EndPhysicalNames
-```
-
-Here, the id numbers happen to be the same as the default ones. This time we
-choose to generate the fibers on a per-element basis rather than per vertex. To
-do this we pass the `--discontinuous-galerkin` (or `-dg` for short) flag, to
-generate fibers in the `DG_0` space rather than in `H_1`. For this mesh we
-happen to know that the apex is somewhere close to `[346.35 1233.74 169.79]`.
-By setting the `--verbose` flag to 3 we get the time of each step, as well as
-some additional information. In addition, we can run in parallel to speed
-things up, by setting the number of processes to use with `mpirun`. The full
-command for generating the fiber orientations for `heart02`, running in
-parallel with two processes is then
-
-```sh
-$ mpirun -np 2 ./cardiac-fibers \
-        --mesh mesh/gmsh/heart02.msh \
-        --apex '346.35 1233.74 169.79' \
-        --out out/heart02 \
-        --save-paraview \
+        --uniform-refinement 1 \
         --discontinuous-galerkin \
+        --save-paraview \
         --verbose 3
 
 ```
 
-![Rendering of the fiber directions on `mesh/gmsh/heart02.msh`](docs/figures/heart02.png)
+
+![Rendering of the fiber directions on `mesh/gmsh/lv_ellipsoid.msh`](docs/figures/lv_ellipsoid.png)
+
 
 ## Building
 
