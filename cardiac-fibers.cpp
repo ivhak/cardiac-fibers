@@ -229,7 +229,7 @@ int main(int argc, char *argv[])
 
     // Set program defaults
     opts.mesh_file = NULL;
-    opts.output_dir = "./out";
+    opts.output_dir = ".";
     opts.time_to_file = false;
 
 #if defined(MFEM_USE_HIP)
@@ -243,8 +243,11 @@ int main(int argc, char *argv[])
     opts.verbose = 0;
     opts.prescribed_apex = Vector(3);
 
-    opts.save_mfem = true;
-    opts.save_paraview = false;
+    opts.save_paraview   = true;
+    opts.save_mfem       = false;
+
+    opts.save_laplacians = true;
+    opts.save_gradients  = false;
 
     opts.itol = 1e-12;
 
@@ -310,6 +313,16 @@ int main(int argc, char *argv[])
             "-s",  "--save-mfem",
             "-ns", "--no-save-mfem",
             "Save data files in the native MFEM format.");
+
+    args.AddOption(&opts.save_laplacians,
+            "-sl",  "--save-laplacians",
+            "-nsl", "--no-save-laplacians",
+            "Save the laplacians phi_epi, phi_lv and phi_rv");
+
+    args.AddOption(&opts.save_gradients,
+            "-sg",  "--save-gradients",
+            "-nsg", "--no-save-gradients",
+            "Save the gradients of phi_epi, phi_lv, phi_rv and psi_ab");
 
     args.AddOption(&opts.itol,
             "-it", "--interpolation-tolerance",
@@ -482,35 +495,43 @@ int main(int argc, char *argv[])
         timing::tick(&t0);
         Vector vertices;
         pmesh.GetVertices(vertices);
+        vertices.UseDevice(false);
         const double *vertices_vals = vertices.Read();
         int n = pmesh.GetNV();
-        double *distances = (double *) malloc(n * sizeof(double));
+
+        Vector distances(n);
+        distances.UseDevice(false);
+        double *distances_vals = distances.ReadWrite();
+
+        const double apex_x = opts.prescribed_apex[0];
+        const double apex_y = opts.prescribed_apex[1];
+        const double apex_z = opts.prescribed_apex[2];
 
         // The vertices are in SOA format: xxx...yyy...zzz...
-        // x
-        MFEM_FORALL(i, n, {
-                distances[i]  = (vertices_vals[0*n+i]-opts.prescribed_apex[0])
-                               *(vertices_vals[0*n+i]-opts.prescribed_apex[0]);
+        // d_i = (x-apex_x)^2
+        MFEM_FORALL_SWITCH(false, i, n, {
+                distances_vals[i]  = (vertices_vals[0*n+i]-apex_x)
+                                   * (vertices_vals[0*n+i]-apex_x);
         });
 
-        // y
-        MFEM_FORALL(i, n, {
-                distances[i] += (vertices_vals[1*n+i]-opts.prescribed_apex[1])
-                              * (vertices_vals[1*n+i]-opts.prescribed_apex[1]);
+        // d_i += (y-apex_y)^2
+        MFEM_FORALL_SWITCH(false, i, n, {
+                distances_vals[i] += (vertices_vals[1*n+i]-apex_y)
+                                   * (vertices_vals[1*n+i]-apex_y);
         });
 
-        // z
-        MFEM_FORALL(i, n, {
-                distances[i] += (vertices_vals[2*n+i]-opts.prescribed_apex[2])
-                              * (vertices_vals[2*n+i]-opts.prescribed_apex[2]);
+        // d_i += (z-apex_z)^2
+        MFEM_FORALL_SWITCH(false, i, n, {
+                distances_vals[i] += (vertices_vals[2*n+i]-apex_z)
+                                   * (vertices_vals[2*n+i]-apex_z);
         });
 
         double min_distance = std::numeric_limits<double>::max();
 
         for (int i = 0; i < pmesh.GetNV(); i++) {
-            if (distances[i] < min_distance) {
+            if (distances_vals[i] < min_distance) {
                 apex = i;
-                min_distance = distances[i];
+                min_distance = distances_vals[i];
             }
         }
 
@@ -546,7 +567,6 @@ int main(int argc, char *argv[])
             logging::timestamp(tout, "Find apex", timing::duration(t0, t1));
         }
 
-        free(distances);
     }
 
 
@@ -564,7 +584,7 @@ int main(int argc, char *argv[])
             prec->SetCycleNumSweeps(1,1);     // 1 sweep on the up and down cycle
             prec->SetInterpolation(17);       // extended+i, matrix-matrix
             prec->SetAggressiveCoarsening(1); // Number of levels of aggressive coarsening
-            // prec->SetStrengthThresh(0.5);
+            prec->SetStrengthThresh(0.5);
             prec->SetRelaxType(7);            // weighted Jacobi
         }
 #endif
@@ -1011,19 +1031,18 @@ int main(int argc, char *argv[])
             // Save the MFEM mesh
             save::save_mesh(&pmesh, mfem_output_dir, mesh_basename, rank);
 
-#ifdef DEBUG
-            std::string debug_dir = mfem_output_dir + "/debug";
-            fs::mksubdir(debug_dir);
-            save::save_solution(x_phi_epi, debug_dir, mesh_basename, "_phi_epi.gf", rank);
-            save::save_solution(x_phi_lv,  debug_dir, mesh_basename, "_phi_lv.gf", rank);
-            save::save_solution(x_phi_rv,  debug_dir, mesh_basename, "_phi_rv.gf", rank);
-            save::save_solution(x_psi_ab,  debug_dir, mesh_basename, "_psi_ab.gf", rank);
+            if (opts.save_laplacians) {
+                save::save_solution(x_phi_epi, mfem_output_dir, mesh_basename, "_phi_epi.gf", rank);
+                save::save_solution(x_phi_lv,  mfem_output_dir, mesh_basename, "_phi_lv.gf", rank);
+                save::save_solution(x_phi_rv,  mfem_output_dir, mesh_basename, "_phi_rv.gf", rank);
+            }
 
-            save::save_solution(&grad_phi_epi, debug_dir, mesh_basename, "_grad_phi_epi.gf", rank);
-            save::save_solution(&grad_phi_lv,  debug_dir, mesh_basename, "_grad_phi_lv.gf", rank);
-            save::save_solution(&grad_phi_rv,  debug_dir, mesh_basename, "_grad_phi_rv.gf", rank);
-            save::save_solution(&grad_psi_ab,  debug_dir, mesh_basename, "_grad_psi_ab.gf", rank);
-#endif
+            if (opts.save_gradients) {
+                save::save_solution(&grad_phi_epi, mfem_output_dir, mesh_basename, "_grad_phi_epi.gf", rank);
+                save::save_solution(&grad_phi_lv,  mfem_output_dir, mesh_basename, "_grad_phi_lv.gf", rank);
+                save::save_solution(&grad_phi_rv,  mfem_output_dir, mesh_basename, "_grad_phi_rv.gf", rank);
+                save::save_solution(&grad_psi_ab,  mfem_output_dir, mesh_basename, "_grad_psi_ab.gf", rank);
+            }
             // Save the solutions
             save::save_solution(&F,  mfem_output_dir, mesh_basename, "_F.gf", rank);
             save::save_solution(&S,  mfem_output_dir, mesh_basename, "_S.gf", rank);
@@ -1039,15 +1058,17 @@ int main(int argc, char *argv[])
 
             pd = new ParaViewDataCollection(mesh_basename, &pmesh);
             pd->SetPrefixPath(paraview_path);
-#ifdef DEBUG
-            pd->RegisterField("grad phi epi", &grad_phi_epi);
-            pd->RegisterField("grad phi lv",  &grad_phi_lv);
-            pd->RegisterField("grad phi rv",  &grad_phi_rv);
-            pd->RegisterField("grad psi ab",  &grad_psi_ab);
-#endif
-            pd->RegisterField("phi epi", x_phi_epi);
-            pd->RegisterField("phi lv",  x_phi_lv);
-            pd->RegisterField("phi rv",  x_phi_rv);
+            if (opts.save_gradients) {
+                pd->RegisterField("grad phi epi", &grad_phi_epi);
+                pd->RegisterField("grad phi lv",  &grad_phi_lv);
+                pd->RegisterField("grad phi rv",  &grad_phi_rv);
+                pd->RegisterField("grad psi ab",  &grad_psi_ab);
+            }
+            if (opts.save_laplacians) {
+                pd->RegisterField("phi epi", x_phi_epi);
+                pd->RegisterField("phi lv",  x_phi_lv);
+                pd->RegisterField("phi rv",  x_phi_rv);
+            }
             pd->RegisterField("F", &F);
             pd->RegisterField("S", &S);
             pd->RegisterField("T", &T);

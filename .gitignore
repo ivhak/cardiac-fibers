@@ -5,3 +5,5 @@ copy_back_data.sh
 data/
 out/
 rocprof/
+paraview/
+mfem
