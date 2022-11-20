@@ -165,9 +165,9 @@ with a single ventricle geometry, we explicitly mark the right ventricle as non
 existent by passing the `--rv-id -1` flag.
 
 The mesh itself is quite coarse, so we can refine it using the
-`--uniform-refinement` flag. Here we choose to do one levels of uniform
+`--uniform-refinement` flag. Here we choose to do one level of uniform
 refinement, which refines the original mesh from consisting of 770 vertices
-2818 elements, to  4909 vertices and 22544 elements.
+2818 elements, to 4909 vertices and 22544 elements.
 
 This time we choose to generate the fibers on a per-element basis rather than
 per vertex. To do this we pass the `--discontinuous-galerkin` (or `-dg` for
