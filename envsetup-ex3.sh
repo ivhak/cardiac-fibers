@@ -38,10 +38,6 @@ if [ "$1" = "mi100q" ] || [ -z "$1" ]; then
     module load openmpi-4.1.4
     module load metis-32-5.1.0
 
-    # The openmpi-4.1.4 module does not properly export MPI_INCDIR and MPI_LIBDIR
-    export MPI_INCDIR=${MPI_HOME}/include
-    export MPI_LIBDIR=${MPI_HOME}/lib
-
     export MFEM_ROOT="${PKG_ROOT}/mi100q/mfem-4.5"
     export MFEM_DBG_ROOT="${PKG_ROOT}/mi100q/mfem-dbg-4.5"
 
@@ -57,10 +53,6 @@ elif [ "$1" = "mi210q" ]; then
     module load hypre-32-2.25.0
     module load openmpi-4.1.4
     module load metis-32-5.1.0
-
-    # The openmpi-4.1.4 module does not properly export MPI_INCDIR and MPI_LIBDIR
-    export MPI_INCDIR=${MPI_HOME}/include
-    export MPI_LIBDIR=${MPI_HOME}/lib
 
     export MFEM_ROOT="${PKG_ROOT}/mi210q/mfem-4.5"
     export MFEM_DBG_ROOT="${PKG_ROOT}/mi210q/mfem-dbg-4.5"
@@ -78,10 +70,6 @@ elif [ "$1" = "dgx2q" ]; then
     module load openmpi-4.1.4
     module load metis-32-5.1.0
 
-    # The openmpi-4.1.4 module does not properly export MPI_INCDIR and MPI_LIBDIR
-    export MPI_INCDIR=${MPI_HOME}/include
-    export MPI_LIBDIR=${MPI_HOME}/lib
-
     export MFEM_ROOT="${PKG_ROOT}/dgx2q/mfem-4.5"
     export MFEM_DBG_ROOT="${PKG_ROOT}/dgx2q/mfem-dbg-4.5"
 
@@ -96,10 +84,6 @@ elif [ "$1" = "defq" ]; then
     module load hypre-32-2.25.0
     module load openmpi-4.1.4
     module load metis-32-5.1.0
-
-    # The openmpi-4.1.4 module does not properly export MPI_INCDIR and MPI_LIBDIR
-    export MPI_INCDIR=${MPI_HOME}/include
-    export MPI_LIBDIR=${MPI_HOME}/lib
 
     export MFEM_ROOT="${PKG_ROOT}/defq/mfem-4.5"
     export MFEM_DBG_ROOT="${PKG_ROOT}/defq/mfem-dbg-4.5"

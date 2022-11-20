@@ -28,22 +28,28 @@ CXX = $(MPI_CXX)
 
 # MFEM
 ifeq ($(DEBUG), YES)
+# Set the debug build to MFEM_ROOT if MFEM_DBG_ROOT is not set
+ifdef MFEM_DBG_ROOT
 MFEM_ROOT=$(MFEM_DBG_ROOT)
+endif
 endif
 
 MFEM_INCDIR = $(MFEM_ROOT)/include
 MFEM_LIBDIR = $(MFEM_ROOT)/lib
 
+MPI_COMPILE_FLAGS = $(shell ${MPI_CXX} --showme:compile)
+MPI_LINK_FLAGS = $(shell ${MPI_CXX} --showme:link)
+
 # Setup the include and link flags
 IFLAGS = -I$(MFEM_INCDIR) \
-		 -I$(MPI_INCDIR) \
 		 -I$(HYPRE_INCDIR) \
-		 -I$(METIS_INCDIR)
+		 -I$(METIS_INCDIR) \
+		 ${MPI_COMPILE_FLAGS}
 
 LFLAGS = -L$(MFEM_LIBDIR) -lmfem \
-		 -L$(MPI_LIBDIR) -lmpi \
 		 -L$(HYPRE_LIBDIR) -lHYPRE \
-		 -L$(METIS_LIBDIR) -lmetis
+		 -L$(METIS_LIBDIR) -lmetis \
+		 ${MPI_LINK_FLAGS}
 
 # openmp
 ifeq ($(CARDIAC_FIBERS_HAS_OPENMP), YES)
@@ -91,17 +97,12 @@ tests: tests.o calculus.o util.o
 # Check that all the needed environment variables are set
 check-env:
 ifndef MFEM_ROOT
-	$(error MPI_ROOT is not set!)
+	$(error MFEM_ROOT is not set!)
 endif
 ifeq ($(DEBUG), YES)
 ifndef MFEM_DBG_ROOT
+	$(warning Warning: MFEM_DBG_ROOT is not set, using MFEM_ROOT)
 endif
-endif
-ifndef MPI_INCDIR
-	$(error MPI_INCDIR is not set!)
-endif
-ifndef MPI_LIBDIR
-	$(error MPI_LIBDIR is not set!)
 endif
 ifndef HYPRE_INCDIR
 	$(error HYPRE_INCDIR is not set!)

@@ -38,7 +38,6 @@ CARDIAC_FIBERS_HAS_OPENMP=NO
 MFEM_ROOT=${PKG_ROOT}/mfem-4.5
 HYPRE_ROOT=/usr/local
 METIS_ROOT=/usr/local
-MPI_ROOT=/usr/local
 
 export MFEM_ROOT
 
@@ -47,9 +46,6 @@ export HYPRE_LIBDIR=${HYPRE_ROOT}/lib
 
 export METIS_INCDIR=${METIS_ROOT}/include
 export METIS_LIBDIR=${METIS_ROOT}/lib
-
-export MPI_INCDIR=${MPI_ROOT}/include
-export MPI_LIBDIR=${MPI_ROOT}/lib
 
 export CARDIAC_FIBERS_HAS_HIP=NO
 export CARDIAC_FIBERS_HAS_CUDA=NO

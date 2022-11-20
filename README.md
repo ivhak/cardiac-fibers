@@ -217,20 +217,19 @@ The supplied Makefile expects the following variables to be set:
 | `HYPRE_LIBDIR`    | Location of hypre library                 | Yes      |
 | `METIS_INCDIR`    | Location of METIS headers                 | Yes      |
 | `METIS_LIBDIR`    | Location of METIS library                 | Yes      |
-| `MPI_INCDIR`      | Location of MPI headers                   | Yes      |
-| `MPI_LIBDIR`      | Location of MPI library                   | Yes      |
 
 A debug build of `cardiac-fibers`, which can be compiled by running `make DEBUG=YES
 cardiac-fibers`, requires that the `MFEM_DBG_ROOT` variable is set to the location of
-a debug build of mfem. If you do not have a debug build of mfem, this can be
-circumvented by setting it to the same as `MFEM_ROOT`, for example by running
-`MFEM_DBG_ROOT=$MFEM_ROOT make DEBUG=YES cardiac-fibers`.
+a debug build of mfem. If `MFEM_DBG_ROOT` is not set, `make` will default to
+using `MFEM_ROOT`.
 
 See the environment setup script for the [eX3](https://www.ex3.simula.no/)
 cluster in [envsetup-ex3.sh](envsetup-ex3.sh) for a working example.
 
 By default (for non-GPU build), the compiler  is set to `mpic++`. This can be
-overwritten with the environment variable `MPI_CXX`.
+overwritten with the environment variable `MPI_CXX`. Note that `MPI_CXX` has to
+point to an actual MPI compiler wrapper, even when compiling for CUDA and HIP,
+as it is used to get the compiler flags and link flags for MPI.
 
 ### GPU builds
 
