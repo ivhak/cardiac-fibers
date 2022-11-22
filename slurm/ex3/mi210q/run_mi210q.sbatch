@@ -11,7 +11,7 @@
 
 LDRB_DIR="${HOME}/master/cardiac-fibers"
 
-DATA_DIR="/global/D1/homes/iverh/data/meshes/martinez-navarro-etal/mesh/gmsh"
+DATA_DIR="/global/D1/homes/iverh/data/meshes/martinez-navarro-etal/mesh/gmsh-bin"
 
 JOB_DIR="./jobs/${SLURM_JOB_NAME}-${SLURM_JOB_ID}"
 
@@ -25,6 +25,7 @@ function run {
         --time-to-file \
         --verbose 3 \
         --apex '345 1232 170' \
+        --discontinuous-galerkin \
         --no-save-paraview \
         --no-save-mfem
 }
