@@ -801,27 +801,8 @@ int main(int argc, char *argv[])
         timing::tick(&t0);
         tracing::roctx_range_push("grad_phi_epi");
 
-#if 0
-        if (opts.use_dg) {
-            // Calculate the gradient of the H1 space in DG0
-            GradientGridFunctionCoefficient ggfc(x_phi_epi);
-            grad_phi_epi.ProjectCoefficient(ggfc);
-
-        } else {
-            // Calculate the gradient of the H1 space in DG0, then project it back down to H1
-            ParGridFunction intermediate(&fespace_vector_dg0);
-
-            GradientGridFunctionCoefficient ggfc(x_phi_epi);
-            intermediate.ProjectCoefficient(ggfc);
-
-            GridFunctionCoefficient gfc(&intermediate);
-            grad_phi_epi.ProjectCoefficient(gfc);
-
-        }
-#else
         GradientGridFunctionCoefficient ggfc(x_phi_epi);
         grad_phi_epi.ProjectCoefficient(ggfc);
-#endif
 
         tracing::roctx_range_pop();
         timing::tick(&t1);
@@ -903,50 +884,107 @@ int main(int argc, char *argv[])
         timing::tick(&t0);
         ParFiniteElementSpace *fespace_scalar_dg0 = new ParFiniteElementSpace(&pmesh, &dg0_fec);
 
+        // We could just setup a GridFunctionCoeffiecient of the solution in
+        // H1, and then project that coefficient onto the new DG0 space.
+        // However, this (currently) only runs on the host, and we would like
+        // to be able to do it on the GPU.
+        //
+        // In the projection from H1 to DG0, we go from having DoFs in the
+        // vertices to having them in the middle of the element. Since we have
+        // a first order elements, the projection from H1 to L2 is simply an
+        // averaging of the H1 DoFs in element i, to the single DG0 dof in the
+        // center of element i.
+        //
+        // First we get the element to dof mappings from the H1 and DG0 spaces
+        // (which we can get read pointers to on the device). Then we can loop
+        // over the elements (in parallel!), get the 4 DoFs belonging to
+        // element i in H1, and set the value of the single DoF in DG0 for
+        // element i to be the average of the four.
+        //
+        // DISCLAIMER: This is hardcoded for, and will only work for, tetrahedron elements.
+
+        const Table& h1_scalar_element_to_dof  = fespace_scalar_h1.GetElementToDofTable();
+        const Table& dg0_scalar_element_to_dof = fespace_scalar_dg0->GetElementToDofTable();
+
+        const int *h1_I = h1_scalar_element_to_dof.ReadI();
+        const int *h1_J = h1_scalar_element_to_dof.ReadJ();
+
+        const int *dg0_I = dg0_scalar_element_to_dof.ReadI();
+        const int *dg0_J = dg0_scalar_element_to_dof.ReadJ();
+        timing::tick(&t1);
+        if (opts.verbose >= 2 && rank == 0) {
+            logging::timestamp(tout, "Setup", timing::duration(t0, t1), 2);
+        }
+
         // Epicardium
         ParGridFunction *x_phi_epi_dg0 = new ParGridFunction(fespace_scalar_dg0);
         x_phi_epi_dg0->UseDevice(true);
+        timing::tick(&t0);
         {
-            GridFunctionCoefficient gfc(x_phi_epi);
-            x_phi_epi_dg0->ProjectCoefficient(gfc);
+            const double *x_phi_epi_h1_vals = x_phi_epi->Read();
+            double *x_phi_epi_dg0_vals = x_phi_epi_dg0->Write();
+            MFEM_FORALL(i, pmesh.GetNE(), {
+                 const int *h1_dofs = &h1_J[h1_I[i]];
+                 const double avg = (x_phi_epi_h1_vals[h1_dofs[0]]
+                                  +  x_phi_epi_h1_vals[h1_dofs[1]]
+                                  +  x_phi_epi_h1_vals[h1_dofs[2]]
+                                  +  x_phi_epi_h1_vals[h1_dofs[3]]) / 4.0;
+                 x_phi_epi_dg0_vals[dg0_J[dg0_I[i]]] = avg;
+            });
+            delete x_phi_epi;
+            x_phi_epi = x_phi_epi_dg0;
         }
-        delete x_phi_epi;
-        x_phi_epi = x_phi_epi_dg0;
         timing::tick(&t1);
         if (opts.verbose >= 2 && rank == 0) {
             logging::timestamp(tout, "x_phi_epi", timing::duration(t0, t1), 2);
         }
 
-        // Left ventricle
-        timing::tick(&t0);
+        // Left ventricle endocaridum
         ParGridFunction *x_phi_lv_dg0 = new ParGridFunction(fespace_scalar_dg0);
         x_phi_lv_dg0->UseDevice(true);
+        timing::tick(&t0);
         {
-            GridFunctionCoefficient gfc(x_phi_lv);
-            x_phi_lv_dg0->ProjectCoefficient(gfc);
+            const double *x_phi_lv_h1_vals = x_phi_lv->Read();
+            double *x_phi_lv_dg0_vals = x_phi_lv_dg0->Write();
+            MFEM_FORALL(i, pmesh.GetNE(), {
+                 const int *h1_dofs = &h1_J[h1_I[i]];
+                 double avg = (x_phi_lv_h1_vals[h1_dofs[0]]
+                            +  x_phi_lv_h1_vals[h1_dofs[1]]
+                            +  x_phi_lv_h1_vals[h1_dofs[2]]
+                            +  x_phi_lv_h1_vals[h1_dofs[3]]) / 4.0;
+                 x_phi_lv_dg0_vals[dg0_J[dg0_I[i]]] = avg;
+            });
+            delete x_phi_lv;
+            x_phi_lv = x_phi_lv_dg0;
         }
-        delete x_phi_lv;
-        x_phi_lv = x_phi_lv_dg0;
         timing::tick(&t1);
         if (opts.verbose >= 2 && rank == 0) {
             logging::timestamp(tout, "x_phi_lv", timing::duration(t0, t1), 2);
         }
 
+        // Right ventricle endocaridum
         if (mesh_has_right_ventricle) {
-            timing::tick(&t0);
             ParGridFunction *x_phi_rv_dg0 = new ParGridFunction(fespace_scalar_dg0);
             x_phi_rv_dg0->UseDevice(true);
+            timing::tick(&t0);
             {
-                GridFunctionCoefficient gfc(x_phi_rv);
-                x_phi_rv_dg0->ProjectCoefficient(gfc);
+                const double *x_phi_rv_h1_vals = x_phi_rv->Read();
+                double *x_phi_rv_dg0_vals = x_phi_rv_dg0->Write();
+                MFEM_FORALL(i, pmesh.GetNE(), {
+                     const int *h1_dofs = &h1_J[h1_I[i]];
+                     double avg = (x_phi_rv_h1_vals[h1_dofs[0]]
+                                +  x_phi_rv_h1_vals[h1_dofs[1]]
+                                +  x_phi_rv_h1_vals[h1_dofs[2]]
+                                +  x_phi_rv_h1_vals[h1_dofs[3]]) / 4.0;
+                     x_phi_rv_dg0_vals[dg0_J[dg0_I[i]]] = avg;
+                });
+                delete x_phi_rv;
+                x_phi_rv = x_phi_rv_dg0;
             }
-            delete x_phi_rv;
-            x_phi_rv = x_phi_rv_dg0;
             timing::tick(&t1);
             if (opts.verbose >= 2 && rank == 0) {
                 logging::timestamp(tout, "x_phi_rv", timing::duration(t0, t1), 2);
             }
-
         }
         tracing::roctx_range_pop();
         timing::tick(&end_proj);
@@ -955,7 +993,6 @@ int main(int argc, char *argv[])
         } else if (opts.verbose && rank == 0) {
             logging::timestamp(tout, "Project laplacians from H1 -> DG0", timing::duration(begin_proj, end_proj), 1);
         }
-
     }
 
     // Get read-only pointers to the internal arrays of the laplacian solutions
