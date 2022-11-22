@@ -493,48 +493,45 @@ int main(int argc, char *argv[])
     int apex = -1;
     {
         timing::tick(&t0);
-        Vector vertices;
-        pmesh.GetVertices(vertices);
-        vertices.UseDevice(false);
-        const double *vertices_vals = vertices.Read();
+        tracing::roctx_range_push("Find apex");
+        Vector local_vertices;
+        pmesh.GetVertices(local_vertices);
+        const double *vert = local_vertices.Read();
         int n = pmesh.GetNV();
 
-        Vector distances(n);
-        distances.UseDevice(false);
-        double *distances_vals = distances.ReadWrite();
+        Vector local_distances(n);
+        double *dist = local_distances.ReadWrite();
 
         const double apex_x = opts.prescribed_apex[0];
         const double apex_y = opts.prescribed_apex[1];
         const double apex_z = opts.prescribed_apex[2];
 
-        // The vertices are in SOA format: xxx...yyy...zzz...
+        // The vertices we query from the parallel mesh are in SOA format:
+        //     { x0,x1,x2,...,xn,y0,y1,y0,...,yn,z0,z1,z2,...,zn }
+        // When running on device we also have to make sure that we synchronize
+        // the device after each element is computed.
+
         // d_i = (x-apex_x)^2
-        MFEM_FORALL_SWITCH(false, i, n, {
-                distances_vals[i]  = (vertices_vals[0*n+i]-apex_x)
-                                   * (vertices_vals[0*n+i]-apex_x);
-        });
+        MFEM_FORALL(i, n, { dist[i]  = (vert[0*n+i]-apex_x) * (vert[0*n+i]-apex_x); });
+        MFEM_DEVICE_SYNC;
 
         // d_i += (y-apex_y)^2
-        MFEM_FORALL_SWITCH(false, i, n, {
-                distances_vals[i] += (vertices_vals[1*n+i]-apex_y)
-                                   * (vertices_vals[1*n+i]-apex_y);
-        });
+        MFEM_FORALL(i, n, { dist[i] += (vert[1*n+i]-apex_y) * (vert[1*n+i]-apex_y); });
+        MFEM_DEVICE_SYNC;
 
         // d_i += (z-apex_z)^2
-        MFEM_FORALL_SWITCH(false, i, n, {
-                distances_vals[i] += (vertices_vals[2*n+i]-apex_z)
-                                   * (vertices_vals[2*n+i]-apex_z);
-        });
+        MFEM_FORALL(i, n, { dist[i] += (vert[2*n+i]-apex_z) * (vert[2*n+i]-apex_z); });
+        MFEM_DEVICE_SYNC;
 
         double min_distance = std::numeric_limits<double>::max();
 
+        // TODO (ivhak): Can this be done on the device as well?
         for (int i = 0; i < pmesh.GetNV(); i++) {
-            if (distances_vals[i] < min_distance) {
+            if (dist[i] < min_distance) {
                 apex = i;
-                min_distance = distances_vals[i];
+                min_distance = dist[i];
             }
         }
-
 
         std::vector<double> min_buffer(nranks, -1);
         MPI_Allgather(&min_distance,     1, MPI_DOUBLE,
@@ -544,11 +541,7 @@ int main(int argc, char *argv[])
         if (target_rank != rank) {
             apex = -1;
         } else if (opts.verbose >= 3) {
-            double found_apex[3] = {
-                (double) vertices_vals[0*n+apex],
-                (double) vertices_vals[1*n+apex],
-                (double) vertices_vals[2*n+apex]
-            };
+            const double found_apex[3] = { vert[0*n+apex], vert[1*n+apex], vert[2*n+apex] };
             std::string msg = "Rank " + std::to_string(rank)
                             + " found the vertex closest to the prescribed apex ("
                             + std::to_string(opts.prescribed_apex[0]) +", "
@@ -558,10 +551,9 @@ int main(int argc, char *argv[])
                             + std::to_string(found_apex[1]) + ", "
                             + std::to_string(found_apex[2]) + ")";
             logging::info(std::cout, msg);
-
-
         }
 
+        tracing::roctx_range_pop();
         timing::tick(&t1);
         if (opts.verbose && rank == 0) {
             logging::timestamp(tout, "Find apex", timing::duration(t0, t1));
@@ -577,7 +569,7 @@ int main(int argc, char *argv[])
         prec = new HypreBoomerAMG;
         prec->SetPrintLevel(opts.verbose >= 4 ? 1 : 0);
 
-#if defined(MFEM_USE_HIP) || defined(MFEM_USE_CUDA)
+#ifdef MFEM_USE_CUDA_OR_HIP
         // FIXME (ivhak): Gives wrong solution!
         if (opts.gpu_tuned_amg) {
             prec->SetCoarsening(8);           // PMIS
@@ -895,7 +887,7 @@ int main(int argc, char *argv[])
     }
 
     // We only need the gradients of the apex to base solution.
-    delete x_psi_ab;
+    // delete x_psi_ab;
 
     // If the fiber orientations are to be calculated in the DG0 space, i.e. on
     // fiber per element rather than per vertex, the solutions need to be
@@ -908,10 +900,10 @@ int main(int argc, char *argv[])
         timing::tick(&begin_proj);
         tracing::roctx_range_push("Project laplacians H1 -> DG0");
 
+        timing::tick(&t0);
         ParFiniteElementSpace *fespace_scalar_dg0 = new ParFiniteElementSpace(&pmesh, &dg0_fec);
 
         // Epicardium
-        timing::tick(&t0);
         ParGridFunction *x_phi_epi_dg0 = new ParGridFunction(fespace_scalar_dg0);
         x_phi_epi_dg0->UseDevice(true);
         {
@@ -998,6 +990,7 @@ int main(int argc, char *argv[])
             opts.alpha_endo, opts.alpha_epi, opts.beta_endo, opts.beta_epi,
             F_vals, S_vals, T_vals, opts.itol
     );
+    MFEM_DEVICE_SYNC;
 
     util::tracing::roctx_range_pop();
     timing::tick(&t1);
@@ -1068,6 +1061,7 @@ int main(int argc, char *argv[])
                 pd->RegisterField("phi epi", x_phi_epi);
                 pd->RegisterField("phi lv",  x_phi_lv);
                 pd->RegisterField("phi rv",  x_phi_rv);
+                pd->RegisterField("psi ab",  x_psi_ab);
             }
             pd->RegisterField("F", &F);
             pd->RegisterField("S", &S);

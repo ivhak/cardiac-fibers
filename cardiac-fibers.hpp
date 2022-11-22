@@ -40,7 +40,7 @@ typedef struct {
     int lv_id;
     int rv_id;
     int uniform_refinement;
-#if defined(MFEM_USE_HIP) || defined(MFEM_USE_CUDA)
+#ifdef MFEM_USE_CUDA_OR_HIP
     bool gpu_tuned_amg;
 #endif
     bool use_dg;
