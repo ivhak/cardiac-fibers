@@ -23,15 +23,75 @@ const double PI=3.14159265358979323846;
 
 typedef struct vec3 {
     double data[3];
-    MFEM_HOST_DEVICE double& operator[](int i) {
+    MFEM_HOST_DEVICE
+    double& operator[](int i) {
         return data[i];
+    }
+
+    MFEM_HOST_DEVICE
+    vec3 operator-(vec3& b) {
+        vec3 out = {data[0] -b.data[0], data[1] - b.data[1], data[2] - b.data[2] };
+        return out;
+    }
+
+    MFEM_HOST_DEVICE
+    void operator+=(vec3& b) {
+        data[0] += b.data[0];
+        data[1] += b.data[1];
+        data[2] += b.data[2];
+    }
+
+    MFEM_HOST_DEVICE
+    void operator-=(vec3& b) {
+        data[0] -= b.data[0];
+        data[1] -= b.data[1];
+        data[2] -= b.data[2];
+    }
+
+    MFEM_HOST_DEVICE
+    void operator=(vec3&b) {
+        data[0] = b.data[0];
+        data[1] = b.data[1];
+        data[2] = b.data[2];
+    }
+
+    MFEM_HOST_DEVICE
+    void operator*=(double b) {
+        data[0] *= b;
+        data[1] *= b;
+        data[2] *= b;
     }
 } vec3;
 
 typedef struct quat {
     double data[4];
+
     MFEM_HOST_DEVICE double& operator[](int i) {
         return data[i];
+    }
+
+    MFEM_HOST_DEVICE
+    void operator=(quat& b) {
+        data[0] = b.data[0];
+        data[1] = b.data[1];
+        data[2] = b.data[2];
+        data[3] = b.data[3];
+    }
+
+    MFEM_HOST_DEVICE
+    void operator*=(double b) {
+        data[0] *= b;
+        data[1] *= b;
+        data[2] *= b;
+        data[3] *= b;
+    }
+
+    MFEM_HOST_DEVICE
+    void operator+=(quat& b) {
+        data[0] += b.data[0];
+        data[1] += b.data[1];
+        data[2] += b.data[2];
+        data[3] += b.data[3];
     }
 } quat;
 
@@ -42,9 +102,8 @@ typedef struct mat3x3 {
     }
 } mat3x3;
 
-MFEM_HOST_DEVICE void veccopy(vec3& a, vec3& b);
-MFEM_HOST_DEVICE void vecmul(vec3& a, double b);
 MFEM_HOST_DEVICE double vecdot(vec3& a, vec3& b);
+MFEM_HOST_DEVICE void cross(vec3& c, vec3& a, vec3& b);
 
 MFEM_HOST_DEVICE void quat2rot(mat3x3& Q, quat& q);
 MFEM_HOST_DEVICE void rot2quat(quat& q, mat3x3& Q);

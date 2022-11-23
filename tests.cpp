@@ -62,8 +62,8 @@ bool test_axis(void)
     vec3 v_norm_e2;
     {
         const double v_norm = sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
-        veccopy(v_norm_e2, e2);
-        vecmul(v_norm_e2, v_norm);
+        v_norm_e2 = e2;
+        v_norm_e2 *= v_norm;
     }
     std::cout << " Test 2: v == ||v|| * e2: ";
     test_vec3equal(v,"v", v_norm_e2, "||v||*e2");

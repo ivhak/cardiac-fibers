@@ -55,16 +55,6 @@ static double quatlen(quat& q)
 }
 
 
-// Set q1 = q2
-MFEM_HOST_DEVICE
-static void quatcopy(quat& q1, quat& q2)
-{
-    q1[0] = q2[0];
-    q1[1] = q2[1];
-    q1[2] = q2[2];
-    q1[3] = q2[3];
-}
-
 // Negate the values of quaternion q
 MFEM_HOST_DEVICE
 static void quatnegate(quat& q)
@@ -75,25 +65,6 @@ static void quatnegate(quat& q)
     q[3] = -(q[3]);
 }
 
-// Multiple quaternion q with scalar a
-MFEM_HOST_DEVICE
-static void quatmul(quat& q, double a)
-{
-    q[0] *= a;
-    q[1] *= a;
-    q[2] *= a;
-    q[3] *= a;
-}
-
-// Add quaternion q2 to q1
-MFEM_HOST_DEVICE
-static void quatadd(quat& q1, quat& q2)
-{
-    q1[0] += q2[0];
-    q1[1] += q2[1];
-    q1[2] += q2[2];
-    q1[3] += q2[3];
-}
 
 // Normalize quaternion
 MFEM_HOST_DEVICE
@@ -110,7 +81,7 @@ static void quatnormalize(quat& q)
 
 // Cross product of two 3D vectors a and b, store in c.
 MFEM_HOST_DEVICE
-static void cross(vec3& c, vec3& a, vec3& b)
+void cross(vec3& c, vec3& a, vec3& b)
 {
     // c = a x b
     c[0] = a[1]*b[2] - a[2]*b[1];
@@ -118,18 +89,8 @@ static void cross(vec3& c, vec3& a, vec3& b)
     c[2] = a[0]*b[1] - a[1]*b[0];
 }
 
-// Set vector a = b
 MFEM_HOST_DEVICE
-void veccopy(vec3& a, vec3& b)
-{
-    a[0] = b[0];
-    a[1] = b[1];
-    a[2] = b[2];
-}
-
-
-MFEM_HOST_DEVICE
-void vecset(vec3& a, const double *b)
+static void vecset(vec3& a, const double *b)
 {
     a[0] = b[0];
     a[1] = b[1];
@@ -139,7 +100,7 @@ void vecset(vec3& a, const double *b)
 
 // Normalize vector a, a = a / ||a||
 MFEM_HOST_DEVICE
-static void vecnormalize(vec3& a)
+void vecnormalize(vec3& a)
 {
     const double sum = a[0]*a[0] + a[1]*a[1] + a[2]*a[2];
     if (sum == 0.0) return;
@@ -154,24 +115,6 @@ MFEM_HOST_DEVICE
 double vecdot(vec3& a, vec3& b)
 {
     return a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
-}
-
-// Subtract vector b from a; a = a - b
-MFEM_HOST_DEVICE
-static void vecsub(vec3& a, vec3& b)
-{
-    a[0] = a[0] - b[0];
-    a[1] = a[1] - b[1];
-    a[2] = a[2] - b[2];
-}
-
-// Scale vector a; a_i = a_i * b
-MFEM_HOST_DEVICE
-void vecmul(vec3& a, double b)
-{
-    a[0] = a[0] * b;
-    a[1] = a[1] * b;
-    a[2] = a[2] * b;
 }
 
 // Negate vector a; a = -a
@@ -325,7 +268,7 @@ MFEM_HOST_DEVICE
 static void slerp(quat& q, quat& q1, quat& q2, double t)
 {
     double dot = quatdot(q1, q2);
-    quatcopy(q, q2);
+    q = q2;
 
     if (dot < 0) {
         dot = -dot;
@@ -338,11 +281,10 @@ static void slerp(quat& q, quat& q1, quat& q2, double t)
     const double a = sin(angle * (1-t))/sin(angle);
     const double b = sin(angle * t)/sin(angle);
 
-    quat q1a = {0};
-    quatcopy(q1a, q1);
-    quatmul(q1a, a);
-    quatmul(q, b);
-    quatadd(q, q1a);
+    quat q1a = q1;
+    q1a *= a;
+    q *= b;
+    q += q1a;
 }
 
 // Given two vectors u and v, u being a vector pointing in
@@ -359,23 +301,23 @@ void axis(mat3x3& Q, vec3& u, vec3& v)
     vec3 e0, e1, e2;
 
     // e1 = u / ||u||
-    veccopy(e1, u);
+    e1 = u;
     vecnormalize(e1);
 
     // e2 = u / || u ||
     // where u = v - (e0*v)e0
     //
     // Normalize v as an initial guess for e0
-    veccopy(e2, v);
+    e2 = v;
     vecnormalize(e2);
 
     vec3 e1_dot_e2_e1;
     {
         const double e1_dot_e2 = vecdot(e1, e2);
-        veccopy(e1_dot_e2_e1, e1);
-        vecmul(e1_dot_e2_e1, e1_dot_e2);
+        e1_dot_e2_e1 = e1;
+        e1_dot_e2_e1 *= e1_dot_e2;
     }
-    vecsub(e2, e1_dot_e2_e1);
+    e2 -= e1_dot_e2_e1;
     vecnormalize(e2);
 
     // e0 = e1 x e2
@@ -462,62 +404,22 @@ void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t)
     rot2quat(qb, Qb);
 
     // Find qm in { ±qa, ±i*qa, ±j*qa, ±k*qa} that maximizes ||qm*qb||
-
     const double a = qa[0], b = qa[1], c = qa[2], d = qa[3];
 
-    quat qa_minus = {0};
-    qa_minus[0] = -a;
-    qa_minus[1] = -b;
-    qa_minus[2] = -c;
-    qa_minus[3] = -d;
+    quat i_qa = {-b,  a, -d,  c};
+    quat j_qa = {-c,  d,  a, -b};
+    quat k_qa = {-d, -c,  b,  a};
 
-    quat i_qa = {0};
-    i_qa[0] = -b;
-    i_qa[1] =  a;
-    i_qa[2] = -d;
-    i_qa[3] =  c;
-
-    quat j_qa = {0};
-    j_qa[0] = -c;
-    j_qa[1] =  d;
-    j_qa[2] =  a;
-    j_qa[3] = -b;
-
-    quat k_qa = {0};
-    k_qa[0] = -d;
-    k_qa[1] = -c;
-    k_qa[2] =  b;
-    k_qa[3] =  a;
-
-    quat i_qa_minus = {0};
-    i_qa_minus[0] = -i_qa[0];
-    i_qa_minus[1] = -i_qa[1];
-    i_qa_minus[2] = -i_qa[2];
-    i_qa_minus[3] = -i_qa[3];
-
-
-    quat j_qa_minus = {0};
-    j_qa_minus[0] = -j_qa[0];
-    j_qa_minus[1] = -j_qa[1];
-    j_qa_minus[2] = -j_qa[2];
-    j_qa_minus[3] = -j_qa[3];
-
-
-    quat k_qa_minus = {0};
-    k_qa_minus[0] = -k_qa[0];
-    k_qa_minus[1] = -k_qa[1];
-    k_qa_minus[2] = -k_qa[2];
-    k_qa_minus[3] = -k_qa[3];
+    quat qa_minus   = {-a, -b, -c, -d};
+    quat i_qa_minus = {-i_qa[0], -i_qa[1], -i_qa[2], -i_qa[3]};
+    quat j_qa_minus = {-j_qa[0], -j_qa[1], -j_qa[2], -j_qa[3]};
+    quat k_qa_minus = {-k_qa[0], -k_qa[1], -k_qa[2], -k_qa[3]};
 
     quat *quat_array[8] = {
-        &qa,
-        &qa_minus,
-        &i_qa,
-        &i_qa_minus,
-        &j_qa,
-        &j_qa_minus,
-        &k_qa,
-        &k_qa_minus,
+        &qa,   &qa_minus,
+        &i_qa, &i_qa_minus,
+        &j_qa, &j_qa_minus,
+        &k_qa, &k_qa_minus,
     };
 
     double max_abs_dot  = -1.0;
@@ -529,7 +431,7 @@ void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t)
         const double abs_dot = quatlen(t);
         if (abs_dot > max_abs_dot) {
             max_abs_dot = abs_dot;
-            quatcopy(qm, (*v)) ;
+            qm = *v;
         }
     }
 
@@ -583,8 +485,7 @@ static void calculate_fiber(
 
     mat3x3 Q_lv = {{{0}}};
     if (lv > tol) {
-        vec3 grad_lv_neg = {0};
-        veccopy(grad_lv_neg, grad_lv);
+        vec3 grad_lv_neg = grad_lv;
         vecnegate(grad_lv_neg);
 
         mat3x3 T = {{{0}}};
