@@ -25,7 +25,6 @@ function run {
         --time-to-file \
         --verbose 3 \
         --apex '345 1232 170' \
-        --discontinuous-galerkin \
         --no-save-paraview \
         --no-save-mfem
 }
@@ -70,8 +69,6 @@ function main {
     run heart08
     run heart09
     run heart10
-    run heart11
-    run heart12
     run heart13
 }
 

@@ -68,8 +68,6 @@ function main {
     run heart08
     run heart09
     run heart10
-    run heart11
-    run heart12
     run heart13
 }
 
