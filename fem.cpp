@@ -66,8 +66,8 @@ void compute_gradient(
         double *gradient,         // Write-only pointer to the gradient in L2
         const double *laplace,    // Read-only pointer to the solution in H1
         const double *vert,       // Read-only pointer to the vertex coordinates
-        const int nv,             // Number of vertices
         const int ne,             // Number of elements
+        const int nv,             // Number of vertices
         const int *h1_table_col,  // Read-only pointer to the H1 element-to-DoF table columns
         const int *h1_table_row,  // Read-only pointer to the H1 element-to-DoF table rows
         const int *l2_table_col,  // Read-only pointer to the L2 element-to-DoF table columns
