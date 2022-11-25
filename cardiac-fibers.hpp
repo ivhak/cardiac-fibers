@@ -43,7 +43,7 @@ typedef struct {
 #ifdef MFEM_USE_CUDA_OR_HIP
     bool gpu_tuned_amg;
 #endif
-    bool use_dg;
+    bool fibers_per_element;
 } Options;
 
 #define LDRB_GPU_HPP

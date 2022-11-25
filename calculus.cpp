@@ -89,6 +89,13 @@ void cross(vec3& c, vec3& a, vec3& b)
     c[2] = a[0]*b[1] - a[1]*b[0];
 }
 
+// Dot product of vectors a and b
+MFEM_HOST_DEVICE
+double vecdot(vec3& a, vec3& b)
+{
+    return a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
+}
+
 MFEM_HOST_DEVICE
 static void vecset(vec3& a, const double *b)
 {
@@ -100,7 +107,7 @@ static void vecset(vec3& a, const double *b)
 
 // Normalize vector a, a = a / ||a||
 MFEM_HOST_DEVICE
-void vecnormalize(vec3& a)
+static void vecnormalize(vec3& a)
 {
     const double sum = a[0]*a[0] + a[1]*a[1] + a[2]*a[2];
     if (sum == 0.0) return;
@@ -110,12 +117,6 @@ void vecnormalize(vec3& a)
     a[2] = a[2] * m;
 }
 
-// Dot product of vectors a and b
-MFEM_HOST_DEVICE
-double vecdot(vec3& a, vec3& b)
-{
-    return a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
-}
 
 // Negate vector a; a = -a
 MFEM_HOST_DEVICE

@@ -80,7 +80,7 @@ CFLAGS := -ccbin=mpiCC -x=cu --expt-extended-lambda --compiler-options="$(CFLAGS
 LFLAGS += -lcusparse -lrt
 endif
 
-SRC = cardiac-fibers.cpp util.cpp calculus.cpp
+SRC = cardiac-fibers.cpp util.cpp calculus.cpp fem.cpp
 OBJ=$(SRC:.cpp=.o)
 
 all: cardiac-fibers
@@ -118,6 +118,6 @@ ifndef METIS_LIBDIR
 endif
 
 clean:
-	$(RM) cardiac-fibers tests cardiac-fibers.o calculus.o util.o tests.o
+	$(RM) cardiac-fibers tests $(OBJ) tests.o
 
 .PHONY: check-env clean

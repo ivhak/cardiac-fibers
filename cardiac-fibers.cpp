@@ -20,8 +20,10 @@
 
 #include "mfem.hpp"
 #include "mfem/general/forall.hpp"
-#include "util.hpp"
+
 #include "cardiac-fibers.hpp"
+#include "fem.hpp"
+#include "util.hpp"
 #include "calculus.hpp"
 
 using namespace mfem;
@@ -267,7 +269,7 @@ int main(int argc, char *argv[])
     opts.gpu_tuned_amg = false;
 #endif
 
-    opts.use_dg = false;
+    opts.fibers_per_element = true;
 
     // Parse command-line options
     OptionsParser args(argc, argv);
@@ -317,7 +319,7 @@ int main(int argc, char *argv[])
     args.AddOption(&opts.save_laplacians,
             "-sl",  "--save-laplacians",
             "-nsl", "--no-save-laplacians",
-            "Save the laplacians phi_epi, phi_lv and phi_rv");
+            "Save the Laplacians phi_epi, phi_lv and phi_rv");
 
     args.AddOption(&opts.save_gradients,
             "-sg",  "--save-gradients",
@@ -366,11 +368,11 @@ int main(int argc, char *argv[])
             "-u", "--uniform-refinement",
             "Perform n levels of uniform refinement on the mesh.");
 
-    args.AddOption(&opts.use_dg,
-            "-dg",  "--discontinuous-galerkin",
-            "-ndg", "--no-discontinuous-galerkin",
-            "Calculate fibers in the DG0 space (one fiber per element) "
-            "rather than H1 (one fiber per vertex).");
+    args.AddOption(&opts.fibers_per_element,
+            "-fpe",  "--fibers-per-element",
+            "-fpv",  "--fibers-per-vertex",
+            "Calculate fibers in the L2 space (one fiber per element) "
+            "or H1 (one fiber per vertex).");
 
 #if defined (MFEM_USE_HIP) || defined (MFEM_USE_CUDA)
     args.AddOption(&opts.gpu_tuned_amg,
@@ -607,7 +609,7 @@ int main(int argc, char *argv[])
     struct timespec begin_laplace, end_laplace;
     timing::tick(&begin_laplace);
     if (opts.verbose >= 2 && rank == 0) {
-        logging::marker(tout, "Compute laplacians", 1);
+        logging::marker(tout, "Compute Laplacians", 1);
     }
 
     // Set up the finite element collection. We use  first order H1-conforming finite elements.
@@ -771,22 +773,16 @@ int main(int argc, char *argv[])
     if (opts.verbose >= 2 && rank == 0) {
         logging::timestamp(tout, "Total", timing::duration(begin_laplace, end_laplace), 2, '=');
     } else if (opts.verbose && rank == 0) {
-        logging::timestamp(tout, "Compute laplacians", timing::duration(begin_laplace, end_laplace), 1);
+        logging::timestamp(tout, "Compute Laplacians",
+                           timing::duration(begin_laplace, end_laplace), 1);
     }
 
-    // Use we want the fibers to be in DG0, we first have to project the
-    // laplacians from H1 to DG0. Then we can compute the gradients in DG0.
+    // If we want the fibers to be in L2, we first have to project the
+    // Laplacians from H1 to L2. Then we can compute the gradients in L2.
 
-    DG_FECollection dg0_fec(0, pmesh.Dimension());
+    L2_FECollection l2_fec(0, pmesh.Dimension());
 
-    ParFiniteElementSpace fespace_vector_dg0(&pmesh, &dg0_fec, 3, Ordering::byVDIM);
-
-    ParFiniteElementSpace *gradient_space;
-    if (opts.use_dg) {
-        gradient_space = &fespace_vector_dg0;
-    } else {
-        gradient_space = &fespace_vector_h1;
-    }
+    ParFiniteElementSpace fespace_vector_l2(&pmesh, &l2_fec, 3, Ordering::byVDIM);
 
     struct timespec begin_grad, end_grad;
     timing::tick(&begin_grad);
@@ -794,15 +790,46 @@ int main(int argc, char *argv[])
         logging::marker(tout, "Compute gradients", 1);
     }
 
+    // Setup the things needed for gradient computation. The tables will also
+    // be used for the H1 to L2 projection when calculating the fibers in L2,
+    // and for the gradient interpolation when calculating fibers in H1.
+    timing::tick(&t0);
+    Vector local_vertices;
+    pmesh.GetVertices(local_vertices);
+    const double *vert = local_vertices.Read();
+
+    const Table& h1_element_to_dof  = fespace_scalar_h1.GetElementToDofTable();
+    const Table& l2_element_to_dof = fespace_vector_l2.GetElementToDofTable();
+
+    const int *h1_I = h1_element_to_dof.ReadI();
+    const int *h1_J = h1_element_to_dof.ReadJ();
+
+    const int *l2_I = l2_element_to_dof.ReadI();
+    const int *l2_J = l2_element_to_dof.ReadJ();
+
+    const int num_elements = pmesh.GetNE();
+    const int num_vertices = pmesh.GetNV();
+
+
+    timing::tick(&t1);
+    if (opts.verbose >= 2 && rank == 0) {
+        logging::timestamp(tout, "Setup", timing::duration(t0, t1), 2);
+    }
+
+
     // Compute gradients for phi_epi, phi_lv, phi_rv and psi_ab
-    ParGridFunction grad_phi_epi(gradient_space);
-    grad_phi_epi.UseDevice(true);
+    ParGridFunction *grad_phi_epi = new ParGridFunction(&fespace_vector_l2);
+    grad_phi_epi->UseDevice(true);
     {
         timing::tick(&t0);
         tracing::roctx_range_push("grad_phi_epi");
 
-        GradientGridFunctionCoefficient ggfc(x_phi_epi);
-        grad_phi_epi.ProjectCoefficient(ggfc);
+        const double *epi_vals = x_phi_epi->Read();
+        double *epi_grads = grad_phi_epi->Write();
+
+        compute_gradient(epi_grads, epi_vals, vert,
+                         num_elements, num_vertices,
+                         h1_I, h1_J, l2_I, l2_J);
 
         tracing::roctx_range_pop();
         timing::tick(&t1);
@@ -811,14 +838,18 @@ int main(int argc, char *argv[])
         }
     }
 
-    ParGridFunction grad_phi_lv(gradient_space);
-    grad_phi_lv.UseDevice(true);
+    ParGridFunction *grad_phi_lv = new ParGridFunction(&fespace_vector_l2);
+    grad_phi_lv->UseDevice(true);
     {
         timing::tick(&t0);
         tracing::roctx_range_push("grad_phi_lv");
 
-        GradientGridFunctionCoefficient ggfc(x_phi_lv);
-        grad_phi_lv.ProjectCoefficient(ggfc);
+        const double *lv_vals = x_phi_lv->Read();
+        double *lv_grads = grad_phi_lv->Write();
+
+        compute_gradient(lv_grads, lv_vals, vert,
+                         num_elements, num_vertices,
+                         h1_I, h1_J, l2_I, l2_J);
 
         tracing::roctx_range_pop();
         timing::tick(&t1);
@@ -827,14 +858,18 @@ int main(int argc, char *argv[])
         }
     }
 
-    ParGridFunction grad_phi_rv(gradient_space);
-    grad_phi_rv.UseDevice(true);
+    ParGridFunction *grad_phi_rv = new ParGridFunction(&fespace_vector_l2);
+    grad_phi_rv->UseDevice(true);
     if (mesh_has_right_ventricle) {
         timing::tick(&t0);
         tracing::roctx_range_push("grad_phi_rv");
 
-        GradientGridFunctionCoefficient ggfc(x_phi_rv);
-        grad_phi_rv.ProjectCoefficient(ggfc);
+        const double *rv_vals = x_phi_rv->Read();
+        double *rv_grads = grad_phi_rv->Write();
+
+        compute_gradient(rv_grads, rv_vals, vert,
+                         num_elements, num_vertices,
+                         h1_I, h1_J, l2_I, l2_J);
 
         tracing::roctx_range_pop();
         timing::tick(&t1);
@@ -842,17 +877,21 @@ int main(int argc, char *argv[])
             logging::timestamp(tout, "grad_phi_rv", timing::duration(t0, t1), 2);
         }
     } else {
-        grad_phi_rv = 0.0;
+        *grad_phi_rv = 0.0;
     }
 
-    ParGridFunction grad_psi_ab(gradient_space);
-    grad_psi_ab.UseDevice(true);
+    ParGridFunction *grad_psi_ab = new ParGridFunction(&fespace_vector_l2);
+    grad_psi_ab->UseDevice(true);
     {
         timing::tick(&t0);
         tracing::roctx_range_push("grad_psi_ab");
 
-        GradientGridFunctionCoefficient ggfc(x_psi_ab);
-        grad_psi_ab.ProjectCoefficient(ggfc);
+        const double *ab_vals = x_psi_ab->Read();
+        double *ab_grads = grad_psi_ab->Write();
+
+        compute_gradient(ab_grads, ab_vals, vert,
+                         num_elements, num_vertices,
+                         h1_I, h1_J, l2_I, l2_J);
 
         tracing::roctx_range_pop();
         timing::tick(&t1);
@@ -870,116 +909,77 @@ int main(int argc, char *argv[])
     // We only need the gradients of the apex to base solution.
     // delete x_psi_ab;
 
-    // If the fiber orientations are to be calculated in the DG0 space, i.e. on
-    // fiber per element rather than per vertex, the solutions need to be
-    // projected into said space.
-    if (opts.use_dg) {
+    // If we want one fiber per element, i.e. in L2, then we have to project
+    // the Laplacians from H1 to L2. The gradients are already in the correct space.
+    //
+    // If we want one fiber per vertex, i.e. in H1, then we have to interpolate
+    // the gradients from H1 to L2. the Laplacians are already in the correct
+    // space
+    if (opts.fibers_per_element) {
         if (opts.verbose >= 2 && rank == 0) {
-            logging::marker(tout, "Project laplacians H1 -> DG0", 1);
+            logging::marker(tout, "Project Laplacians H1 -> L2", 1);
         }
         struct timespec begin_proj, end_proj;
         timing::tick(&begin_proj);
-        tracing::roctx_range_push("Project laplacians H1 -> DG0");
+        tracing::roctx_range_push("Project Laplacians H1 -> L2");
 
         timing::tick(&t0);
-        ParFiniteElementSpace *fespace_scalar_dg0 = new ParFiniteElementSpace(&pmesh, &dg0_fec);
+        ParFiniteElementSpace *fespace_scalar_l2 = new ParFiniteElementSpace(&pmesh, &l2_fec);
 
-        // We could just setup a GridFunctionCoeffiecient of the solution in
-        // H1, and then project that coefficient onto the new DG0 space.
-        // However, this (currently) only runs on the host, and we would like
-        // to be able to do it on the GPU.
-        //
-        // In the projection from H1 to DG0, we go from having DoFs in the
-        // vertices to having them in the middle of the element. Since we have
-        // a first order elements, the projection from H1 to L2 is simply an
-        // averaging of the H1 DoFs in element i, to the single DG0 dof in the
-        // center of element i.
-        //
-        // First we get the element to dof mappings from the H1 and DG0 spaces
-        // (which we can get read pointers to on the device). Then we can loop
-        // over the elements (in parallel!), get the 4 DoFs belonging to
-        // element i in H1, and set the value of the single DoF in DG0 for
-        // element i to be the average of the four.
-        //
-        // DISCLAIMER: This is hardcoded for, and will only work for, tetrahedron elements.
-
-        const Table& h1_scalar_element_to_dof  = fespace_scalar_h1.GetElementToDofTable();
-        const Table& dg0_scalar_element_to_dof = fespace_scalar_dg0->GetElementToDofTable();
-
-        const int *h1_I = h1_scalar_element_to_dof.ReadI();
-        const int *h1_J = h1_scalar_element_to_dof.ReadJ();
-
-        const int *dg0_I = dg0_scalar_element_to_dof.ReadI();
-        const int *dg0_J = dg0_scalar_element_to_dof.ReadJ();
         timing::tick(&t1);
         if (opts.verbose >= 2 && rank == 0) {
             logging::timestamp(tout, "Setup", timing::duration(t0, t1), 2);
         }
 
+        // Project x_phi_epi, x_phi_lv and x_phi_rv into L2, then free the old
+        // solutions and set the solution pointers to the projected ones.
+
         // Epicardium
-        ParGridFunction *x_phi_epi_dg0 = new ParGridFunction(fespace_scalar_dg0);
-        x_phi_epi_dg0->UseDevice(true);
+        ParGridFunction *x_phi_epi_l2 = new ParGridFunction(fespace_scalar_l2);
+        x_phi_epi_l2->UseDevice(true);
         timing::tick(&t0);
         {
             const double *x_phi_epi_h1_vals = x_phi_epi->Read();
-            double *x_phi_epi_dg0_vals = x_phi_epi_dg0->Write();
-            MFEM_FORALL(i, pmesh.GetNE(), {
-                 const int *h1_dofs = &h1_J[h1_I[i]];
-                 const double avg = (x_phi_epi_h1_vals[h1_dofs[0]]
-                                  +  x_phi_epi_h1_vals[h1_dofs[1]]
-                                  +  x_phi_epi_h1_vals[h1_dofs[2]]
-                                  +  x_phi_epi_h1_vals[h1_dofs[3]]) / 4.0;
-                 x_phi_epi_dg0_vals[dg0_J[dg0_I[i]]] = avg;
-            });
+            double *x_phi_epi_l2_vals = x_phi_epi_l2->Write();
+            project_h1_to_l2(x_phi_epi_l2_vals, x_phi_epi_h1_vals, num_elements,
+                              h1_I, h1_J, l2_I, l2_J);
             delete x_phi_epi;
-            x_phi_epi = x_phi_epi_dg0;
+            x_phi_epi = x_phi_epi_l2;
         }
         timing::tick(&t1);
         if (opts.verbose >= 2 && rank == 0) {
             logging::timestamp(tout, "x_phi_epi", timing::duration(t0, t1), 2);
         }
 
-        // Left ventricle endocaridum
-        ParGridFunction *x_phi_lv_dg0 = new ParGridFunction(fespace_scalar_dg0);
-        x_phi_lv_dg0->UseDevice(true);
+        // Left ventricle endocardium
+        ParGridFunction *x_phi_lv_l2 = new ParGridFunction(fespace_scalar_l2);
+        x_phi_lv_l2->UseDevice(true);
         timing::tick(&t0);
         {
             const double *x_phi_lv_h1_vals = x_phi_lv->Read();
-            double *x_phi_lv_dg0_vals = x_phi_lv_dg0->Write();
-            MFEM_FORALL(i, pmesh.GetNE(), {
-                 const int *h1_dofs = &h1_J[h1_I[i]];
-                 double avg = (x_phi_lv_h1_vals[h1_dofs[0]]
-                            +  x_phi_lv_h1_vals[h1_dofs[1]]
-                            +  x_phi_lv_h1_vals[h1_dofs[2]]
-                            +  x_phi_lv_h1_vals[h1_dofs[3]]) / 4.0;
-                 x_phi_lv_dg0_vals[dg0_J[dg0_I[i]]] = avg;
-            });
+            double *x_phi_lv_l2_vals = x_phi_lv_l2->Write();
+            project_h1_to_l2(x_phi_lv_l2_vals, x_phi_lv_h1_vals, num_elements,
+                              h1_I, h1_J, l2_I, l2_J);
             delete x_phi_lv;
-            x_phi_lv = x_phi_lv_dg0;
+            x_phi_lv = x_phi_lv_l2;
         }
         timing::tick(&t1);
         if (opts.verbose >= 2 && rank == 0) {
             logging::timestamp(tout, "x_phi_lv", timing::duration(t0, t1), 2);
         }
 
-        // Right ventricle endocaridum
+        // Right ventricle endocardium
         if (mesh_has_right_ventricle) {
-            ParGridFunction *x_phi_rv_dg0 = new ParGridFunction(fespace_scalar_dg0);
-            x_phi_rv_dg0->UseDevice(true);
+            ParGridFunction *x_phi_rv_l2 = new ParGridFunction(fespace_scalar_l2);
+            x_phi_rv_l2->UseDevice(true);
             timing::tick(&t0);
             {
                 const double *x_phi_rv_h1_vals = x_phi_rv->Read();
-                double *x_phi_rv_dg0_vals = x_phi_rv_dg0->Write();
-                MFEM_FORALL(i, pmesh.GetNE(), {
-                     const int *h1_dofs = &h1_J[h1_I[i]];
-                     double avg = (x_phi_rv_h1_vals[h1_dofs[0]]
-                                +  x_phi_rv_h1_vals[h1_dofs[1]]
-                                +  x_phi_rv_h1_vals[h1_dofs[2]]
-                                +  x_phi_rv_h1_vals[h1_dofs[3]]) / 4.0;
-                     x_phi_rv_dg0_vals[dg0_J[dg0_I[i]]] = avg;
-                });
+                double *x_phi_rv_l2_vals = x_phi_rv_l2->Write();
+                project_h1_to_l2(x_phi_rv_l2_vals, x_phi_rv_h1_vals, num_elements,
+                                  h1_I, h1_J, l2_I, l2_J);
                 delete x_phi_rv;
-                x_phi_rv = x_phi_rv_dg0;
+                x_phi_rv = x_phi_rv_l2;
             }
             timing::tick(&t1);
             if (opts.verbose >= 2 && rank == 0) {
@@ -991,7 +991,115 @@ int main(int argc, char *argv[])
         if (opts.verbose >= 2 && rank == 0) {
             logging::timestamp(tout, "Total", timing::duration(begin_proj, end_proj), 2, '=');
         } else if (opts.verbose && rank == 0) {
-            logging::timestamp(tout, "Project laplacians from H1 -> DG0", timing::duration(begin_proj, end_proj), 1);
+            logging::timestamp(tout, "Project Laplacians from H1 -> L2",
+                               timing::duration(begin_proj, end_proj), 1);
+        }
+    } else {
+        // If we want the fibers on a per vertex basis (i.e. in H1), we need to
+        // interpolate the gradients into H1 rather than projecting the
+        // Laplacians into L2.
+
+
+        if (opts.verbose >= 2 && rank == 0) {
+            logging::marker(tout, "Interpolate gradients L2 -> H1", 1);
+        }
+        struct timespec begin_interp, end_interp;
+        timing::tick(&begin_interp);
+        tracing::roctx_range_push("Interpolate gradients L2 -> H1");
+
+        timing::tick(&t0);
+        Table *vertex_to_element = pmesh.GetVertexToElementTable();
+
+        const int *v2e_I = vertex_to_element->ReadI();
+        const int *v2e_J = vertex_to_element->ReadJ();
+        timing::tick(&t1);
+        if (opts.verbose >= 2 && rank == 0) {
+            logging::timestamp(tout, "Setup", timing::duration(t0, t1), 2);
+        }
+
+
+        ParGridFunction *grad_phi_epi_h1 = new ParGridFunction(&fespace_vector_h1);
+        grad_phi_epi_h1->UseDevice(true);
+        timing::tick(&t0);
+        {
+            double *grads_epi_h1 = grad_phi_epi_h1->Write();
+            const double *grads_epi_l2 = grad_phi_epi->Read();
+
+            interpolate_gradient_to_h1(grads_epi_h1, grads_epi_l2, num_vertices,
+                                       v2e_I, v2e_J, l2_I, l2_J);
+            delete grad_phi_epi;
+            grad_phi_epi = grad_phi_epi_h1;
+        }
+        timing::tick(&t1);
+        if (opts.verbose >= 2 && rank == 0) {
+            logging::timestamp(tout, "grad_phi_epi", timing::duration(t0, t1), 2);
+        }
+
+        ParGridFunction *grad_phi_lv_h1 = new ParGridFunction(&fespace_vector_h1);
+        grad_phi_lv_h1->UseDevice(true);
+        timing::tick(&t0);
+        {
+            double *grads_lv_h1 = grad_phi_lv_h1->Write();
+            const double *grads_lv_l2 = grad_phi_lv->Read();
+
+            interpolate_gradient_to_h1(grads_lv_h1, grads_lv_l2, num_vertices,
+                                       v2e_I, v2e_J, l2_I, l2_J);
+            delete grad_phi_lv;
+            grad_phi_lv = grad_phi_lv_h1;
+        }
+        timing::tick(&t1);
+        if (opts.verbose >= 2 && rank == 0) {
+            logging::timestamp(tout, "grad_phi_lv", timing::duration(t0, t1), 2);
+        }
+
+        ParGridFunction *grad_phi_rv_h1 = new ParGridFunction(&fespace_vector_h1);
+        grad_phi_rv_h1->UseDevice(true);
+        if (mesh_has_right_ventricle) {
+            timing::tick(&t0);
+            {
+                double *grads_rv_h1 = grad_phi_rv_h1->Write();
+                const double *grads_rv_l2 = grad_phi_rv->Read();
+
+                interpolate_gradient_to_h1(grads_rv_h1, grads_rv_l2, num_vertices,
+                                           v2e_I, v2e_J, l2_I, l2_J);
+                delete grad_phi_rv;
+                grad_phi_rv = grad_phi_rv_h1;
+            }
+            timing::tick(&t1);
+            if (opts.verbose >= 2 && rank == 0) {
+                logging::timestamp(tout, "grad_phi_rv", timing::duration(t0, t1), 2);
+            }
+        } else {
+            *grad_phi_rv_h1 = 0.0;
+            delete grad_phi_lv;
+            grad_phi_rv = grad_phi_rv_h1;
+        }
+
+        ParGridFunction *grad_psi_ab_h1 = new ParGridFunction(&fespace_vector_h1);
+        grad_psi_ab->UseDevice(true);
+        timing::tick(&t0);
+        {
+            double *grads_ab_h1 = grad_psi_ab_h1->Write();
+            const double *grads_ab_l2 = grad_psi_ab->Read();
+
+            interpolate_gradient_to_h1(grads_ab_h1, grads_ab_l2, num_vertices,
+                                       v2e_I, v2e_J, l2_I, l2_J);
+            delete grad_psi_ab;
+            grad_psi_ab = grad_psi_ab_h1;
+        }
+        timing::tick(&t1);
+        if (opts.verbose >= 2 && rank == 0) {
+            logging::timestamp(tout, "grad_phi_rv", timing::duration(t0, t1), 2);
+        }
+
+
+        delete vertex_to_element;
+        timing::tick(&end_interp);
+        if (opts.verbose >= 2 && rank == 0) {
+            logging::timestamp(tout, "Total", timing::duration(begin_interp, end_interp), 2, '=');
+        } else if (opts.verbose && rank == 0) {
+            logging::timestamp(tout, "Interpolate gradients from L2 -> H1",
+                               timing::duration(begin_interp, end_interp), 1);
         }
     }
 
@@ -1001,12 +1109,16 @@ int main(int argc, char *argv[])
     const double *phi_rv  = x_phi_rv->Read();
 
     // Get read-only pointers to the internal arrays of the gradients
-    const double *grad_phi_epi_vals = grad_phi_epi.Read();
-    const double *grad_phi_lv_vals  = grad_phi_lv.Read();
-    const double *grad_phi_rv_vals  = grad_phi_rv.Read();
-    const double *grad_psi_ab_vals  = grad_psi_ab.Read();
+    const double *grad_phi_epi_vals = grad_phi_epi->Read();
+    const double *grad_phi_lv_vals  = grad_phi_lv->Read();
+    const double *grad_phi_rv_vals  = grad_phi_rv->Read();
+    const double *grad_psi_ab_vals  = grad_psi_ab->Read();
 
     // Setup GridFunctions to store the fibre directions in
+
+    ParFiniteElementSpace *gradient_space = opts.fibers_per_element
+                                          ? &fespace_vector_l2
+                                          : &fespace_vector_h1;
     ParGridFunction F(gradient_space);
     ParGridFunction S(gradient_space);
     ParGridFunction T(gradient_space);
@@ -1019,17 +1131,16 @@ int main(int argc, char *argv[])
 
     // Calculate the fiber orientation
     timing::tick(&t0);
-    util::tracing::roctx_range_push("define_fibers");
-    define_fibers(
-            x_phi_epi->Size(),
-            phi_epi, phi_lv, phi_rv,
-            grad_phi_epi_vals, grad_phi_lv_vals, grad_phi_rv_vals, grad_psi_ab_vals,
-            opts.alpha_endo, opts.alpha_epi, opts.beta_endo, opts.beta_epi,
-            F_vals, S_vals, T_vals, opts.itol
+    tracing::roctx_range_push("define_fibers");
+    define_fibers(x_phi_epi->Size(),
+                  phi_epi, phi_lv, phi_rv,
+                  grad_phi_epi_vals, grad_phi_lv_vals, grad_phi_rv_vals, grad_psi_ab_vals,
+                  opts.alpha_endo, opts.alpha_epi, opts.beta_endo, opts.beta_epi,
+                  F_vals, S_vals, T_vals, opts.itol
     );
     MFEM_DEVICE_SYNC;
 
-    util::tracing::roctx_range_pop();
+    tracing::roctx_range_pop();
     timing::tick(&t1);
     if (opts.verbose && rank == 0)
         logging::timestamp(tout, "Define fiber orientation", timing::duration(t0, t1), 1);
@@ -1068,10 +1179,10 @@ int main(int argc, char *argv[])
             }
 
             if (opts.save_gradients) {
-                save::save_solution(&grad_phi_epi, mfem_output_dir, mesh_basename, "_grad_phi_epi.gf", rank);
-                save::save_solution(&grad_phi_lv,  mfem_output_dir, mesh_basename, "_grad_phi_lv.gf", rank);
-                save::save_solution(&grad_phi_rv,  mfem_output_dir, mesh_basename, "_grad_phi_rv.gf", rank);
-                save::save_solution(&grad_psi_ab,  mfem_output_dir, mesh_basename, "_grad_psi_ab.gf", rank);
+                save::save_solution(grad_phi_epi, mfem_output_dir, mesh_basename, "_grad_phi_epi.gf", rank);
+                save::save_solution(grad_phi_lv,  mfem_output_dir, mesh_basename, "_grad_phi_lv.gf", rank);
+                save::save_solution(grad_phi_rv,  mfem_output_dir, mesh_basename, "_grad_phi_rv.gf", rank);
+                save::save_solution(grad_psi_ab,  mfem_output_dir, mesh_basename, "_grad_psi_ab.gf", rank);
             }
             // Save the solutions
             save::save_solution(&F,  mfem_output_dir, mesh_basename, "_F.gf", rank);
@@ -1089,10 +1200,10 @@ int main(int argc, char *argv[])
             pd = new ParaViewDataCollection(mesh_basename, &pmesh);
             pd->SetPrefixPath(paraview_path);
             if (opts.save_gradients) {
-                pd->RegisterField("grad phi epi", &grad_phi_epi);
-                pd->RegisterField("grad phi lv",  &grad_phi_lv);
-                pd->RegisterField("grad phi rv",  &grad_phi_rv);
-                pd->RegisterField("grad psi ab",  &grad_psi_ab);
+                pd->RegisterField("grad phi epi", grad_phi_epi);
+                pd->RegisterField("grad phi lv",  grad_phi_lv);
+                pd->RegisterField("grad phi rv",  grad_phi_rv);
+                pd->RegisterField("grad psi ab",  grad_psi_ab);
             }
             if (opts.save_laplacians) {
                 pd->RegisterField("phi epi", x_phi_epi);

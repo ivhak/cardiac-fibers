@@ -39,7 +39,7 @@ Options:
    -s, --save-mfem, -ns, --no-save-mfem, current option: --no-save-mfem
         Save data files in the native MFEM format.
    -sl, --save-laplacians, -nsl, --no-save-laplacians, current option: --save-laplacians
-        Save the laplacians phi_epi, phi_lv and phi_rv
+        Save the Laplacians phi_epi, phi_lv and phi_rv
    -sg, --save-gradients, -nsg, --no-save-gradients, current option: --no-save-gradients
         Save the gradients of phi_epi, phi_lv, phi_rv and psi_ab
    -it <double>, --interpolation-tolerance <double>, current value: 1e-12
@@ -63,6 +63,8 @@ Options:
         Set to -1 if there is no right ventricle in the geometry, e.g. for a single ventricle geometry.
    -u <int>, --uniform-refinement <int>, current value: 0
         Perform n levels of uniform refinement on the mesh.
+   -fpe, --fibers-per-element, -fpv, --fibers-per-vertex, current option: --fibers-per-element
+        Calculate fibers in the L2 space (one fiber per element) or H1 (one fiber per vertex).
    -gamg, --gpu-tuned-amg, -ngamg, --no-gpu-tuned-amg, current option: --no-gpu-tuned-amg
         Tune the BoomerAmg preconditioner for (hopefully) better GPU performance.
 ```
@@ -107,12 +109,15 @@ location of the apex, we can calculate the fiber orientations. We pass the
 `--save-paraview` flag to save the solution in a format that can be opened in
 the visualization program [ParaView](https://www.paraview.org/). We also pass
 the `--verbose` flag with a value of 3 to print some useful information along
-the way.
+the way. It is possible to generate the fibers either on a per element basis
+(in $L^$), or on a per vertex basis (in $H^1$). Here we choose to do it per vertex.
+
 
 ```sh
 $ ./cardiac-fibers \
         --mesh mesh/gmsh/heart02.msh \
         --apex '346.35 1233.74 169.79' \
+        --fibers-per-vertex \
         --save-paraview \
         --verbose 3
 ```
@@ -171,8 +176,9 @@ refinement, which refines the original mesh from consisting of 770 vertices
 2818 elements, to 4909 vertices and 22544 elements.
 
 This time we choose to generate the fibers on a per-element basis rather than
-per vertex. To do this we pass the `--discontinuous-galerkin` (or `-dg` for
-short) flag, to generate fibers in the `DG_0` space rather than in `H_1`.
+per vertex. To do this we can pass the `--fibers-per-element` (or `-fpe` for
+short) flag, to generate fibers in the `L2` space rather than in `H_1`. But,
+this is the default behavior, so it can be omitted.
 
 ```sh
 $ ./cardiac-fibers \
@@ -184,7 +190,6 @@ $ ./cardiac-fibers \
         --epi-id 7 \
         --rv-id -1 \
         --uniform-refinement 1 \
-        --discontinuous-galerkin \
         --save-paraview \
         --verbose 3
 
