@@ -110,7 +110,7 @@ location of the apex, we can calculate the fiber orientations. We pass the
 the visualization program [ParaView](https://www.paraview.org/). We also pass
 the `--verbose` flag with a value of 3 to print some useful information along
 the way. It is possible to generate the fibers either on a per element basis
-(in $L^$), or on a per vertex basis (in $H^1$). Here we choose to do it per vertex.
+(in $L^2$), or on a per vertex basis (in $H^1$). Here we choose to do it per vertex.
 
 
 ```sh
