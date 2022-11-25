@@ -798,7 +798,7 @@ int main(int argc, char *argv[])
     pmesh.GetVertices(local_vertices);
     const double *vert = local_vertices.Read();
 
-    const Table& h1_element_to_dof  = fespace_scalar_h1.GetElementToDofTable();
+    const Table& h1_element_to_dof = fespace_scalar_h1.GetElementToDofTable();
     const Table& l2_element_to_dof = fespace_vector_l2.GetElementToDofTable();
 
     const int *h1_I = h1_element_to_dof.ReadI();

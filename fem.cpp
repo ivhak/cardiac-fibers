@@ -5,33 +5,33 @@
 #include "fem.hpp"
 
 // We could just setup a GridFunctionCoefficient of the solution in
-// H1, and then project that coefficient onto the new l2 space.
+// H1, and then project that coefficient onto the new L2 space.
 // However, this (currently) only runs on the host, and we would like
 // to be able to do it on the GPU.
 //
-// In the projection from H1 to l2, we go from having DoFs in the
+// In the projection from H1 to L2, we go from having DoFs in the
 // vertices to having them in the middle of the element. Since we have
 // a first order elements, the projection from H1 to L2 is simply an
-// averaging of the H1 DoFs in element i, to the single l2 dof in the
+// averaging of the H1 DoFs in element i, to the single L2 dof in the
 // center of element i.
 //
-// First we get the element to dof mappings from the H1 and l2 spaces
+// First we get the element to dof mappings from the H1 and L2 spaces
 // (which we can get read pointers to on the device). Then we can loop
 // over the elements (in parallel!), get the 4 DoFs belonging to
-// element i in H1, and set the value of the single DoF in l2 for
+// element i in H1, and set the value of the single DoF in L2 for
 // element i to be the average of the four.
 //
 // DISCLAIMER: This is hardcoded for, and will only work for, tetrahedron elements.
 void project_h1_to_l2(
-        double *l2_vals,         // Write-only pointer to the solution in l2
+        double *l2_vals,          // Write-only pointer to the solution in L2
         const double *h1_vals,    // Read-only pointer to the solution in H1
-        const int n,              // Number of elements
+        const int ne,             // Number of elements
         const int *h1_table_col,  // Read-only pointer to the H1 element-to-DoF table columns
         const int *h1_table_row,  // Read-only pointer to the H1 element-to-DoF table rows
-        const int *l2_table_col, // Read-only pointer to the l2 element-to-DoF table columns
-        const int *l2_table_row) // Read-only pointer to the l2 element-to-DoF table rows
+        const int *l2_table_col,  // Read-only pointer to the L2 element-to-DoF table columns
+        const int *l2_table_row)  // Read-only pointer to the L2 element-to-DoF table rows
 {
-    mfem::MFEM_FORALL(i, n, {
+    mfem::MFEM_FORALL(i, ne, {
         const int *h1_dofs = &h1_table_row[h1_table_col[i]];
         double avg = h1_vals[h1_dofs[0]]
                    + h1_vals[h1_dofs[1]]
@@ -39,7 +39,6 @@ void project_h1_to_l2(
                    + h1_vals[h1_dofs[3]];
         avg *= 0.25;
         l2_vals[l2_table_row[l2_table_col[i]]] = avg;
-
     });
 }
 
@@ -64,17 +63,17 @@ double _vecdot(vec3& a, vec3& b)
 }
 
 void compute_gradient(
-        double *gradient,
-        const double *laplace,
-        const double *vert,
-        const int num_elems,
-        const int num_verts,
-        const int *h1_table_col,
-        const int *h1_table_row,
-        const int *l2_table_col,
-        const int *l2_table_row)
+        double *gradient,         // Write-only pointer to the gradient in L2
+        const double *laplace,    // Read-only pointer to the solution in H1
+        const double *vert,       // Read-only pointer to the vertex coordinates
+        const int nv,             // Number of vertices
+        const int ne,             // Number of elements
+        const int *h1_table_col,  // Read-only pointer to the H1 element-to-DoF table columns
+        const int *h1_table_row,  // Read-only pointer to the H1 element-to-DoF table rows
+        const int *l2_table_col,  // Read-only pointer to the L2 element-to-DoF table columns
+        const int *l2_table_row)  // Read-only pointer to the L2 element-to-DoF table rows
 {
-    mfem::MFEM_FORALL(i, num_elems, {
+    mfem::MFEM_FORALL(i, ne, {
         const int *h1_dofs = &h1_table_row[h1_table_col[i]];
 
         // FIXME: Which vertices are set as i,j,k and h is purely decided by
@@ -83,29 +82,10 @@ void compute_gradient(
         // won't span a volume at all. If that is the case, it should be as
         // simple as swapping two of the vertices.
 
-        vec3 v_j = {
-            vert[0*num_verts+h1_dofs[0]],
-            vert[1*num_verts+h1_dofs[0]],
-            vert[2*num_verts+h1_dofs[0]]
-        };
-
-        vec3 v_i = {
-            vert[0*num_verts+h1_dofs[1]],
-            vert[1*num_verts+h1_dofs[1]],
-            vert[2*num_verts+h1_dofs[1]]
-        };
-
-        vec3 v_k = {
-            vert[0*num_verts+h1_dofs[2]],
-            vert[1*num_verts+h1_dofs[2]],
-            vert[2*num_verts+h1_dofs[2]]
-        };
-
-        vec3 v_h = {
-            vert[0*num_verts+h1_dofs[3]],
-            vert[1*num_verts+h1_dofs[3]],
-            vert[2*num_verts+h1_dofs[3]]
-        };
+        vec3 v_j = { vert[0*nv+h1_dofs[0]], vert[1*nv+h1_dofs[0]], vert[2*nv+h1_dofs[0]] };
+        vec3 v_i = { vert[0*nv+h1_dofs[1]], vert[1*nv+h1_dofs[1]], vert[2*nv+h1_dofs[1]] };
+        vec3 v_k = { vert[0*nv+h1_dofs[2]], vert[1*nv+h1_dofs[2]], vert[2*nv+h1_dofs[2]] };
+        vec3 v_h = { vert[0*nv+h1_dofs[3]], vert[1*nv+h1_dofs[3]], vert[2*nv+h1_dofs[3]] };
 
         const double f_j = laplace[h1_dofs[0]];
         const double f_i = laplace[h1_dofs[1]];
@@ -121,17 +101,9 @@ void compute_gradient(
         vec3 v_ki = v_k - v_i;
         vec3 v_ji = v_j - v_i;
 
-        // v_ik_x_v_hk = (v_i - v_k) x (v_h - v_k)
-        vec3 v_ik_x_v_hk;
-        _cross(v_ik_x_v_hk, v_ik, v_hk);
-
-        // v_ih_x_v_jh = (v_i - v_k) x (v_j - v_h)
-        vec3 v_ih_x_v_jh;
-        _cross(v_ih_x_v_jh, v_ih, v_jh);
-
-        // v_ki_x_v_ji = (v_k - v_i) x (v_j - v_i)
-        vec3 v_ki_x_v_ji;
-        _cross(v_ki_x_v_ji, v_ki, v_ji);
+        vec3 v_ik_x_v_hk; _cross(v_ik_x_v_hk, v_ik, v_hk);
+        vec3 v_ih_x_v_jh; _cross(v_ih_x_v_jh, v_ih, v_jh);
+        vec3 v_ki_x_v_ji; _cross(v_ki_x_v_ji, v_ki, v_ji);
 
         double vol;
         {
@@ -142,9 +114,7 @@ void compute_gradient(
         }
 
         v_ik_x_v_hk *= (f_j - f_i);
-
         v_ih_x_v_jh *= (f_k - f_i);
-
         v_ki_x_v_ji *= (f_h - f_i);
 
         vec3 grad = v_ik_x_v_hk;
@@ -162,19 +132,18 @@ void compute_gradient(
 }
 
 void interpolate_gradient_to_h1(
-        double *h1_vals,
-        const double *l2_vals,
-        const int num_vertices,
-        const int *v2e_table_col,
-        const int *v2e_table_row,
-        const int *l2_table_col,
-        const int *l2_table_row)
+        double *h1_vals,          // Write-only pointer to the gradient in H1
+        const double *l2_vals,    // Read-only pointer to the gradient in L2
+        const int nv,             // Number of vertices
+        const int *v2e_table_col, // Read-only pointer to the vertex-to-element table columns
+        const int *v2e_table_row, // Read-only pointer to the vertex-to-element table rows
+        const int *l2_table_col,  // Read-only pointer to the L2 element-to-DoF table columns
+        const int *l2_table_row)  // Read-only pointer to the L2 element-to-DoF table rows
 {
 
     // We interpolate the gradients in a DoF i in H1 by taking the average of
     // the gradients in the elements that i is a part of.
-
-    mfem::MFEM_FORALL(i, num_vertices, {
+    mfem::MFEM_FORALL(i, nv, {
         // Find the elements connected to vertex i
         const int *element_indices = &v2e_table_row[v2e_table_col[i]];
         const int num_elements = v2e_table_col[i+1] - v2e_table_col[i];
