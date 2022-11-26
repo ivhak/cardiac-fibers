@@ -1071,7 +1071,7 @@ int main(int argc, char *argv[])
             }
         } else {
             *grad_phi_rv_h1 = 0.0;
-            delete grad_phi_lv;
+            delete grad_phi_rv;
             grad_phi_rv = grad_phi_rv_h1;
         }
 
