@@ -15,7 +15,7 @@ Implementations of the LDRB algorithm already exist, see for example
 * [life<sup>x</sup>](https://lifex.gitlab.io/): An implementation written in
   C++, using the [deal.II](https://www.dealii.org/) finite element library.
 * [cardioid/fibers](https://github.com/LLNL/cardioid/tree/master/fibers): An
-  implementation written in C++, which also used the MFEM library.
+  implementation written in C++, which also uses the MFEM library.
 
 The goal of `cardiac-fibers` is first and foremost to implement the LDRB
 algorithm with GPU execution in mind, by leveraging the GPU-support
