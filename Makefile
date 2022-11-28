@@ -51,7 +51,7 @@ IFLAGS = -I$(MFEM_INCDIR) \
 LFLAGS = -L$(MFEM_LIBDIR) -lmfem \
 		 -L$(HYPRE_LIBDIR) -lHYPRE \
 		 -L$(METIS_LIBDIR) -lmetis \
-		 ${MPI_LINK_FLAGS}
+		 $(MPI_LINK_FLAGS)
 
 # openmp
 ifeq ($(CARDIAC_FIBERS_HAS_OPENMP), YES)
@@ -78,7 +78,7 @@ ifeq ($(CARDIAC_FIBERS_HAS_CUDA), YES)
 CUDA_CXX ?= nvcc
 CXX=$(CUDA_CXX)
 # Wrap the old CFLAGS into --compiler-options, and set the needed nvcc specific flags
-CFLAGS := -ccbin=mpiCC -x=cu --expt-extended-lambda --compiler-options="$(CFLAGS)"
+CFLAGS := -ccbin=$(MPI_CXX) -x=cu --expt-extended-lambda --compiler-options="$(CFLAGS)"
 LFLAGS += -lcusparse -lrt
 endif
 
