@@ -530,7 +530,9 @@ int main(int argc, char *argv[])
 
         const double *host_distance = local_distances.HostRead();
 
-        // TODO (ivhak): Can this be done on the device as well?
+        // TODO (ivhak): This could (and should) probably be implemented as a
+        // parallel reduction and be run on the GPU as well, but this work for
+        // now...
         for (int i = 0; i < pmesh.GetNV(); i++) {
             if (host_distance[i] < min_distance) {
                 apex = i;
@@ -575,7 +577,9 @@ int main(int argc, char *argv[])
         prec->SetPrintLevel(opts.verbose >= 4 ? 1 : 0);
 
 #ifdef MFEM_USE_CUDA_OR_HIP
-        // FIXME (ivhak): Gives wrong solution!
+        // FIXME (ivhak): Currently, these setting end up giving the wrong
+        // solution to grad_psi_ab, probably caused by enforcing a boundary
+        // condition in a single vertex in psi_ab.
         if (opts.gpu_tuned_amg) {
             prec->SetCoarsening(8);           // PMIS
             prec->SetCycleNumSweeps(1,1);     // 1 sweep on the up and down cycle
@@ -591,7 +595,7 @@ int main(int argc, char *argv[])
     HyprePCG *cg = new HyprePCG(MPI_COMM_WORLD);
     cg->SetTol(1e-20);
     cg->SetMaxIter(2000);
-    cg->SetPrintLevel(opts.verbose >= 4 ? 1 : 0);
+    cg->SetPrintLevel(opts.verbose >= 4 ? 2 : 0);
     if (prec) cg->SetPreconditioner(*prec);
     solver = cg;
 
