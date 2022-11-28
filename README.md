@@ -9,6 +9,17 @@ finite-element library.
 > to computational heart models. Annals of biomedical engineering, 40(10),
 > pp.2243-2254.(https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3518842/)
 
+Implementations of the LDRB already exist, see for example
+* [ldrb](https://github.com/finsberg/ldrb): An implementation written in
+  python, using the FEniCS PDE library.
+* [life<sup>x</sup>](https://lifex.gitlab.io/): An implementation written in
+  C++, using the deal.II finite element library.
+* [cardioid/fibers](https://github.com/LLNL/cardioid/tree/master/fibers): An
+  implementation written in C++, which also used the MFEM library.
+
+The distinguishing feature of `cardiac-fibers` is that it mainly targets GPU
+execution, by leveraging the GPU-support introduced in MFEM version 4.0.
+
 ## Usage
 
 ```
