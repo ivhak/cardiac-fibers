@@ -140,6 +140,16 @@ void interpolate_gradient_to_h1(
         const int *l2_table_col,  // Read-only pointer to the L2 element-to-DoF table columns
         const int *l2_table_row)  // Read-only pointer to the L2 element-to-DoF table rows
 {
+    // FIXME (ivhak): So this implementation is not really well defined when
+    // using more than one process. Along the mesh cuts, the gradients in the
+    // vertex will have different values when coming from the two different
+    // sides. E.g. if a vertex v is part of the "cut" in a mesh that is divided
+    // into two sub-meshes M_1 and M_2, then the value of the gradient in v
+    // when in M_1 will be an average of the elements that have v as a vertex
+    // _and_ that are in M_1. The same is true for M_2. So, assuming two
+    // processes/sub-meshes, the real value of the gradient in v is
+    // 0.5*(grad_v_M_1 + grad_v_M_2).
+    // This will probably result on some weird fibers in the cuts.
 
     // We interpolate the gradients in a DoF i in H1 by taking the average of
     // the gradients in the elements that i is a part of.
