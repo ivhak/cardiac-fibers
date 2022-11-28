@@ -497,12 +497,13 @@ int main(int argc, char *argv[])
         timing::tick(&t0);
         tracing::roctx_range_push("Find apex");
         Vector local_vertices;
+        local_vertices.UseDevice(true);
         pmesh.GetVertices(local_vertices);
         const double *vert = local_vertices.Read();
         int n = pmesh.GetNV();
 
         Vector local_distances(n);
-        double *dist = local_distances.ReadWrite();
+        double *dist = local_distances.Write();
 
         const double apex_x = opts.prescribed_apex[0];
         const double apex_y = opts.prescribed_apex[1];
@@ -527,11 +528,13 @@ int main(int argc, char *argv[])
 
         double min_distance = std::numeric_limits<double>::max();
 
+        const double *host_distance = local_distances.HostRead();
+
         // TODO (ivhak): Can this be done on the device as well?
         for (int i = 0; i < pmesh.GetNV(); i++) {
-            if (dist[i] < min_distance) {
+            if (host_distance[i] < min_distance) {
                 apex = i;
-                min_distance = dist[i];
+                min_distance = host_distance[i];
             }
         }
 
@@ -543,7 +546,7 @@ int main(int argc, char *argv[])
         if (target_rank != rank) {
             apex = -1;
         } else if (opts.verbose >= 3) {
-            const double found_apex[3] = { vert[0*n+apex], vert[1*n+apex], vert[2*n+apex] };
+            const double *found_apex = pmesh.GetVertex(apex);
             std::string msg = "Rank " + std::to_string(rank)
                             + " found the vertex closest to the prescribed apex ("
                             + std::to_string(opts.prescribed_apex[0]) +", "

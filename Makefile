@@ -37,14 +37,16 @@ endif
 MFEM_INCDIR = $(MFEM_ROOT)/include
 MFEM_LIBDIR = $(MFEM_ROOT)/lib
 
-MPI_COMPILE_FLAGS = $(shell ${MPI_CXX} --showme:compile)
-MPI_LINK_FLAGS = $(shell ${MPI_CXX} --showme:link)
+MPI_INC_FLAGS = $(addprefix -I, $(shell $(MPI_CXX) --showme:incdirs))
+MPI_LIBS = $(addprefix -l, $(shell $(MPI_CXX) --showme:libs))
+MPI_LIB_FLAGS = $(addprefix -L, $(shell $(MPI_CXX) --showme:libdirs))
+MPI_LINK_FLAGS = $(MPI_LIB_FLAGS) $(MPI_LIBS)
 
 # Setup the include and link flags
 IFLAGS = -I$(MFEM_INCDIR) \
 		 -I$(HYPRE_INCDIR) \
 		 -I$(METIS_INCDIR) \
-		 ${MPI_COMPILE_FLAGS}
+		 $(MPI_INC_FLAGS) \
 
 LFLAGS = -L$(MFEM_LIBDIR) -lmfem \
 		 -L$(HYPRE_LIBDIR) -lHYPRE \
