@@ -28,14 +28,15 @@ module load metis-32-5.1.0
 
 make BUILD_DIR=${MFEM_BUILD_DIR} config \
     MFEM_USE_MPI=YES \
-    MPICXX=mpiCC \
+    MPICXX=mpic++ \
     MFEM_USE_CUDA=YES \
     MFEM_USE_METIS=YES \
     MFEM_USE_METIS_5=YES \
     HYPRE_LIB="-L${HYPRE_LIBDIR} -lHYPRE" \
     HYPRE_OPT="-I${HYPRE_INCDIR}" \
     METIS_LIB="-L${METIS_LIBDIR} -lmetis" \
-    METIS_OPT="-I${METIS_INCDIR}"
+    METIS_OPT="-I${METIS_INCDIR}"\
+    CUDA_ARCH=sm_70
 
 make BUILD_DIR=${MFEM_BUILD_DIR} -j 4
 

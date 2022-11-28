@@ -27,7 +27,7 @@ module load metis-32-5.1.0
 make BUILD_DIR=${MFEM_BUILD_DIR} config \
     MFEM_USE_MPI=YES \
     MFEM_USE_OPENMP=YES \
-    MPICXX=mpiCC \
+    MPICXX=mpic++ \
     MFEM_USE_METIS=YES \
     MFEM_USE_METIS_5=YES \
     HYPRE_LIB="-L${HYPRE_LIBDIR} -lHYPRE" \
