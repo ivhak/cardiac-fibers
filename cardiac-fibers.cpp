@@ -1123,12 +1123,12 @@ int main(int argc, char *argv[])
 
     // Setup GridFunctions to store the fibre directions in
 
-    ParFiniteElementSpace *gradient_space = opts.fibers_per_element
-                                          ? &fespace_vector_l2
-                                          : &fespace_vector_h1;
-    ParGridFunction F(gradient_space);
-    ParGridFunction S(gradient_space);
-    ParGridFunction T(gradient_space);
+    ParFiniteElementSpace *fiber_space = opts.fibers_per_element
+                                       ? &fespace_vector_l2
+                                       : &fespace_vector_h1;
+    ParGridFunction F(fiber_space);
+    ParGridFunction S(fiber_space);
+    ParGridFunction T(fiber_space);
 
     // Get write-only pointers to the internal arrays
     double *F_vals = F.Write();
@@ -1156,6 +1156,14 @@ int main(int argc, char *argv[])
     if (opts.verbose && rank == 0) {
         logging::timestamp(tout, "Total (fiber)", timing::duration(begin_fiber, end_fiber), 1, '=');
     }
+
+
+    // Calculate the angle of the fibers. Useful for visualization.
+    ParGridFunction angle(x_phi_epi->ParFESpace());
+    double *angle_vals = angle.Write();
+    const double *F_read_vals = F.Read();
+    MFEM_FORALL(i, angle.Size(), { angle_vals[i] = asin(-F_read_vals[3*i])*180.0 / PI; });
+    angle.HostRead();
 
     // Make sure the fiber directions are read back to the host before saving
     // the solutions.
@@ -1195,6 +1203,7 @@ int main(int argc, char *argv[])
             save::save_solution(&F,  mfem_output_dir, mesh_basename, "_F.gf", rank);
             save::save_solution(&S,  mfem_output_dir, mesh_basename, "_S.gf", rank);
             save::save_solution(&T,  mfem_output_dir, mesh_basename, "_T.gf", rank);
+            save::save_solution(&angle,  mfem_output_dir, mesh_basename, "_angle.gf", rank);
         }
 
         // Save in paraview as well
@@ -1221,6 +1230,7 @@ int main(int argc, char *argv[])
             pd->RegisterField("F", &F);
             pd->RegisterField("S", &S);
             pd->RegisterField("T", &T);
+            pd->RegisterField("angle", &angle);
             pd->SetLevelsOfDetail(1);
             pd->SetDataFormat(VTKFormat::BINARY);
             pd->SetHighOrderOutput(false);
