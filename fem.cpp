@@ -82,15 +82,19 @@ void compute_gradient(
         // won't span a volume at all. If that is the case, it should be as
         // simple as swapping two of the vertices.
 
+        // The vertices are in SoA-format:
+        //     x0  x1  x2 ... xn y0 y1 y2 ... yn z0 z1 z2 ... zn
+        // where n is the total number of vertices.
         vec3 v_j = { vert[0*nv+h1_dofs[0]], vert[1*nv+h1_dofs[0]], vert[2*nv+h1_dofs[0]] };
-        vec3 v_i = { vert[0*nv+h1_dofs[1]], vert[1*nv+h1_dofs[1]], vert[2*nv+h1_dofs[1]] };
-        vec3 v_k = { vert[0*nv+h1_dofs[2]], vert[1*nv+h1_dofs[2]], vert[2*nv+h1_dofs[2]] };
-        vec3 v_h = { vert[0*nv+h1_dofs[3]], vert[1*nv+h1_dofs[3]], vert[2*nv+h1_dofs[3]] };
+        vec3 v_k = { vert[0*nv+h1_dofs[1]], vert[1*nv+h1_dofs[1]], vert[2*nv+h1_dofs[1]] };
+        vec3 v_h = { vert[0*nv+h1_dofs[2]], vert[1*nv+h1_dofs[2]], vert[2*nv+h1_dofs[2]] };
+        vec3 v_i = { vert[0*nv+h1_dofs[3]], vert[1*nv+h1_dofs[3]], vert[2*nv+h1_dofs[3]] };
 
+        // Get the values of the scalar H1 DoFs at each vertex of the tetrahedron.
         const double f_j = laplace[h1_dofs[0]];
-        const double f_i = laplace[h1_dofs[1]];
-        const double f_k = laplace[h1_dofs[2]];
-        const double f_h = laplace[h1_dofs[3]];
+        const double f_k = laplace[h1_dofs[1]];
+        const double f_h = laplace[h1_dofs[2]];
+        const double f_i = laplace[h1_dofs[3]];
 
         vec3 v_ik = v_i - v_k;
         vec3 v_hk = v_h - v_k;
@@ -101,16 +105,20 @@ void compute_gradient(
         vec3 v_ki = v_k - v_i;
         vec3 v_ji = v_j - v_i;
 
+        // The normal vector of the plane adjacent to v_j
         vec3 v_ik_x_v_hk; _cross(v_ik_x_v_hk, v_ik, v_hk);
+
+        // The normal vector of the plane adjacent to v_k
         vec3 v_ih_x_v_jh; _cross(v_ih_x_v_jh, v_ih, v_jh);
+
+        // The normal vector of the plane adjacent to v_h
         vec3 v_ki_x_v_ji; _cross(v_ki_x_v_ji, v_ki, v_ji);
 
         double vol;
         {
-            vec3 v_jk = v_j - v_k;
-            vec3 v_jk_x_v_hk = {0};
-            _cross(v_jk_x_v_hk, v_jk, v_hk);
-            vol = abs(_vecdot(v_ik, v_jk_x_v_hk));
+            vec3 v_hi = v_h - v_i;
+            vol = abs(_vecdot(v_hi, v_ki_x_v_ji));
+            // vol *= (1.0/6.0);
         }
 
         v_ik_x_v_hk *= (f_j - f_i);
@@ -120,7 +128,6 @@ void compute_gradient(
         vec3 grad = v_ik_x_v_hk;
         grad += v_ih_x_v_jh;
         grad += v_ki_x_v_ji;
-
         grad *= (1.0 / vol);
 
         const int l2_dof = l2_table_row[l2_table_col[i]];
