@@ -494,8 +494,15 @@ int main(int argc, char *argv[])
     // conditions in that vertex.
     int apex = -1;
     {
+        struct timespec begin_apex, end_apex;
+        timing::tick(&begin_apex);
         timing::tick(&t0);
         tracing::roctx_range_push("Find apex");
+
+        if (opts.verbose >= 2 && rank == 0) {
+            logging::marker(tout, "Find apex", 0);
+        }
+
         Vector local_vertices;
         local_vertices.UseDevice(true);
         pmesh.GetVertices(local_vertices);
@@ -514,6 +521,12 @@ int main(int argc, char *argv[])
         // When running on device we also have to make sure that we synchronize
         // the device after each element is computed.
 
+        timing::tick(&t1);
+        if (opts.verbose >= 2 && rank == 0) {
+            logging::timestamp(tout, "Setup", timing::duration(t0, t1), 1);
+        }
+
+        timing::tick(&t0);
         // d_i = (x-apex_x)^2
         MFEM_FORALL(i, n, { dist[i]  = (vert[0*n+i]-apex_x) * (vert[0*n+i]-apex_x); });
         MFEM_DEVICE_SYNC;
@@ -525,7 +538,12 @@ int main(int argc, char *argv[])
         // d_i += (z-apex_z)^2
         MFEM_FORALL(i, n, { dist[i] += (vert[2*n+i]-apex_z) * (vert[2*n+i]-apex_z); });
         MFEM_DEVICE_SYNC;
+        timing::tick(&t1);
+        if (opts.verbose >= 2 && rank == 0) {
+            logging::timestamp(tout, "Calculate distances", timing::duration(t0, t1), 1);
+        }
 
+        timing::tick(&t0);
         double min_distance = std::numeric_limits<double>::max();
 
         const double *host_distance = local_distances.HostRead();
@@ -539,7 +557,12 @@ int main(int argc, char *argv[])
                 min_distance = host_distance[i];
             }
         }
+        timing::tick(&t1);
+        if (opts.verbose >= 2 && rank == 0) {
+            logging::timestamp(tout, "Find local minimum", timing::duration(t0, t1), 1);
+        }
 
+        timing::tick(&t1);
         std::vector<double> min_buffer(nranks, -1);
         MPI_Allgather(&min_distance,     1, MPI_DOUBLE,
                       min_buffer.data(), 1, MPI_DOUBLE, MPI_COMM_WORLD);
@@ -559,11 +582,18 @@ int main(int argc, char *argv[])
                             + std::to_string(found_apex[2]) + ")";
             logging::info(std::cout, msg);
         }
+        timing::tick(&t1);
+        if (opts.verbose >= 2 && rank == 0) {
+            logging::timestamp(tout, "Find global minimum", timing::duration(t0, t1), 1);
+        }
 
         tracing::roctx_range_pop();
-        timing::tick(&t1);
-        if (opts.verbose && rank == 0) {
-            logging::timestamp(tout, "Find apex", timing::duration(t0, t1));
+        timing::tick(&end_apex);
+        if (opts.verbose >= 2 && rank == 0) {
+            logging::timestamp(tout, "Total", timing::duration(begin_apex, end_apex), 1, '=');
+        } else if (opts.verbose && rank == 0) {
+            logging::timestamp(tout, "Find apex",
+                               timing::duration(begin_apex, end_apex), 0);
         }
 
     }
@@ -913,9 +943,6 @@ int main(int argc, char *argv[])
         logging::timestamp(tout, "Compute gradients", timing::duration(begin_grad, end_grad), 1);
     }
 
-    // We only need the gradients of the apex to base solution.
-    // delete x_psi_ab;
-
     // If we want one fiber per element, i.e. in L2, then we have to project
     // the Laplacians from H1 to L2. The gradients are already in the correct space.
     //
@@ -1170,6 +1197,7 @@ int main(int argc, char *argv[])
     F.HostRead();
     S.HostRead();
     T.HostRead();
+
 
     if (opts.save_paraview || opts.save_mfem) {
         timing::tick(&t0);
