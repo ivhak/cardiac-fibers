@@ -7,3 +7,4 @@ out/
 rocprof/
 paraview/
 mfem
+tests
