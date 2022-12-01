@@ -562,13 +562,12 @@ int main(int argc, char *argv[])
             logging::timestamp(tout, "Find local minimum", timing::duration(t0, t1), 1);
         }
 
-        timing::tick(&t1);
-        std::vector<double> min_buffer(nranks, -1);
-        MPI_Allgather(&min_distance,     1, MPI_DOUBLE,
-                      min_buffer.data(), 1, MPI_DOUBLE, MPI_COMM_WORLD);
-        auto result = std::min_element(min_buffer.begin(), min_buffer.end());
-        auto target_rank = result - min_buffer.begin();
-        if (target_rank != rank) {
+        timing::tick(&t0);
+        struct double_int local_min = {.val=min_distance, .rank=rank};
+        struct double_int global_min;
+
+        MPI_Allreduce(&local_min, &global_min, 1, MPI_DOUBLE_INT, MPI_MINLOC, MPI_COMM_WORLD);
+        if (rank != global_min.rank) {
             apex = -1;
         } else if (opts.verbose >= 3) {
             const double *found_apex = pmesh.GetVertex(apex);

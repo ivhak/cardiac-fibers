@@ -46,5 +46,10 @@ typedef struct {
     bool fibers_per_element;
 } Options;
 
+struct double_int {
+    double val;
+    int rank;
+};
+
 #define LDRB_GPU_HPP
 #endif
