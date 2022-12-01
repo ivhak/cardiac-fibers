@@ -1,5 +1,9 @@
 #include "mfem.hpp"
+
+#include "fem.hpp"
 #include "calculus.hpp"
+
+using namespace mfem;
 
 static bool vec3equal(vec3& u, vec3& v) {
     return u[0] == v[0]
@@ -145,9 +149,200 @@ bool test_quaternions(void)
     return true;
 }
 
+void solve_laplace_epi(GridFunction& x, Mesh& mesh)
+{
+    int nattr = mesh.bdr_attributes.Max();
+    Array<int> ess_bdr(nattr);          // Essential boundaries
+    Array<int> nonzero_ess_bdr(nattr);  // Essential boundaries with value 1.0
+    Array<int> zero_ess_bdr(nattr);     // Essential boundaries with value 0.0
+
+    const int epi  = 2;
+    const int lv   = 3;
+    const int rv   = 4;
+
+    ess_bdr = 0;
+    ess_bdr[epi-1] = 1;
+    ess_bdr[lv -1] = 1;
+    ess_bdr[rv -1] = 1;
+
+    nonzero_ess_bdr = 0;
+    nonzero_ess_bdr[epi-1] = 1;
+
+    zero_ess_bdr = 0;
+    zero_ess_bdr[lv-1] = 1;
+    zero_ess_bdr[rv-1] = 1;
+
+    ConstantCoefficient zero(0.0);
+    ConstantCoefficient one(1.0);
+
+    x = 0.0;
+    x.ProjectBdrCoefficient(zero, zero_ess_bdr);
+    x.ProjectBdrCoefficient(one, nonzero_ess_bdr);
+
+    Array<int> ess_tdof_list;
+    x.FESpace()->GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
+
+    LinearForm b(x.FESpace());
+    b.AddDomainIntegrator(new DomainLFIntegrator(zero));
+    b.Assemble();
+
+    BilinearForm a(x.FESpace());
+    a.AddDomainIntegrator(new DiffusionIntegrator(one));
+    a.Assemble();
+
+    SparseMatrix A;
+    Vector B, X;
+    a.FormLinearSystem(ess_tdof_list, x, b, A, X, B);
+
+    GSSmoother M(A);
+    PCG(A, M, B, X, 0, 200, 1e-12, 0.0);
+
+    a.RecoverFEMSolution(X, b, x);
+}
+
+void test_gradients(void)
+{
+    std::cout << "test_gradients: ";
+
+    Mesh mesh("./mesh/gmsh/heart01.msh", 1, 1);
+
+    H1_FECollection h1_fec(1, mesh.Dimension());
+    L2_FECollection l2_fec(0, mesh.Dimension());
+
+    FiniteElementSpace fespace_scalar_h1(&mesh, &h1_fec);
+    FiniteElementSpace fespace_vector_l2(&mesh, &l2_fec, 3, Ordering::byVDIM);
+
+    // Solve the Laplacian from epi to endo on heart01
+    GridFunction x(&fespace_scalar_h1);
+    solve_laplace_epi(x, mesh);
+
+    GridFunction grad_manual(&fespace_vector_l2);
+    {
+        Vector vertices;
+        mesh.GetVertices(vertices);
+        const double *vert = vertices.Read();
+
+        const Table& h1_element_to_dof = fespace_scalar_h1.GetElementToDofTable();
+        const Table& l2_element_to_dof = fespace_vector_l2.GetElementToDofTable();
+
+        const int *h1_I = h1_element_to_dof.ReadI();
+        const int *h1_J = h1_element_to_dof.ReadJ();
+
+        const int *l2_I = l2_element_to_dof.ReadI();
+        const int *l2_J = l2_element_to_dof.ReadJ();
+
+        const int num_elements = mesh.GetNE();
+        const int num_vertices = mesh.GetNV();
+
+        const double *x_vals = x.Read();
+        double *grad_vals = grad_manual.Write();
+
+        compute_gradient(grad_vals, x_vals, vert,
+                         num_elements, num_vertices,
+                         h1_I, h1_J, l2_I, l2_J);
+
+    }
+
+    GridFunction grad_mfem(&fespace_vector_l2);
+    {
+        GradientGridFunctionCoefficient ggfc(&x);
+        grad_mfem.ProjectCoefficient(ggfc);
+    }
+
+    const double *grad_manual_vals = grad_manual.Read();
+    const double *grad_mfem_vals = grad_mfem.Read();
+
+    bool passed = true;
+    double max_diff = 0.0;
+    for (int i = 0; i < grad_manual.Size(); i++) {
+        double diff = abs(grad_manual_vals[i] - grad_mfem_vals[i]);
+        if (diff > 1e-12) {
+            passed = false;
+            break;
+        }
+        if (max_diff < diff) {
+            max_diff = diff;
+        }
+    }
+    if (passed) {
+        std::cout << "[PASSED] (Maximal elementwise diff: " << max_diff << ")"<< std::endl;
+
+    } else {
+        std::cout << "[FAILED]" << std::endl;
+    }
+}
+
+void test_projection(void)
+{
+    std::cout << "test_projection: ";
+
+    Mesh mesh("./mesh/gmsh/heart01.msh", 1, 1);
+
+    H1_FECollection h1_fec(1, mesh.Dimension());
+    L2_FECollection l2_fec(0, mesh.Dimension());
+
+    FiniteElementSpace fespace_scalar_h1(&mesh, &h1_fec);
+    FiniteElementSpace fespace_scalar_l2(&mesh, &l2_fec);
+
+    // Solve the Laplacian from epi to endo on heart01
+    GridFunction x(&fespace_scalar_h1);
+    solve_laplace_epi(x, mesh);
+
+    GridFunction x_l2_manual(&fespace_scalar_l2);
+    {
+        const Table& h1_element_to_dof = fespace_scalar_h1.GetElementToDofTable();
+        const Table& l2_element_to_dof = fespace_scalar_l2.GetElementToDofTable();
+
+        const int *h1_I = h1_element_to_dof.ReadI();
+        const int *h1_J = h1_element_to_dof.ReadJ();
+
+        const int *l2_I = l2_element_to_dof.ReadI();
+        const int *l2_J = l2_element_to_dof.ReadJ();
+
+        const int num_elements = mesh.GetNE();
+
+        const double *x_h1 = x.Read();
+        double *x_l2 = x_l2_manual.Write();
+
+        project_h1_to_l2(x_l2, x_h1, num_elements,
+                         h1_I, h1_J, l2_I, l2_J);
+    }
+
+    GridFunction x_l2_mfem(&fespace_scalar_l2);
+    {
+        GridFunctionCoefficient gfc(&x);
+        x_l2_mfem.ProjectCoefficient(gfc);
+    }
+
+    const double *x_l2_manual_vals = x_l2_manual.Read();
+    const double *x_l2_mfem_vals = x_l2_mfem.Read();
+
+    bool passed = true;
+    double max_diff = 0.0;
+    for (int i = 0; i < x_l2_manual.Size(); i++) {
+        double diff = abs(x_l2_manual_vals[i] - x_l2_mfem_vals[i]);
+        if (diff > 1e-12) {
+            passed = false;
+            break;
+        }
+        if (max_diff < diff) {
+            max_diff = diff;
+        }
+    }
+    if (passed) {
+        std::cout << "[PASSED] (Maximal elementwise diff: " << max_diff << ")"<< std::endl;
+
+    } else {
+        std::cout << "[FAILED]" << std::endl;
+    }
+}
+
+
 int main(void)
 {
     test_axis();
     test_quaternions();
+    test_gradients();
+    test_projection();
     return 0;
 }

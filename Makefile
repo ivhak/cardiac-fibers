@@ -90,7 +90,7 @@ all: cardiac-fibers
 cardiac-fibers: check-env $(OBJ)
 	$(CXX) -o $@ $(OBJ) $(LFLAGS)
 
-tests: tests.o calculus.o util.o
+tests: tests.o fem.o calculus.o util.o
 	$(CXX) -o $@ $^ $(LFLAGS)
 
 %.o: %.cpp
