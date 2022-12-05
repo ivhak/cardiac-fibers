@@ -648,22 +648,35 @@ int main(int argc, char *argv[])
         logging::marker(tout, "Compute Laplacians", 1);
     }
 
+    timing::tick(&t0);
+
+
     // Set up the finite element collection. We use  first order H1-conforming finite elements.
     H1_FECollection h1_fec(1, pmesh.Dimension());
 
     // Set up two finite element spaces: one for scalar values (1D) , and one for 3d vectors
     ParFiniteElementSpace fespace_scalar_h1(&pmesh, &h1_fec);
-    ParFiniteElementSpace fespace_vector_h1(&pmesh, &h1_fec, 3, Ordering::byVDIM);
 
+    ParGridFunction *x_phi_epi = new ParGridFunction(&fespace_scalar_h1);
+    ParGridFunction *x_phi_lv  = new ParGridFunction(&fespace_scalar_h1);
+    ParGridFunction *x_phi_rv  = new ParGridFunction(&fespace_scalar_h1);
+    ParGridFunction *x_psi_ab  = new ParGridFunction(&fespace_scalar_h1);
+
+    x_phi_epi->UseDevice(true);
+    x_phi_lv->UseDevice(true);
+    x_phi_rv->UseDevice(true);
+    x_psi_ab->UseDevice(true);
 
     int nattr = pmesh.bdr_attributes.Max();
     Array<int> ess_bdr(nattr);          // Essential boundaries
     Array<int> nonzero_ess_bdr(nattr);  // Essential boundaries with value 1.0
     Array<int> zero_ess_bdr(nattr);     // Essential boundaries with value 0.0
 
+    timing::tick(&t1);
+    if (opts.verbose >= 2 && rank == 0) {
+        logging::timestamp(tout, "Setup", timing::duration(t0, t1), 2);
+    }
     // Solve the Laplace equation from EPI (1.0) to (LV_ENDO union RV_ENDO) (0.0)
-    ParGridFunction *x_phi_epi = new ParGridFunction(&fespace_scalar_h1);
-    x_phi_epi->UseDevice(true);
     {
         if (opts.verbose >= 2 && rank == 0) {
             logging::marker(tout, "phi_epi", 2);
@@ -700,8 +713,6 @@ int main(int argc, char *argv[])
 
 
     // Solve the Laplace equation from LV_ENDO (1.0) to (RV_ENDO union EPI) (0.0)
-    ParGridFunction *x_phi_lv = new ParGridFunction(&fespace_scalar_h1);
-    x_phi_lv->UseDevice(true);
     {
         if (opts.verbose >= 2 && rank == 0) {
             logging::marker(tout, "phi_lv", 2);
@@ -738,8 +749,6 @@ int main(int argc, char *argv[])
 
 
     // Solve the Laplace equation from RV_ENDO (1.0) to (LV_ENDO union EPI) (0.0)
-    ParGridFunction *x_phi_rv = new ParGridFunction(&fespace_scalar_h1);
-    x_phi_rv->UseDevice(true);
     if (mesh_has_right_ventricle) {
         if (opts.verbose >= 2 && rank == 0) {
             logging::marker(tout, "phi_rv", 2);
@@ -775,8 +784,6 @@ int main(int argc, char *argv[])
 
 
     // Solve the Laplace equation from BASE (1.0) to APEX (0.0)
-    ParGridFunction *x_psi_ab = new ParGridFunction(&fespace_scalar_h1);
-    x_psi_ab->UseDevice(true);
     {
         if (opts.verbose >= 2 && rank == 0) {
             logging::marker(tout, "psi_ab", 2);
@@ -816,15 +823,14 @@ int main(int argc, char *argv[])
     // If we want the fibers to be in L2, we first have to project the
     // Laplacians from H1 to L2. Then we can compute the gradients in L2.
 
-    L2_FECollection l2_fec(0, pmesh.Dimension());
-
-    ParFiniteElementSpace fespace_vector_l2(&pmesh, &l2_fec, 3, Ordering::byVDIM);
-
     struct timespec begin_grad, end_grad;
     timing::tick(&begin_grad);
     if (opts.verbose >= 2 && rank == 0) {
         logging::marker(tout, "Compute gradients", 1);
     }
+
+    L2_FECollection l2_fec(0, pmesh.Dimension());
+    ParFiniteElementSpace fespace_vector_l2(&pmesh, &l2_fec, 3, Ordering::byVDIM);
 
     // Setup the things needed for gradient computation. The tables will also
     // be used for the H1 to L2 projection when calculating the fibers in L2,
@@ -846,6 +852,17 @@ int main(int argc, char *argv[])
     const int num_elements = pmesh.GetNE();
     const int num_vertices = pmesh.GetNV();
 
+    ParGridFunction *grad_phi_epi, *grad_phi_lv, *grad_phi_rv, *grad_psi_ab;
+
+    grad_phi_epi = new ParGridFunction(&fespace_vector_l2);
+    grad_phi_lv  = new ParGridFunction(&fespace_vector_l2);
+    grad_phi_rv  = new ParGridFunction(&fespace_vector_l2);
+    grad_psi_ab  = new ParGridFunction(&fespace_vector_l2);
+
+    grad_phi_epi->UseDevice(true);
+    grad_phi_lv->UseDevice(true);
+    grad_phi_rv->UseDevice(true);
+    grad_psi_ab->UseDevice(true);
 
     timing::tick(&t1);
     if (opts.verbose >= 2 && rank == 0) {
@@ -854,8 +871,9 @@ int main(int argc, char *argv[])
 
 
     // Compute gradients for phi_epi, phi_lv, phi_rv and psi_ab
-    ParGridFunction *grad_phi_epi = new ParGridFunction(&fespace_vector_l2);
-    grad_phi_epi->UseDevice(true);
+
+
+    // Gradient of phi_epi
     {
         timing::tick(&t0);
         tracing::roctx_range_push("grad_phi_epi");
@@ -874,8 +892,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    ParGridFunction *grad_phi_lv = new ParGridFunction(&fespace_vector_l2);
-    grad_phi_lv->UseDevice(true);
+    // Gradient of phi_rv
     {
         timing::tick(&t0);
         tracing::roctx_range_push("grad_phi_lv");
@@ -894,8 +911,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    ParGridFunction *grad_phi_rv = new ParGridFunction(&fespace_vector_l2);
-    grad_phi_rv->UseDevice(true);
+    // Gradient of phi_lv
     if (mesh_has_right_ventricle) {
         timing::tick(&t0);
         tracing::roctx_range_push("grad_phi_rv");
@@ -916,8 +932,7 @@ int main(int argc, char *argv[])
         *grad_phi_rv = 0.0;
     }
 
-    ParGridFunction *grad_psi_ab = new ParGridFunction(&fespace_vector_l2);
-    grad_psi_ab->UseDevice(true);
+    // Gradient of psi_ab
     {
         timing::tick(&t0);
         tracing::roctx_range_push("grad_psi_ab");
@@ -1041,6 +1056,7 @@ int main(int argc, char *argv[])
         tracing::roctx_range_push("Interpolate gradients L2 -> H1");
 
         timing::tick(&t0);
+        ParFiniteElementSpace *fespace_vector_h1 = new ParFiniteElementSpace(&pmesh, &h1_fec, 3, Ordering::byVDIM);
         Table *vertex_to_element = pmesh.GetVertexToElementTable();
 
         const int *v2e_I = vertex_to_element->ReadI();
@@ -1051,7 +1067,7 @@ int main(int argc, char *argv[])
         }
 
 
-        ParGridFunction *grad_phi_epi_h1 = new ParGridFunction(&fespace_vector_h1);
+        ParGridFunction *grad_phi_epi_h1 = new ParGridFunction(fespace_vector_h1);
         grad_phi_epi_h1->UseDevice(true);
         timing::tick(&t0);
         {
@@ -1068,7 +1084,7 @@ int main(int argc, char *argv[])
             logging::timestamp(tout, "grad_phi_epi", timing::duration(t0, t1), 2);
         }
 
-        ParGridFunction *grad_phi_lv_h1 = new ParGridFunction(&fespace_vector_h1);
+        ParGridFunction *grad_phi_lv_h1 = new ParGridFunction(fespace_vector_h1);
         grad_phi_lv_h1->UseDevice(true);
         timing::tick(&t0);
         {
@@ -1085,7 +1101,7 @@ int main(int argc, char *argv[])
             logging::timestamp(tout, "grad_phi_lv", timing::duration(t0, t1), 2);
         }
 
-        ParGridFunction *grad_phi_rv_h1 = new ParGridFunction(&fespace_vector_h1);
+        ParGridFunction *grad_phi_rv_h1 = new ParGridFunction(fespace_vector_h1);
         grad_phi_rv_h1->UseDevice(true);
         if (mesh_has_right_ventricle) {
             timing::tick(&t0);
@@ -1108,7 +1124,7 @@ int main(int argc, char *argv[])
             grad_phi_rv = grad_phi_rv_h1;
         }
 
-        ParGridFunction *grad_psi_ab_h1 = new ParGridFunction(&fespace_vector_h1);
+        ParGridFunction *grad_psi_ab_h1 = new ParGridFunction(fespace_vector_h1);
         grad_psi_ab->UseDevice(true);
         timing::tick(&t0);
         {
@@ -1122,7 +1138,7 @@ int main(int argc, char *argv[])
         }
         timing::tick(&t1);
         if (opts.verbose >= 2 && rank == 0) {
-            logging::timestamp(tout, "grad_phi_rv", timing::duration(t0, t1), 2);
+            logging::timestamp(tout, "grad_psi_ab", timing::duration(t0, t1), 2);
         }
 
 
@@ -1135,6 +1151,13 @@ int main(int argc, char *argv[])
                                timing::duration(begin_interp, end_interp), 1);
         }
     }
+
+    if (opts.verbose >= 2 && rank == 0) {
+        logging::marker(tout, "Compute fiber orientations", 1);
+    }
+    struct timespec begin_ldrb, end_ldrb;
+    timing::tick(&begin_ldrb);
+    timing::tick(&t0);
 
     // Get read-only pointers to the internal arrays of the laplacian solutions
     const double *phi_epi = x_phi_epi->Read();
@@ -1149,9 +1172,7 @@ int main(int argc, char *argv[])
 
     // Setup GridFunctions to store the fibre directions in
 
-    ParFiniteElementSpace *fiber_space = opts.fibers_per_element
-                                       ? &fespace_vector_l2
-                                       : &fespace_vector_h1;
+    ParFiniteElementSpace *fiber_space = grad_phi_epi->ParFESpace();
     ParGridFunction F(fiber_space);
     ParGridFunction S(fiber_space);
     ParGridFunction T(fiber_space);
@@ -1161,6 +1182,10 @@ int main(int argc, char *argv[])
     double *S_vals = S.Write();
     double *T_vals = T.Write();
 
+    timing::tick(&t1);
+    if (opts.verbose >= 2 && rank == 0) {
+        logging::timestamp(tout, "Setup", timing::duration(t0, t1), 2);
+    }
 
     // Calculate the fiber orientation
     timing::tick(&t0);
@@ -1175,12 +1200,15 @@ int main(int argc, char *argv[])
 
     tracing::roctx_range_pop();
     timing::tick(&t1);
-    if (opts.verbose && rank == 0)
-        logging::timestamp(tout, "Define fiber orientation", timing::duration(t0, t1), 1);
+    timing::tick(&end_ldrb);
+    if (opts.verbose && rank == 0) {
+        logging::timestamp(tout, "define_fibers", timing::duration(t0, t1), 2);
+        logging::timestamp(tout, "Total", timing::duration(begin_ldrb, end_ldrb), 2, '=');
+    }
 
     timing::tick(&end_fiber);
     if (opts.verbose && rank == 0) {
-        logging::timestamp(tout, "Total (fiber)", timing::duration(begin_fiber, end_fiber), 1, '=');
+        logging::timestamp(tout, "Total", timing::duration(begin_fiber, end_fiber), 1, '=');
     }
 
 
