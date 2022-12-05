@@ -96,45 +96,47 @@ void compute_gradient(
         const double f_h = laplace[h1_dofs[2]];
         const double f_i = laplace[h1_dofs[3]];
 
-        vec3 v_ik = v_i - v_k;
-        vec3 v_hk = v_h - v_k;
+        // Jacobian matrix
+        const double J0 = v_j[0] - v_i[0];
+        const double J1 = v_k[0] - v_i[0];
+        const double J2 = v_h[0] - v_i[0];
+        const double J3 = v_j[1] - v_i[1];
+        const double J4 = v_k[1] - v_i[1];
+        const double J5 = v_h[1] - v_i[1];
+        const double J6 = v_j[2] - v_i[2];
+        const double J7 = v_k[2] - v_i[2];
+        const double J8 = v_h[2] - v_i[2];
 
-        vec3 v_ih = v_i - v_h;
-        vec3 v_jh = v_j - v_h;
+        // Cofactors of the Jacobian -
+        // the transpose of the inverse of the Jacobian matrix
+        // times the determinant of the Jacobian matrix,
+        // i.e., C = det(J) J^{-T}, (or, J^{-T} = 1/det(J)*C).
+        const double C0 = J4*J8-J5*J7;
+        const double C1 = J5*J6-J3*J8;
+        const double C2 = J3*J7-J4*J6;
+        const double C3 = J2*J7-J1*J8;
+        const double C4 = J0*J8-J2*J6;
+        const double C5 = J1*J6-J0*J7;
+        const double C6 = J1*J5-J2*J4;
+        const double C7 = J2*J3-J0*J5;
+        const double C8 = J0*J4-J1*J3;
 
-        vec3 v_ki = v_k - v_i;
-        vec3 v_ji = v_j - v_i;
-
-        // The normal vector of the plane adjacent to v_j
-        vec3 v_ik_x_v_hk; _cross(v_ik_x_v_hk, v_ik, v_hk);
-
-        // The normal vector of the plane adjacent to v_k
-        vec3 v_ih_x_v_jh; _cross(v_ih_x_v_jh, v_ih, v_jh);
-
-        // The normal vector of the plane adjacent to v_h
-        vec3 v_ki_x_v_ji; _cross(v_ki_x_v_ji, v_ki, v_ji);
-
-        double vol;
-        {
-            vec3 v_hi = v_h - v_i;
-            vol = abs(_vecdot(v_hi, v_ki_x_v_ji));
-            // vol *= (1.0/6.0);
-        }
-
-        v_ik_x_v_hk *= (f_j - f_i);
-        v_ih_x_v_jh *= (f_k - f_i);
-        v_ki_x_v_ji *= (f_h - f_i);
-
-        vec3 grad = v_ik_x_v_hk;
-        grad += v_ih_x_v_jh;
-        grad += v_ki_x_v_ji;
-        grad *= (1.0 / vol);
+        // Determinant of the Jacobian
+        double Jdet = J0*C0+J1*C1+J2*C2;
 
         const int l2_dof = l2_table_row[l2_table_col[i]];
 
-        gradient[3*l2_dof+0] = grad[0];
-        gradient[3*l2_dof+1] = grad[1];
-        gradient[3*l2_dof+2] = grad[2];
+        //                 | f_j - f_i |
+        // grad u = J^{-T} | f_k - f_i |
+        //                 | f_h - f_i |
+        //
+        // compute the product of cofactor matrix with the vector
+        // (c[1]-c[0], c[2]-c[0], c[3]-c[0]), and,
+        // finally, scaled by the inverse of
+        // the Jacobian determinant.
+        gradient[3*l2_dof+0] = ((f_j-f_i)*C0 + (f_k - f_i)*C1 + (f_h - f_i)*C2) / Jdet;
+        gradient[3*l2_dof+1] = ((f_j-f_i)*C3 + (f_k - f_i)*C4 + (f_h - f_i)*C5) / Jdet;
+        gradient[3*l2_dof+2] = ((f_j-f_i)*C6 + (f_k - f_i)*C7 + (f_h - f_i)*C8) / Jdet;
     });
 }
 
