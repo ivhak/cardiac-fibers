@@ -4,6 +4,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
+#SBATCH --exclusive
 #SBATCH --time=4-00:00:00
 #SBATCH --output=jobs/%x-%j.err
 #SBATCH --error=jobs/%x-%j.err
@@ -21,7 +22,6 @@ function run {
     mpirun --bind-to core -np ${SLURM_NTASKS} ${BUILD_DIR}/cardiac-fibers \
         --mesh ${DATA_DIR}/"$1".msh \
         --out ${JOB_DIR}/"$1" \
-        --device omp \
         --time-to-file \
         --verbose 3 \
         --apex '345 1232 170' \
