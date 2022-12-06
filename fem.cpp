@@ -114,11 +114,10 @@ void compute_gradient(
         // The normal vector of the plane adjacent to v_h
         vec3 v_ki_x_v_ji; _cross(v_ki_x_v_ji, v_ki, v_ji);
 
-        double vol;
+        double six_vol;
         {
             vec3 v_hi = v_h - v_i;
-            vol = abs(_vecdot(v_hi, v_ki_x_v_ji));
-            // vol *= (1.0/6.0);
+            six_vol = abs(_vecdot(v_hi, v_ki_x_v_ji));
         }
 
         v_ik_x_v_hk *= (f_j - f_i);
@@ -128,7 +127,7 @@ void compute_gradient(
         vec3 grad = v_ik_x_v_hk;
         grad += v_ih_x_v_jh;
         grad += v_ki_x_v_ji;
-        grad *= (1.0 / vol);
+        grad *= (1.0 / six_vol);
 
         const int l2_dof = l2_table_row[l2_table_col[i]];
 

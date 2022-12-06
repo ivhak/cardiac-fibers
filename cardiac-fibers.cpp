@@ -434,10 +434,12 @@ int main(int argc, char *argv[])
              + "consisting of " + std::to_string(mesh.GetNV()) + " vertices "
              + "and " + std::to_string(mesh.GetNE()) + " elements";
         logging::info(std::cout, msg);
-
     }
     if (opts.verbose && rank == 0)
         logging::timestamp(tout, "Mesh load", timing::duration(t0, t1));
+
+    MFEM_VERIFY((mesh.MeshGenerator() & 0b1110) == 0,
+                "The mesh has non-simplex elements. Only tetrahedral meshes are supported");
 
     // Define a parallel mesh by a partitioning of the serial mesh.
     timing::tick(&t0);
@@ -828,6 +830,7 @@ int main(int argc, char *argv[])
     if (opts.verbose >= 2 && rank == 0) {
         logging::marker(tout, "Compute gradients", 1);
     }
+    timing::tick(&t0);
 
     L2_FECollection l2_fec(0, pmesh.Dimension());
     ParFiniteElementSpace fespace_vector_l2(&pmesh, &l2_fec, 3, Ordering::byVDIM);
@@ -835,7 +838,6 @@ int main(int argc, char *argv[])
     // Setup the things needed for gradient computation. The tables will also
     // be used for the H1 to L2 projection when calculating the fibers in L2,
     // and for the gradient interpolation when calculating fibers in H1.
-    timing::tick(&t0);
     Vector local_vertices;
     pmesh.GetVertices(local_vertices);
     const double *vert = local_vertices.Read();
@@ -868,10 +870,6 @@ int main(int argc, char *argv[])
     if (opts.verbose >= 2 && rank == 0) {
         logging::timestamp(tout, "Setup", timing::duration(t0, t1), 2);
     }
-
-
-    // Compute gradients for phi_epi, phi_lv, phi_rv and psi_ab
-
 
     // Gradient of phi_epi
     {
@@ -970,6 +968,7 @@ int main(int argc, char *argv[])
         struct timespec begin_proj, end_proj;
         timing::tick(&begin_proj);
         tracing::roctx_range_push("Project Laplacians H1 -> L2");
+        tracing::roctx_range_push("Setup");
 
         timing::tick(&t0);
         ParFiniteElementSpace *fespace_scalar_l2 = new ParFiniteElementSpace(&pmesh, &l2_fec);
@@ -978,6 +977,7 @@ int main(int argc, char *argv[])
         if (opts.verbose >= 2 && rank == 0) {
             logging::timestamp(tout, "Setup", timing::duration(t0, t1), 2);
         }
+        tracing::roctx_range_pop();
 
         // Project x_phi_epi, x_phi_lv and x_phi_rv into L2, then free the old
         // solutions and set the solution pointers to the projected ones.
