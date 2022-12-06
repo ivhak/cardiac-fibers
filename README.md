@@ -38,6 +38,9 @@ Options:
         will be output to <OUT>/time.txt, where <OUT> is set with the -o (--out) flag.
    -m <string>, --mesh <string>, (required)
         Mesh file to use. See https://mfem.org/mesh-formats/ for a list of suppored formats.
+   -pm, --par-mesh, -npm, --no-par-mesh, current option: --no-par-mesh
+        Mesh is parallel, i.e, one file for each rank.
+        Each rank will read the mesh <MESH_FILE>.<rank>, e.g., mesh.000000.
    -a '<double>...', --apex '<double>...', (required)
         Coordinate of apex, space separated list: 'x y z'.
    -o <string>, --out <string>, current value: .

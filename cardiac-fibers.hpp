@@ -22,6 +22,7 @@
 typedef struct {
     int verbose;
     const char *mesh_file;
+    bool par_mesh;
     const char *output_dir;
     const char *device_config;
     bool time_to_file;

@@ -231,6 +231,7 @@ int main(int argc, char *argv[])
 
     // Set program defaults
     opts.mesh_file = NULL;
+    opts.par_mesh = false;
     opts.output_dir = ".";
     opts.time_to_file = false;
 
@@ -287,6 +288,12 @@ int main(int argc, char *argv[])
             "-m", "--mesh",
             "Mesh file to use. "
             "See https://mfem.org/mesh-formats/ for a list of suppored formats.", true);
+
+    args.AddOption(&opts.par_mesh,
+            "-pm", "--par-mesh",
+            "-npm", "--no-par-mesh",
+            "Mesh is parallel, i.e, one file for each rank.\n"
+            "\tEach rank will read the mesh <MESH_FILE>.<rank>, e.g., mesh.000000.");
 
     args.AddOption(&opts.prescribed_apex,
             "-a", "--apex",
@@ -425,36 +432,59 @@ int main(int argc, char *argv[])
     }
 
     // Load the mesh
-    timing::tick(&t0);
-    Mesh mesh(opts.mesh_file, 1, 1);
-    timing::tick(&t1);
+    ParMesh *pmesh = NULL;
+    if (!opts.par_mesh) {
+        timing::tick(&t0);
+        Mesh mesh(opts.mesh_file, 1, 1);
+        timing::tick(&t1);
 
-    if (opts.verbose >= 3 && rank == 0) {
-        std::string msg = "Loaded meshfile '" + std::string(opts.mesh_file) + "' "
-             + "consisting of " + std::to_string(mesh.GetNV()) + " vertices "
-             + "and " + std::to_string(mesh.GetNE()) + " elements";
-        logging::info(std::cout, msg);
+        if (opts.verbose >= 3 && rank == 0) {
+            std::string msg = "Loaded meshfile '" + std::string(opts.mesh_file) + "' "
+                 + "consisting of " + std::to_string(mesh.GetNV()) + " vertices "
+                 + "and " + std::to_string(mesh.GetNE()) + " elements";
+            logging::info(std::cout, msg);
+        }
+        if (opts.verbose && rank == 0)
+            logging::timestamp(tout, "Mesh load", timing::duration(t0, t1));
+
+        MFEM_VERIFY((mesh.MeshGenerator() & 0b1110) == 0,
+                    "The mesh has non-simplex elements. Only tetrahedral meshes are supported");
+
+        // Define a parallel mesh by a partitioning of the serial mesh.
+        timing::tick(&t0);
+        pmesh = new ParMesh(MPI_COMM_WORLD, mesh);
+        mesh.Clear();
+        timing::tick(&t1);
+        if (opts.verbose && rank == 0)
+            logging::timestamp(tout, "Partition mesh", timing::duration(t0, t1));
+    } else {
+        timing::tick(&t0);
+        std::stringstream fname;
+        fname << opts.mesh_file  << "." << std::setw(6) << std::setfill('0') << rank;
+        std::string filename = fname.str();
+
+        if (opts.verbose >= 3 && rank == 0) {
+            std::stringstream msg;
+            msg << "The -pm flag was passed, loading mesh in parallel from "
+                << "'" << opts.mesh_file << ".{000000 ... "
+                << std::setw(6) << std::setfill('0') << nranks-1 << "}'";
+            logging::info(std::cout, msg.str());
+
+        }
+        mfem::ifgzstream mesh_ifs(filename);
+        pmesh = new ParMesh(MPI_COMM_WORLD, mesh_ifs, 1);
+        timing::tick(&t1);
+        if (opts.verbose && rank == 0) {
+            logging::timestamp(tout, "Parallel mesh load", timing::duration(t0, t1));
+        }
     }
-    if (opts.verbose && rank == 0)
-        logging::timestamp(tout, "Mesh load", timing::duration(t0, t1));
-
-    MFEM_VERIFY((mesh.MeshGenerator() & 0b1110) == 0,
-                "The mesh has non-simplex elements. Only tetrahedral meshes are supported");
-
-    // Define a parallel mesh by a partitioning of the serial mesh.
-    timing::tick(&t0);
-    ParMesh pmesh(MPI_COMM_WORLD, mesh);
-    mesh.Clear();
-    timing::tick(&t1);
-    if (opts.verbose && rank == 0)
-        logging::timestamp(tout, "Partition mesh", timing::duration(t0, t1));
 
     // Uniform refinement of the mesh
     if (opts.uniform_refinement > 0) {
         struct timespec uf0, uf1;
         timing::tick(&uf0);
         for (int i = 0; i < opts.uniform_refinement; i++)
-            pmesh.UniformRefinement();
+            pmesh->UniformRefinement();
         timing::tick(&uf1);
         if (opts.verbose && rank == 0) {
             std::string msg = "Uniform refinement ("
@@ -464,12 +494,12 @@ int main(int argc, char *argv[])
         }
 
         if (opts.verbose >= 3) {
-            int num_verts = pmesh.GetNV();
+            int num_verts = pmesh->GetNV();
             std::vector<int> verts(nranks, 0);
             MPI_Allgather(&num_verts,    1, MPI_INT,
                            verts.data(), 1, MPI_INT, MPI_COMM_WORLD);
 
-            int num_elems = pmesh.GetNE();
+            int num_elems = pmesh->GetNE();
             std::vector<int> elems(nranks, 0);
             MPI_Allgather(&num_elems,   1, MPI_INT,
                           elems.data(), 1, MPI_INT, MPI_COMM_WORLD);
@@ -507,9 +537,9 @@ int main(int argc, char *argv[])
 
         Vector local_vertices;
         local_vertices.UseDevice(true);
-        pmesh.GetVertices(local_vertices);
+        pmesh->GetVertices(local_vertices);
         const double *vert = local_vertices.Read();
-        int n = pmesh.GetNV();
+        int n = pmesh->GetNV();
 
         Vector local_distances(n);
         double *dist = local_distances.Write();
@@ -553,7 +583,7 @@ int main(int argc, char *argv[])
         // TODO (ivhak): This could (and should) probably be implemented as a
         // parallel reduction and be run on the GPU as well, but this work for
         // now...
-        for (int i = 0; i < pmesh.GetNV(); i++) {
+        for (int i = 0; i < pmesh->GetNV(); i++) {
             if (host_distance[i] < min_distance) {
                 apex = i;
                 min_distance = host_distance[i];
@@ -572,7 +602,7 @@ int main(int argc, char *argv[])
         if (rank != global_min.rank) {
             apex = -1;
         } else if (opts.verbose >= 3) {
-            const double *found_apex = pmesh.GetVertex(apex);
+            const double *found_apex = pmesh->GetVertex(apex);
             std::string msg = "Rank " + std::to_string(rank)
                             + " found the vertex closest to the prescribed apex ("
                             + std::to_string(opts.prescribed_apex[0]) +", "
@@ -654,10 +684,10 @@ int main(int argc, char *argv[])
 
 
     // Set up the finite element collection. We use  first order H1-conforming finite elements.
-    H1_FECollection h1_fec(1, pmesh.Dimension());
+    H1_FECollection h1_fec(1, pmesh->Dimension());
 
     // Set up two finite element spaces: one for scalar values (1D) , and one for 3d vectors
-    ParFiniteElementSpace fespace_scalar_h1(&pmesh, &h1_fec);
+    ParFiniteElementSpace fespace_scalar_h1(pmesh, &h1_fec);
 
     ParGridFunction *x_phi_epi = new ParGridFunction(&fespace_scalar_h1);
     ParGridFunction *x_phi_lv  = new ParGridFunction(&fespace_scalar_h1);
@@ -669,7 +699,7 @@ int main(int argc, char *argv[])
     x_phi_rv->UseDevice(true);
     x_psi_ab->UseDevice(true);
 
-    int nattr = pmesh.bdr_attributes.Max();
+    int nattr = pmesh->bdr_attributes.Max();
     Array<int> ess_bdr(nattr);          // Essential boundaries
     Array<int> nonzero_ess_bdr(nattr);  // Essential boundaries with value 1.0
     Array<int> zero_ess_bdr(nattr);     // Essential boundaries with value 0.0
@@ -832,14 +862,14 @@ int main(int argc, char *argv[])
     }
     timing::tick(&t0);
 
-    L2_FECollection l2_fec(0, pmesh.Dimension());
-    ParFiniteElementSpace fespace_vector_l2(&pmesh, &l2_fec, 3, Ordering::byVDIM);
+    L2_FECollection l2_fec(0, pmesh->Dimension());
+    ParFiniteElementSpace fespace_vector_l2(pmesh, &l2_fec, 3, Ordering::byVDIM);
 
     // Setup the things needed for gradient computation. The tables will also
     // be used for the H1 to L2 projection when calculating the fibers in L2,
     // and for the gradient interpolation when calculating fibers in H1.
     Vector local_vertices;
-    pmesh.GetVertices(local_vertices);
+    pmesh->GetVertices(local_vertices);
     const double *vert = local_vertices.Read();
 
     const Table& h1_element_to_dof = fespace_scalar_h1.GetElementToDofTable();
@@ -851,8 +881,8 @@ int main(int argc, char *argv[])
     const int *l2_I = l2_element_to_dof.ReadI();
     const int *l2_J = l2_element_to_dof.ReadJ();
 
-    const int num_elements = pmesh.GetNE();
-    const int num_vertices = pmesh.GetNV();
+    const int num_elements = pmesh->GetNE();
+    const int num_vertices = pmesh->GetNV();
 
     ParGridFunction *grad_phi_epi, *grad_phi_lv, *grad_phi_rv, *grad_psi_ab;
 
@@ -971,7 +1001,7 @@ int main(int argc, char *argv[])
         tracing::roctx_range_push("Setup");
 
         timing::tick(&t0);
-        ParFiniteElementSpace *fespace_scalar_l2 = new ParFiniteElementSpace(&pmesh, &l2_fec);
+        ParFiniteElementSpace *fespace_scalar_l2 = new ParFiniteElementSpace(pmesh, &l2_fec);
 
         timing::tick(&t1);
         if (opts.verbose >= 2 && rank == 0) {
@@ -1056,8 +1086,8 @@ int main(int argc, char *argv[])
         tracing::roctx_range_push("Interpolate gradients L2 -> H1");
 
         timing::tick(&t0);
-        ParFiniteElementSpace *fespace_vector_h1 = new ParFiniteElementSpace(&pmesh, &h1_fec, 3, Ordering::byVDIM);
-        Table *vertex_to_element = pmesh.GetVertexToElementTable();
+        ParFiniteElementSpace *fespace_vector_h1 = new ParFiniteElementSpace(pmesh, &h1_fec, 3, Ordering::byVDIM);
+        Table *vertex_to_element = pmesh->GetVertexToElementTable();
 
         const int *v2e_I = vertex_to_element->ReadI();
         const int *v2e_J = vertex_to_element->ReadJ();
@@ -1225,7 +1255,6 @@ int main(int argc, char *argv[])
     S.HostRead();
     T.HostRead();
 
-
     if (opts.save_paraview || opts.save_mfem) {
         timing::tick(&t0);
         // Save the mesh and solutions
@@ -1240,7 +1269,7 @@ int main(int argc, char *argv[])
             fs::mksubdir(mfem_output_dir);
 
             // Save the MFEM mesh
-            save::save_mesh(&pmesh, mfem_output_dir, mesh_basename, rank);
+            save::save_mesh(pmesh, mfem_output_dir, mesh_basename, rank);
 
             if (opts.save_laplacians) {
                 save::save_solution(x_phi_epi, mfem_output_dir, mesh_basename, "_phi_epi.gf", rank);
@@ -1268,7 +1297,7 @@ int main(int argc, char *argv[])
             paraview_path += "/paraview";
             fs::mksubdir(paraview_path);
 
-            pd = new ParaViewDataCollection(mesh_basename, &pmesh);
+            pd = new ParaViewDataCollection(mesh_basename, pmesh);
             pd->SetPrefixPath(paraview_path);
             if (opts.save_gradients) {
                 pd->RegisterField("grad phi epi", grad_phi_epi);
