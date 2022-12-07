@@ -11,7 +11,7 @@
 
 LDRB_DIR="${HOME}/master/cardiac-fibers"
 
-DATA_DIR="/global/D1/homes/iverh/data/meshes/martinez-navarro-etal/mesh/gmsh"
+DATA_DIR="/global/D1/homes/iverh/data/meshes/martinez-navarro-etal/mesh/mfem"
 
 JOB_DIR="./jobs/${SLURM_JOB_NAME}-${SLURM_JOB_ID}"
 
@@ -20,7 +20,8 @@ BUILD_DIR=
 
 function run {
     mpirun -np ${SLURM_NTASKS} ${BUILD_DIR}/cardiac-fibers \
-        --mesh ${DATA_DIR}/"$1".msh \
+        --par-mesh \
+        --mesh ${DATA_DIR}/"$1"/${SLURM_NTASKS}/"$1".mesh \
         --out ${JOB_DIR}/"$1" \
         --time-to-file \
         --verbose 3 \
