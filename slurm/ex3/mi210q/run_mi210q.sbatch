@@ -5,6 +5,7 @@
 #SBATCH --ntasks=1
 #SBATCH --time=4-00:00:00
 #SBATCH --gres=rsmi:1
+#SBATCH --exclusive
 #SBATCH --cpus-per-task=1
 #SBATCH --output=jobs/%x-%j.out
 #SBATCH --error=jobs/%x-%j.err
@@ -17,9 +18,10 @@ JOB_DIR="./jobs/${SLURM_JOB_NAME}-${SLURM_JOB_ID}"
 
 BUILD_DIR=
 
+export SLURM_CPU_BIND=verbose
 
 function run {
-    mpirun -np ${SLURM_NTASKS} ${BUILD_DIR}/cardiac-fibers \
+    srun --cpu-bind=rank --accel-bind=gv ${BUILD_DIR}/cardiac-fibers \
         --par-mesh \
         --mesh ${DATA_DIR}/"$1"/${SLURM_NTASKS}/"$1".mesh \
         --out ${JOB_DIR}/"$1" \

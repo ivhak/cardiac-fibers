@@ -21,7 +21,7 @@ export SLURM_CPU_BIND=verbose
 
 
 function run {
-    srun --cpu-bind=rank -np ${SLURM_NTASKS} ${BUILD_DIR}/cardiac-fibers \
+    srun --cpu-bind=rank ${BUILD_DIR}/cardiac-fibers \
         --par-mesh \
         --mesh ${DATA_DIR}/"$1"/${SLURM_NTASKS}/"$1".mesh \
         --out ${JOB_DIR}/"$1" \
