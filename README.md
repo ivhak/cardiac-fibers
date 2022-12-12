@@ -208,6 +208,9 @@ $ ./cardiac-fibers \
 
 ```
 
+The following visualization is rendered using the `'Stream Tracer'` and
+`'Tube'` filters in ParaView.
+
 
 ![Rendering of the fiber directions on `mesh/gmsh/lv_ellipsoid.msh`](docs/figures/lv_ellipsoid.png)
 
