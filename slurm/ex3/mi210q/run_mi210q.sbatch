@@ -35,7 +35,7 @@ function run {
 function main {
     set -o errexit
 
-    BUILD_DIR=/global/D1/homes/iverh/cardiac-fibers-${SLURM_JOB_ID}
+    BUILD_DIR=/global/D1/homes/iverh/work/cardiac-fibers-${SLURM_JOB_ID}
 
     cp -r ${LDRB_DIR} ${BUILD_DIR}
 
