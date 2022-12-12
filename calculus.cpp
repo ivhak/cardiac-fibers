@@ -485,7 +485,7 @@ static void calculate_fiber(
     const double beta_w  = beta_endo*(1.0-epi)   + beta_epi*epi;
 
     mat3x3 Q_lv = {{{0}}};
-    if (lv > tol) {
+    {
         vec3 grad_lv_neg = grad_lv;
         vecnegate(grad_lv_neg);
 
@@ -495,7 +495,7 @@ static void calculate_fiber(
     }
 
     mat3x3 Q_rv = {{{0}}};
-    if (rv > tol) {
+    {
         mat3x3 T = {{{0}}};
         axis(T, grad_ab, grad_rv);
         orient(Q_rv, T, alpha_s, beta_s);
@@ -505,7 +505,7 @@ static void calculate_fiber(
     bislerp(Q_endo, Q_lv, Q_rv, depth);
 
     mat3x3 Q_epi = {{{0}}};
-    if (epi > tol) {
+    {
         mat3x3 T = {{{0}}};
         axis(T, grad_ab, grad_epi);
         orient(Q_epi, T, alpha_w, beta_w);
