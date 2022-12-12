@@ -465,16 +465,10 @@ static void calculate_fiber(
     double beta_epi,
     double *F,
     double *S,
-    double *T,
-    double tol)
+    double *T)
 {
 
-    double depth;
-    if (lv + rv < tol) {
-        depth = 0.5;
-    } else {
-        depth = rv / (lv + rv);
-    }
+    double depth = (lv > 0 || rv > 0) ? rv / (lv + rv) : 0.5;
 
     MFEM_ASSERT_KERNEL(depth >= 0.0 && depth <= 1.0, "depth not in range [0,1]");
 
@@ -547,8 +541,7 @@ void define_fibers(
     double beta_epi,
     double *F,
     double *S,
-    double *T,
-    double tol)
+    double *T)
 {
     MFEM_FORALL(i, n,
     {
@@ -579,7 +572,7 @@ void define_fibers(
         calculate_fiber(i, phi_epi_i, phi_lv_i, phi_rv_i,
                         grad_phi_epi_i, grad_phi_lv_i, grad_phi_rv_i, grad_psi_ab_i,
                         alpha_endo, alpha_epi, beta_endo, beta_epi,
-                        F, S, T, tol);
+                        F, S, T);
     });
 }
 

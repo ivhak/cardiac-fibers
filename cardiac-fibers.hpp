@@ -31,7 +31,6 @@ typedef struct {
     bool save_laplacians;
     bool save_gradients;
     mfem::Vector prescribed_apex;
-    double itol;
     double alpha_endo;
     double alpha_epi;
     double beta_endo;

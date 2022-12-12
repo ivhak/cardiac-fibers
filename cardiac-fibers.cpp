@@ -252,8 +252,6 @@ int main(int argc, char *argv[])
     opts.save_laplacians = true;
     opts.save_gradients  = false;
 
-    opts.itol = 1e-12;
-
     opts.alpha_endo =  60.0;
     opts.alpha_epi  = -60.0;
     opts.beta_endo  = -60.0;
@@ -332,10 +330,6 @@ int main(int argc, char *argv[])
             "-sg",  "--save-gradients",
             "-nsg", "--no-save-gradients",
             "Save the gradients of phi_epi, phi_lv, phi_rv and psi_ab");
-
-    args.AddOption(&opts.itol,
-            "-it", "--interpolation-tolerance",
-            "Tolerance for LDRB interpolations.");
 
     args.AddOption(&opts.alpha_endo,
             "-ao", "--alpha-endo",
@@ -1224,7 +1218,7 @@ int main(int argc, char *argv[])
                   phi_epi, phi_lv, phi_rv,
                   grad_phi_epi_vals, grad_phi_lv_vals, grad_phi_rv_vals, grad_psi_ab_vals,
                   opts.alpha_endo, opts.alpha_epi, opts.beta_endo, opts.beta_epi,
-                  F_vals, S_vals, T_vals, opts.itol
+                  F_vals, S_vals, T_vals
     );
     MFEM_DEVICE_SYNC;
 

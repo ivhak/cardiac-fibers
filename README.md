@@ -57,8 +57,6 @@ Options:
         Save the Laplacians phi_epi, phi_lv and phi_rv
    -sg, --save-gradients, -nsg, --no-save-gradients, current option: --no-save-gradients
         Save the gradients of phi_epi, phi_lv, phi_rv and psi_ab
-   -it <double>, --interpolation-tolerance <double>, current value: 1e-12
-        Tolerance for LDRB interpolations.
    -ao <double>, --alpha-endo <double>, current value: 60
         Alpha angle in endocardium.
    -ai <double>, --alpha-epi <double>, current value: -60
