@@ -2,7 +2,7 @@
 
 `cardiac-fibers` is an implementation of the Laplace-Dirichlet Rule-Based
 algorithm (LDRB) for assigning myocardial fiber orientations, based on the MFEM
-finite-element library.
+finite element library.
 
 > Bayer, J.D., Blake, R.C., Plank, G. and Trayanova, N.A., 2012.
 > A novel rule-based algorithm for assigning myocardial fiber orientation
