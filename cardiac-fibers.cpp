@@ -73,10 +73,12 @@ void laplace(
     int apex,
     int verbose,
     std::ostream& tout,
+    std::string tag,
     int rank)
 {
     struct timespec t0, t1;
 
+    std::string log_prefix = "[" + tag + "]:";
 
     // Determine the list of true (i.e. parallel conforming) essential boundary
     // dofs, defined by the boundary attributes marked as essential (Dirichlet)
@@ -135,7 +137,7 @@ void laplace(
     }
     timing::tick(&t1);
     if (verbose >= 2 && rank == 0) {
-        logging::timestamp(tout, "Setup boundary cond.", timing::duration(t0, t1), 3);
+        logging::timestamp(tout, log_prefix + " Setup boundary cond.", timing::duration(t0, t1), 3);
     }
     tracing::roctx_range_pop(); // Setup boundary conditions
 
@@ -160,7 +162,7 @@ void laplace(
     b.Assemble();
     timing::tick(&t1);
     if (verbose >= 2 && rank == 0) {
-        logging::timestamp(tout, "Assemble RHS", timing::duration(t0, t1), 3);
+        logging::timestamp(tout, log_prefix + " Assemble RHS", timing::duration(t0, t1), 3);
     }
     tracing::roctx_range_pop(); // Assemble RHS
 
@@ -185,7 +187,7 @@ void laplace(
     a.Assemble();
     timing::tick(&t1);
     if (verbose >= 2 && rank == 0) {
-        logging::timestamp(tout, "Assemble LHS", timing::duration(t0, t1), 3);
+        logging::timestamp(tout, log_prefix + " Assemble LHS", timing::duration(t0, t1), 3);
     }
     tracing::roctx_range_pop(); // Assemble LHS
 
@@ -198,7 +200,7 @@ void laplace(
     a.FormLinearSystem(ess_tdof_list, *x, b, A, X, B);
     timing::tick(&t1);
     if (verbose >= 2 && rank == 0) {
-        logging::timestamp(tout, "Form linear system", timing::duration(t0, t1), 3);
+        logging::timestamp(tout, log_prefix + " Form linear system", timing::duration(t0, t1), 3);
     }
     tracing::roctx_range_pop(); // Form linear system
 
@@ -210,7 +212,7 @@ void laplace(
     solver->Mult(B, X);
     timing::tick(&t1);
     if (verbose >= 2 && rank == 0) {
-        logging::timestamp(tout, "Solve", timing::duration(t0, t1), 3);
+        logging::timestamp(tout, log_prefix + " Solve", timing::duration(t0, t1), 3);
     }
     tracing::roctx_range_pop(); // Solve
 
@@ -657,7 +659,7 @@ int main(int argc, char *argv[])
 
     timing::tick(&t1);
     if (opts.verbose && rank == 0) {
-        logging::timestamp(tout, "Setup precond. and solver", timing::duration(t0,t1));
+        logging::timestamp(tout, "Setup preconditioner and solver", timing::duration(t0,t1));
     }
 
     // Time the fiber orientation calculations
@@ -665,13 +667,13 @@ int main(int argc, char *argv[])
     timing::tick(&begin_fiber);
 
     if (opts.verbose && rank == 0) {
-        logging::marker(tout, "Compute fiber orientation");
+        logging::marker(tout, "Run LDRB algorithm");
     }
 
     struct timespec begin_laplace, end_laplace;
     timing::tick(&begin_laplace);
     if (opts.verbose >= 2 && rank == 0) {
-        logging::marker(tout, "Compute Laplacians", 1);
+        logging::marker(tout, "[LDRB] Compute Laplacians", 1);
     }
 
     timing::tick(&t0);
@@ -700,12 +702,12 @@ int main(int argc, char *argv[])
 
     timing::tick(&t1);
     if (opts.verbose >= 2 && rank == 0) {
-        logging::timestamp(tout, "Setup", timing::duration(t0, t1), 2);
+        logging::timestamp(tout, "[Laplacians]: Setup", timing::duration(t0, t1), 2);
     }
     // Solve the Laplace equation from EPI (1.0) to (LV_ENDO union RV_ENDO) (0.0)
     {
         if (opts.verbose >= 2 && rank == 0) {
-            logging::marker(tout, "phi_epi", 2);
+            logging::marker(tout, "[Laplacians]: phi_epi", 2);
         }
         timing::tick(&t0);
 
@@ -727,13 +729,13 @@ int main(int argc, char *argv[])
 
         laplace(x_phi_epi, solver,
                 ess_bdr, nonzero_ess_bdr, zero_ess_bdr,
-                -1, opts.verbose, tout, rank);
+                -1, opts.verbose, tout, "phi_epi", rank);
 
         tracing::roctx_range_pop();
 
         timing::tick(&t1);
         if (opts.verbose >= 2 && rank == 0) {
-            logging::timestamp(tout, "Total", timing::duration(t0, t1), 3, '=');
+            logging::timestamp(tout, "[phi_epi]: Total", timing::duration(t0, t1), 3, '=');
         }
     }
 
@@ -741,7 +743,7 @@ int main(int argc, char *argv[])
     // Solve the Laplace equation from LV_ENDO (1.0) to (RV_ENDO union EPI) (0.0)
     {
         if (opts.verbose >= 2 && rank == 0) {
-            logging::marker(tout, "phi_lv", 2);
+            logging::marker(tout, "[Laplacians]: phi_lv", 2);
         }
         timing::tick(&t0);
 
@@ -763,13 +765,13 @@ int main(int argc, char *argv[])
 
         laplace(x_phi_lv, solver,
                 ess_bdr, nonzero_ess_bdr, zero_ess_bdr,
-                -1, opts.verbose, tout, rank);
+                -1, opts.verbose, tout, "phi_lv", rank);
 
         tracing::roctx_range_pop();
 
         timing::tick(&t1);
         if (opts.verbose >= 2 && rank == 0) {
-            logging::timestamp(tout, "Total", timing::duration(t0, t1), 3, '=');
+            logging::timestamp(tout, "[phi_lv]: Total", timing::duration(t0, t1), 3, '=');
         }
     }
 
@@ -777,7 +779,7 @@ int main(int argc, char *argv[])
     // Solve the Laplace equation from RV_ENDO (1.0) to (LV_ENDO union EPI) (0.0)
     if (mesh_has_right_ventricle) {
         if (opts.verbose >= 2 && rank == 0) {
-            logging::marker(tout, "phi_rv", 2);
+            logging::marker(tout, "[Laplacians]: phi_rv", 2);
         }
         timing::tick(&t0);
 
@@ -797,12 +799,12 @@ int main(int argc, char *argv[])
 
         laplace(x_phi_rv, solver,
                 ess_bdr, nonzero_ess_bdr, zero_ess_bdr,
-                -1, opts.verbose, tout, rank);
+                -1, opts.verbose, tout, "phi_rv", rank);
 
         tracing::roctx_range_pop();
         timing::tick(&t1);
         if (opts.verbose >= 2 && rank == 0) {
-            logging::timestamp(tout, "Total", timing::duration(t0, t1), 3, '=');
+            logging::timestamp(tout, "[phi_rv]: Total", timing::duration(t0, t1), 3, '=');
         }
     } else {
         *x_phi_rv = 0.0;
@@ -812,7 +814,7 @@ int main(int argc, char *argv[])
     // Solve the Laplace equation from BASE (1.0) to APEX (0.0)
     {
         if (opts.verbose >= 2 && rank == 0) {
-            logging::marker(tout, "psi_ab", 2);
+            logging::marker(tout, "[Laplacians]: psi_ab", 2);
         }
         timing::tick(&t0);
 
@@ -828,19 +830,19 @@ int main(int argc, char *argv[])
 
         laplace(x_psi_ab, solver,
                 ess_bdr, nonzero_ess_bdr, zero_ess_bdr,
-                apex, opts.verbose, tout, rank);
+                apex, opts.verbose, tout, "psi_ab", rank);
 
         tracing::roctx_range_pop();
 
         timing::tick(&t1);
         if (opts.verbose >= 2 && rank == 0 ) {
-            logging::timestamp(tout, "Total", timing::duration(t0, t1), 3, '=');
+            logging::timestamp(tout, "[psi_ab]: Total", timing::duration(t0, t1), 3, '=');
         }
     }
 
     timing::tick(&end_laplace);
     if (opts.verbose >= 2 && rank == 0) {
-        logging::timestamp(tout, "Total", timing::duration(begin_laplace, end_laplace), 2, '=');
+        logging::timestamp(tout, "[Laplacians]: Total", timing::duration(begin_laplace, end_laplace), 2, '=');
     } else if (opts.verbose && rank == 0) {
         logging::timestamp(tout, "Compute Laplacians",
                            timing::duration(begin_laplace, end_laplace), 1);
@@ -852,7 +854,7 @@ int main(int argc, char *argv[])
     struct timespec begin_grad, end_grad;
     timing::tick(&begin_grad);
     if (opts.verbose >= 2 && rank == 0) {
-        logging::marker(tout, "Compute gradients", 1);
+        logging::marker(tout, "[LDRB]: Compute gradients", 1);
     }
     timing::tick(&t0);
 
@@ -892,7 +894,7 @@ int main(int argc, char *argv[])
 
     timing::tick(&t1);
     if (opts.verbose >= 2 && rank == 0) {
-        logging::timestamp(tout, "Setup", timing::duration(t0, t1), 2);
+        logging::timestamp(tout, "[Gradients]: Setup", timing::duration(t0, t1), 2);
     }
 
     // Gradient of phi_epi
@@ -910,7 +912,7 @@ int main(int argc, char *argv[])
         tracing::roctx_range_pop();
         timing::tick(&t1);
         if (opts.verbose >= 2 && rank == 0) {
-            logging::timestamp(tout, "grad_phi_epi", timing::duration(t0, t1), 2);
+            logging::timestamp(tout, "[Gradients]: grad_phi_epi", timing::duration(t0, t1), 2);
         }
     }
 
@@ -929,7 +931,7 @@ int main(int argc, char *argv[])
         tracing::roctx_range_pop();
         timing::tick(&t1);
         if (opts.verbose >= 2&& rank == 0) {
-            logging::timestamp(tout, "grad_phi_lv", timing::duration(t0, t1), 2);
+            logging::timestamp(tout, "[Gradients]: grad_phi_lv", timing::duration(t0, t1), 2);
         }
     }
 
@@ -948,7 +950,7 @@ int main(int argc, char *argv[])
         tracing::roctx_range_pop();
         timing::tick(&t1);
         if (opts.verbose >= 2&& rank == 0) {
-            logging::timestamp(tout, "grad_phi_rv", timing::duration(t0, t1), 2);
+            logging::timestamp(tout, "[Gradients]: grad_phi_rv", timing::duration(t0, t1), 2);
         }
     } else {
         *grad_phi_rv = 0.0;
@@ -969,12 +971,12 @@ int main(int argc, char *argv[])
         tracing::roctx_range_pop();
         timing::tick(&t1);
         if (opts.verbose >= 2&& rank == 0) {
-            logging::timestamp(tout, "grad_psi_ab", timing::duration(t0, t1), 2);
+            logging::timestamp(tout, "[Gradients]: grad_psi_ab", timing::duration(t0, t1), 2);
         }
     }
     timing::tick(&end_grad);
     if (opts.verbose >= 2 && rank == 0) {
-        logging::timestamp(tout, "Total", timing::duration(begin_grad, end_grad), 2, '=');
+        logging::timestamp(tout, "[Gradients]: Total", timing::duration(begin_grad, end_grad), 2, '=');
     } else if (opts.verbose && rank == 0) {
         logging::timestamp(tout, "Compute gradients", timing::duration(begin_grad, end_grad), 1);
     }
@@ -987,7 +989,7 @@ int main(int argc, char *argv[])
     // space
     if (opts.fibers_per_element) {
         if (opts.verbose >= 2 && rank == 0) {
-            logging::marker(tout, "Project Laplacians H1 -> L2", 1);
+            logging::marker(tout, "[LDRB]: Project Laplacians H1 -> L2", 1);
         }
         struct timespec begin_proj, end_proj;
         timing::tick(&begin_proj);
@@ -999,7 +1001,7 @@ int main(int argc, char *argv[])
 
         timing::tick(&t1);
         if (opts.verbose >= 2 && rank == 0) {
-            logging::timestamp(tout, "Setup", timing::duration(t0, t1), 2);
+            logging::timestamp(tout, "[Projection]: Setup", timing::duration(t0, t1), 2);
         }
         tracing::roctx_range_pop();
 
@@ -1020,7 +1022,7 @@ int main(int argc, char *argv[])
         }
         timing::tick(&t1);
         if (opts.verbose >= 2 && rank == 0) {
-            logging::timestamp(tout, "x_phi_epi", timing::duration(t0, t1), 2);
+            logging::timestamp(tout, "[Projection]: x_phi_epi", timing::duration(t0, t1), 2);
         }
 
         // Left ventricle endocardium
@@ -1037,7 +1039,7 @@ int main(int argc, char *argv[])
         }
         timing::tick(&t1);
         if (opts.verbose >= 2 && rank == 0) {
-            logging::timestamp(tout, "x_phi_lv", timing::duration(t0, t1), 2);
+            logging::timestamp(tout, "[Projection]: x_phi_lv", timing::duration(t0, t1), 2);
         }
 
         // Right ventricle endocardium
@@ -1055,13 +1057,13 @@ int main(int argc, char *argv[])
             }
             timing::tick(&t1);
             if (opts.verbose >= 2 && rank == 0) {
-                logging::timestamp(tout, "x_phi_rv", timing::duration(t0, t1), 2);
+                logging::timestamp(tout, "[Projection]: x_phi_rv", timing::duration(t0, t1), 2);
             }
         }
         tracing::roctx_range_pop();
         timing::tick(&end_proj);
         if (opts.verbose >= 2 && rank == 0) {
-            logging::timestamp(tout, "Total", timing::duration(begin_proj, end_proj), 2, '=');
+            logging::timestamp(tout, "[Projection]: Total", timing::duration(begin_proj, end_proj), 2, '=');
         } else if (opts.verbose && rank == 0) {
             logging::timestamp(tout, "Project Laplacians from H1 -> L2",
                                timing::duration(begin_proj, end_proj), 1);
@@ -1073,7 +1075,7 @@ int main(int argc, char *argv[])
 
 
         if (opts.verbose >= 2 && rank == 0) {
-            logging::marker(tout, "Interpolate gradients L2 -> H1", 1);
+            logging::marker(tout, "[LDRB]: Interpolate gradients L2 -> H1", 1);
         }
         struct timespec begin_interp, end_interp;
         timing::tick(&begin_interp);
@@ -1087,7 +1089,7 @@ int main(int argc, char *argv[])
         const int *v2e_J = vertex_to_element->ReadJ();
         timing::tick(&t1);
         if (opts.verbose >= 2 && rank == 0) {
-            logging::timestamp(tout, "Setup", timing::duration(t0, t1), 2);
+            logging::timestamp(tout, "[Interpolate]: Setup", timing::duration(t0, t1), 2);
         }
 
 
@@ -1105,7 +1107,7 @@ int main(int argc, char *argv[])
         }
         timing::tick(&t1);
         if (opts.verbose >= 2 && rank == 0) {
-            logging::timestamp(tout, "grad_phi_epi", timing::duration(t0, t1), 2);
+            logging::timestamp(tout, "[Interpolate]: grad_phi_epi", timing::duration(t0, t1), 2);
         }
 
         ParGridFunction *grad_phi_lv_h1 = new ParGridFunction(fespace_vector_h1);
@@ -1122,7 +1124,7 @@ int main(int argc, char *argv[])
         }
         timing::tick(&t1);
         if (opts.verbose >= 2 && rank == 0) {
-            logging::timestamp(tout, "grad_phi_lv", timing::duration(t0, t1), 2);
+            logging::timestamp(tout, "[Interpolate]: grad_phi_lv", timing::duration(t0, t1), 2);
         }
 
         ParGridFunction *grad_phi_rv_h1 = new ParGridFunction(fespace_vector_h1);
@@ -1140,7 +1142,7 @@ int main(int argc, char *argv[])
             }
             timing::tick(&t1);
             if (opts.verbose >= 2 && rank == 0) {
-                logging::timestamp(tout, "grad_phi_rv", timing::duration(t0, t1), 2);
+                logging::timestamp(tout, "[Interpolate]: grad_phi_rv", timing::duration(t0, t1), 2);
             }
         } else {
             *grad_phi_rv_h1 = 0.0;
@@ -1162,14 +1164,14 @@ int main(int argc, char *argv[])
         }
         timing::tick(&t1);
         if (opts.verbose >= 2 && rank == 0) {
-            logging::timestamp(tout, "grad_psi_ab", timing::duration(t0, t1), 2);
+            logging::timestamp(tout, "[Interpolate]: grad_psi_ab", timing::duration(t0, t1), 2);
         }
 
 
         delete vertex_to_element;
         timing::tick(&end_interp);
         if (opts.verbose >= 2 && rank == 0) {
-            logging::timestamp(tout, "Total", timing::duration(begin_interp, end_interp), 2, '=');
+            logging::timestamp(tout, "[Interpolate]: Total", timing::duration(begin_interp, end_interp), 2, '=');
         } else if (opts.verbose && rank == 0) {
             logging::timestamp(tout, "Interpolate gradients from L2 -> H1",
                                timing::duration(begin_interp, end_interp), 1);
@@ -1177,7 +1179,7 @@ int main(int argc, char *argv[])
     }
 
     if (opts.verbose >= 2 && rank == 0) {
-        logging::marker(tout, "Compute fiber orientations", 1);
+        logging::marker(tout, "[LDRB]: Compute fibers", 1);
     }
     struct timespec begin_ldrb, end_ldrb;
     timing::tick(&begin_ldrb);
@@ -1208,7 +1210,7 @@ int main(int argc, char *argv[])
 
     timing::tick(&t1);
     if (opts.verbose >= 2 && rank == 0) {
-        logging::timestamp(tout, "Setup", timing::duration(t0, t1), 2);
+        logging::timestamp(tout, "[Fiber]: Setup", timing::duration(t0, t1), 2);
     }
 
     // Calculate the fiber orientation
@@ -1225,13 +1227,17 @@ int main(int argc, char *argv[])
     tracing::roctx_range_pop();
     timing::tick(&t1);
     timing::tick(&end_ldrb);
-    if (opts.verbose && rank == 0) {
-        logging::timestamp(tout, "define_fibers", timing::duration(t0, t1), 2);
-        logging::timestamp(tout, "Total", timing::duration(begin_ldrb, end_ldrb), 2, '=');
+    if (opts.verbose >= 2 && rank == 0) {
+        logging::timestamp(tout, "[Fiber]: Run define_fibers", timing::duration(t0, t1), 2);
+        logging::timestamp(tout, "[Fiber]: Total", timing::duration(begin_ldrb, end_ldrb), 2, '=');
+    } else if (opts.verbose && rank == 0) {
+        logging::timestamp(tout, "Run LDRB", timing::duration(begin_ldrb, end_ldrb), 1, '-');
     }
 
     timing::tick(&end_fiber);
-    if (opts.verbose && rank == 0) {
+    if (opts.verbose >= 2 && rank == 0) {
+        logging::timestamp(tout, "[LDRB]: Total", timing::duration(begin_fiber, end_fiber), 1, '=');
+    } else if (opts.verbose && rank == 0) {
         logging::timestamp(tout, "Total", timing::duration(begin_fiber, end_fiber), 1, '=');
     }
 
