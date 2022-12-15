@@ -37,15 +37,13 @@ void util::tracing::roctx_range_pop(void) {
 #endif
 }
 
-#define INDENT_WIDTH 2
-#define LOG_LEFT_COL_WIDTH 48
-
 void util::logging::timestamp(
     std::ostream& out,
     std::string const& log_string,
     double seconds,
     const int indent,
-    char override_marker)
+    char override_marker,
+    int colwidth)
 {
     assert(indent >= 0 && indent <= 3);
     char level_marker = '+';
@@ -57,7 +55,8 @@ void util::logging::timestamp(
     out << indent_chars
         << level_marker
         << " "
-        << std::left << std::setw(LOG_LEFT_COL_WIDTH-INDENT_WIDTH*indent) << log_string
+        << std::left << std::setfill(' ')
+        << std::setw(colwidth-INDENT_WIDTH*indent) << log_string
         << std::right << std::fixed << std::setw(12)
         << std::setprecision(6)<< seconds << " s" << std::endl;
 }

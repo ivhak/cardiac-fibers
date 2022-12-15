@@ -22,6 +22,9 @@
 #include <iomanip>
 #include "mfem.hpp"
 
+#define INDENT_WIDTH 2
+#define LOG_LEFT_COL_WIDTH 48
+
 namespace util {
     namespace tracing {
         // Wrappers around roctxRangePush/Pop that are no-ops if tracing is not enabled
@@ -31,7 +34,7 @@ namespace util {
 
     namespace logging {
         void timestamp(std::ostream& out, std::string const& log_string, double seconds,
-                       int ident=0, char override_marker=0);
+                       int ident=0, char override_marker=0, int colwidth=LOG_LEFT_COL_WIDTH);
         void marker(std::ostream& out, std::string const& log_string,
                 int ident=0, char override_marker=0);
         void info(std::ostream& out, std::string const& log_string);

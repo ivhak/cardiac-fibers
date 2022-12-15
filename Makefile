@@ -95,7 +95,7 @@ tests: tests.o fem.o calculus.o util.o
 
 tools: tools/mfem_to_carp
 
-tools/mfem_to_carp: tools/mfem_to_carp.o
+tools/mfem_to_carp: tools/mfem_to_carp.o util.o
 	$(CXX) -o $@ $^ $(LFLAGS)
 
 %.o: %.cpp
