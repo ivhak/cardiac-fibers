@@ -210,6 +210,7 @@ void laplace(
 
     solver->SetOperator(*A);
     solver->Mult(B, X);
+    MFEM_DEVICE_SYNC;
     timing::tick(&t1);
     if (verbose >= 2 && rank == 0) {
         logging::timestamp(tout, log_prefix + " Solve", timing::duration(t0, t1), 3);
