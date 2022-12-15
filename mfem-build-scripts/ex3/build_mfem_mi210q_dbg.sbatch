@@ -18,10 +18,10 @@ MFEM_INSTALL_DIR=/global/D1/homes/iverh/packages/mi210q/mfem-dbg-4.5
 
 set -e
 module purge
-module use /global/D1/homes/james/ex3modules/mi210q/20221107/modulefiles
+module use /global/D1/homes/james/ex3modules/mi210q/20221215/modulefiles
 
 module load amd/rocm/5.1.3
-module load hypre-32-2.25.0
+module load hypre-32-2.25.0-gfx90a
 module load openmpi-4.1.4
 module load metis-32-5.1.0
 
