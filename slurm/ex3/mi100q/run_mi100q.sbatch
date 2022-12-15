@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #SBATCH --job-name=cardiac-fibers
 #SBATCH --partition=mi100q
+#SBATCH --exclusive
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --time=4-00:00:00
@@ -19,7 +20,7 @@ BUILD_DIR=
 
 
 function run {
-    mpirun -np ${SLURM_NTASKS} ${BUILD_DIR}/cardiac-fibers \
+    srun ${BUILD_DIR}/cardiac-fibers \
         --par-mesh \
         --mesh ${DATA_DIR}/"$1"/${SLURM_NTASKS}/"$1".mesh \
         --out ${JOB_DIR}/"$1" \
