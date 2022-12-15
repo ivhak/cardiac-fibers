@@ -39,7 +39,6 @@ function main {
 
     . ${BUILD_DIR}/envsetup-ex3.sh mi100q
 
-
     # Print some diagnostics
     echo "SLURM_JOB_NAME=${SLURM_JOB_NAME}"
     echo "SLURM_JOB_ID=${SLURM_JOB_ID}"
@@ -69,8 +68,6 @@ function main {
     run heart07
     run heart08
     run heart09
-    run heart10
-    run heart13
 }
 
 main

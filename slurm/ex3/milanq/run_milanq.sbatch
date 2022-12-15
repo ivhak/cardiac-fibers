@@ -70,8 +70,8 @@ function main {
     run heart07
     run heart08
     run heart09
-    run heart10
-    run heart13
+    # run heart10
+    # run heart13
 }
 
 main
