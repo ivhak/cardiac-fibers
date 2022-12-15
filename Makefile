@@ -93,6 +93,11 @@ cardiac-fibers: check-env $(OBJ)
 tests: tests.o fem.o calculus.o util.o
 	$(CXX) -o $@ $^ $(LFLAGS)
 
+tools: tools/mfem_to_carp
+
+tools/mfem_to_carp: tools/mfem_to_carp.o
+	$(CXX) -o $@ $^ $(LFLAGS)
+
 %.o: %.cpp
 	$(CXX) -c $(CFLAGS) $(IFLAGS) -o $@ $^
 
@@ -120,6 +125,6 @@ ifndef METIS_LIBDIR
 endif
 
 clean:
-	$(RM) cardiac-fibers tests $(OBJ) tests.o
+	$(RM) cardiac-fibers tests $(OBJ) tests.o tools/*.o tools/mfem_to_carp
 
 .PHONY: check-env clean

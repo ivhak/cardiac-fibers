@@ -163,7 +163,7 @@ void util::save::save_solution(
     filename << dir << "/" << base_name << suffix << "."
              << std::setfill('0') << std::setw(6) << rank;
     std::ofstream x_ofs(filename.str().c_str());
-    x_ofs.precision(8);
+    x_ofs.precision(12);
     x->Save(x_ofs);
 }
 
@@ -177,7 +177,7 @@ void util::save::save_mesh(
     mesh_out << dir << "/" << base_name << ".mesh."
              << std::setfill('0') << std::setw(6) << rank;
     std::ofstream mesh_ofs(mesh_out.str().c_str());
-    mesh_ofs.precision(8);
+    mesh_ofs.precision(12);
     pmesh->Print(mesh_ofs);
 }
 #endif
