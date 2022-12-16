@@ -909,6 +909,7 @@ int main(int argc, char *argv[])
         compute_gradient(epi_grads, epi_vals, vert,
                          num_elements, num_vertices,
                          h1_I, h1_J, l2_I, l2_J);
+        MFEM_DEVICE_SYNC;
 
         tracing::roctx_range_pop();
         timing::tick(&t1);
@@ -928,6 +929,7 @@ int main(int argc, char *argv[])
         compute_gradient(lv_grads, lv_vals, vert,
                          num_elements, num_vertices,
                          h1_I, h1_J, l2_I, l2_J);
+        MFEM_DEVICE_SYNC;
 
         tracing::roctx_range_pop();
         timing::tick(&t1);
@@ -947,6 +949,7 @@ int main(int argc, char *argv[])
         compute_gradient(rv_grads, rv_vals, vert,
                          num_elements, num_vertices,
                          h1_I, h1_J, l2_I, l2_J);
+        MFEM_DEVICE_SYNC;
 
         tracing::roctx_range_pop();
         timing::tick(&t1);
@@ -968,6 +971,7 @@ int main(int argc, char *argv[])
         compute_gradient(ab_grads, ab_vals, vert,
                          num_elements, num_vertices,
                          h1_I, h1_J, l2_I, l2_J);
+        MFEM_DEVICE_SYNC;
 
         tracing::roctx_range_pop();
         timing::tick(&t1);
@@ -1018,6 +1022,7 @@ int main(int argc, char *argv[])
             double *x_phi_epi_l2_vals = x_phi_epi_l2->Write();
             project_h1_to_l2(x_phi_epi_l2_vals, x_phi_epi_h1_vals, num_elements,
                               h1_I, h1_J, l2_I, l2_J);
+            MFEM_DEVICE_SYNC;
             delete x_phi_epi;
             x_phi_epi = x_phi_epi_l2;
         }
@@ -1035,6 +1040,7 @@ int main(int argc, char *argv[])
             double *x_phi_lv_l2_vals = x_phi_lv_l2->Write();
             project_h1_to_l2(x_phi_lv_l2_vals, x_phi_lv_h1_vals, num_elements,
                               h1_I, h1_J, l2_I, l2_J);
+            MFEM_DEVICE_SYNC;
             delete x_phi_lv;
             x_phi_lv = x_phi_lv_l2;
         }
@@ -1053,6 +1059,7 @@ int main(int argc, char *argv[])
                 double *x_phi_rv_l2_vals = x_phi_rv_l2->Write();
                 project_h1_to_l2(x_phi_rv_l2_vals, x_phi_rv_h1_vals, num_elements,
                                   h1_I, h1_J, l2_I, l2_J);
+                MFEM_DEVICE_SYNC;
                 delete x_phi_rv;
                 x_phi_rv = x_phi_rv_l2;
             }
@@ -1103,6 +1110,7 @@ int main(int argc, char *argv[])
 
             interpolate_gradient_to_h1(grads_epi_h1, grads_epi_l2, num_vertices,
                                        v2e_I, v2e_J, l2_I, l2_J);
+            MFEM_DEVICE_SYNC;
             delete grad_phi_epi;
             grad_phi_epi = grad_phi_epi_h1;
         }
@@ -1120,6 +1128,7 @@ int main(int argc, char *argv[])
 
             interpolate_gradient_to_h1(grads_lv_h1, grads_lv_l2, num_vertices,
                                        v2e_I, v2e_J, l2_I, l2_J);
+            MFEM_DEVICE_SYNC;
             delete grad_phi_lv;
             grad_phi_lv = grad_phi_lv_h1;
         }
@@ -1138,6 +1147,7 @@ int main(int argc, char *argv[])
 
                 interpolate_gradient_to_h1(grads_rv_h1, grads_rv_l2, num_vertices,
                                            v2e_I, v2e_J, l2_I, l2_J);
+                MFEM_DEVICE_SYNC;
                 delete grad_phi_rv;
                 grad_phi_rv = grad_phi_rv_h1;
             }
@@ -1160,6 +1170,7 @@ int main(int argc, char *argv[])
 
             interpolate_gradient_to_h1(grads_ab_h1, grads_ab_l2, num_vertices,
                                        v2e_I, v2e_J, l2_I, l2_J);
+            MFEM_DEVICE_SYNC;
             delete grad_psi_ab;
             grad_psi_ab = grad_psi_ab_h1;
         }
