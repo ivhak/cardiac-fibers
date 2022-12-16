@@ -28,8 +28,7 @@ function run {
         --time-to-file \
         --verbose 4 \
         --apex '345 1232 170' \
-        --no-save-paraview \
-        --no-save-mfem
+        --no-save-mfem ${@:2}
 }
 
 function main {
@@ -61,15 +60,15 @@ function main {
 
     mkdir -p ${JOB_DIR}
 
-    run heart01
-    run heart02
-    run heart03
-    run heart04
-    run heart05
-    run heart06
-    run heart07
-    run heart08
-    run heart09
+    run heart01 --save-paraview
+    run heart02 --save-paraview
+    run heart03 --no-save-paraview
+    run heart04 --no-save-paraview
+    run heart05 --no-save-paraview
+    run heart06 --no-save-paraview
+    run heart07 --no-save-paraview
+    run heart08 --no-save-paraview
+    run heart09 --no-save-paraview
     # run heart10
     # run heart13
 }
