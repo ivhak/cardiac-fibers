@@ -19,10 +19,10 @@ MFEM_INSTALL_DIR=/global/D1/homes/iverh/packages/dgx2q/mfem-4.5
 
 set -e
 module purge
-module use /global/D1/homes/james/ex3modules/dgx2q/1.0.0/modulefiles
+module use /global/D1/homes/james/ex3modules/dgx2q/20221210/modulefiles
 
 module load cuda10.1/toolkit/10.1.243
-module load hypre-32-2.24.0
+module load hypre-32-2.25.0
 module load openmpi-4.1.4
 module load metis-32-5.1.0
 
