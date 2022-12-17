@@ -1203,16 +1203,16 @@ int main(int argc, char *argv[])
     // We are done with the gradients/projections, so we can free the device
     // side vertices, as well as the element-to-DoF tables for H1 and L2.
     {
-        Memory<int>& h1_element_to_dof_I_mem = h1_element_to_dof.GetIMemory();
+        Memory<int> h1_element_to_dof_I_mem = h1_element_to_dof.GetIMemory();
         h1_element_to_dof_I_mem.DeleteDevice(/* copy_back */ false);
 
-        Memory<int>& h1_element_to_dof_J_mem = h1_element_to_dof.GetJMemory();
+        Memory<int> h1_element_to_dof_J_mem = h1_element_to_dof.GetJMemory();
         h1_element_to_dof_J_mem.DeleteDevice(/* copy_back */ false);
 
-        Memory<int>& l2_element_to_dof_I_mem = l2_element_to_dof.GetIMemory();
+        Memory<int> l2_element_to_dof_I_mem = l2_element_to_dof.GetIMemory();
         l2_element_to_dof_I_mem.DeleteDevice(/* copy_back */ false);
 
-        Memory<int>& l2_element_to_dof_J_mem = l2_element_to_dof.GetJMemory();
+        Memory<int> l2_element_to_dof_J_mem = l2_element_to_dof.GetJMemory();
         l2_element_to_dof_J_mem.DeleteDevice(/* copy_back */ false);
 
         local_vertices.DeleteDevice(/* copy_back */ false);
