@@ -841,6 +841,10 @@ int main(int argc, char *argv[])
         }
     }
 
+    // We are done using the preconditioner and solver
+    delete solver;
+    delete prec;
+
     timing::tick(&end_laplace);
     if (opts.verbose >= 2 && rank == 0) {
         logging::timestamp(tout, "[Laplacians]: Total", timing::duration(begin_laplace, end_laplace), 2, '=');
@@ -865,6 +869,12 @@ int main(int argc, char *argv[])
     // Setup the things needed for gradient computation. The tables will also
     // be used for the H1 to L2 projection when calculating the fibers in L2,
     // and for the gradient interpolation when calculating fibers in H1.
+    //
+    // NOTE: These device side arrays (vertices, h1_I, h1_J, l2_I, l2_J) are
+    // not freed by MFEM's memory manager until the end of this scope, i.e.,
+    // after the fiber computations. However, they are only needed until we are
+    // done with the gradients/projections. Make sure they are manually freed
+    // after that.
     Vector local_vertices;
     pmesh->GetVertices(local_vertices);
     const double *vert = local_vertices.Read();
@@ -1188,6 +1198,24 @@ int main(int argc, char *argv[])
             logging::timestamp(tout, "Interpolate gradients from L2 -> H1",
                                timing::duration(begin_interp, end_interp), 1);
         }
+    }
+
+    // We are done with the gradients/projections, so we can free the device
+    // side vertices, as well as the element-to-DoF tables for H1 and L2.
+    {
+        Memory<int>& h1_element_to_dof_I_mem = h1_element_to_dof.GetIMemory();
+        h1_element_to_dof_I_mem.DeleteDevice(/* copy_back */ false);
+
+        Memory<int>& h1_element_to_dof_J_mem = h1_element_to_dof.GetJMemory();
+        h1_element_to_dof_J_mem.DeleteDevice(/* copy_back */ false);
+
+        Memory<int>& l2_element_to_dof_I_mem = l2_element_to_dof.GetIMemory();
+        l2_element_to_dof_I_mem.DeleteDevice(/* copy_back */ false);
+
+        Memory<int>& l2_element_to_dof_J_mem = l2_element_to_dof.GetJMemory();
+        l2_element_to_dof_J_mem.DeleteDevice(/* copy_back */ false);
+
+        local_vertices.DeleteDevice(/* copy_back */ false);
     }
 
     if (opts.verbose >= 2 && rank == 0) {
