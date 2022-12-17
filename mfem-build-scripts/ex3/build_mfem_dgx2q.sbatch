@@ -21,7 +21,7 @@ set -e
 module purge
 module use /global/D1/homes/james/ex3modules/dgx2q/20221210/modulefiles
 
-module load cuda10.1/toolkit/10.1.243
+module load cuda11.0/toolkit/11.0.3
 module load hypre-32-2.25.0
 module load openmpi-4.1.4
 module load metis-32-5.1.0
