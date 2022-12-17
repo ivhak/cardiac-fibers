@@ -25,12 +25,15 @@ module load hypre-32-2.25.0-gfx90a
 module load openmpi-4.1.4
 module load metis-32-5.1.0
 
+# Tracking HIP memory allocations/frees can be enabled with MFEM_TRACK_HIP_MEM,
+# but that can't be set through `make config`. Setting it manually.
+sed -i "s/\/\/ \(#define MFEM_TRACK_HIP_MEM\)/\1/" general/hip.cpp
+
 make BUILD_DIR=${MFEM_BUILD_DIR} config \
     MFEM_DEBUG=YES \
     MFEM_USE_MPI=YES \
     MPICXX=mpic++ \
     MFEM_USE_HIP=YES \
-    MFEM_TRACK_HIP_MEM=YES \
     MFEM_USE_METIS=YES \
     MFEM_USE_METIS_5=YES \
     HYPRE_LIB="-L${HYPRE_LIBDIR} -lHYPRE" \
@@ -45,3 +48,5 @@ make BUILD_DIR=${MFEM_BUILD_DIR} check
 
 make BUILD_DIR=${MFEM_BUILD_DIR} install PREFIX=${MFEM_INSTALL_DIR}
 
+# Reset MFEM_TRACK_HIP
+sed -i "s/\(#define MFEM_TRACK_HIP_MEM\)/\/\/ \1/" general/hip.cpp
