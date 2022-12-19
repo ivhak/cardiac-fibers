@@ -23,7 +23,7 @@ CARDIAC_FIBERS_COMMIT=${CARDIAC_FIBERS_COMMIT:-HEAD}
 export SLURM_CPU_BIND=verbose
 
 function run {
-    srun --cpu-bind=rank ${BUILD_DIR}/cardiac-fibers \
+    srun --cpu-bind=rank ${BUILD_DIR}/cardiac-fibers/cardiac-fibers \
         --par-mesh \
         --mesh ${DATA_DIR}/"$1"/${SLURM_NTASKS}/"$1".mesh \
         --out ${JOB_DIR}/"$1" \
