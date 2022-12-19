@@ -42,7 +42,7 @@ function main {
     pushd cardiac-fibers
     git checkout ${CARDIAC_FIBERS_COMMIT}
     . envsetup-ex3.sh defq
-    make clean cardiac-fibers
+    make TIMING_BARRIERS=YES clean cardiac-fibers
     popd
     popd
 
