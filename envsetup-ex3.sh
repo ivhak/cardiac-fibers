@@ -27,6 +27,8 @@ CARDIAC_FIBERS_HAS_HIP=NO
 CARDIAC_FIBERS_HAS_CUDA=NO
 CARDIAC_FIBERS_HAS_OPENMP=NO
 
+module load slurm/20.02.7
+
 if [ "$1" = "mi100q" ] || [ -z "$1" ]; then
     # HIP build, default
     echo "Setting up environment for mi100q (HIP)"
