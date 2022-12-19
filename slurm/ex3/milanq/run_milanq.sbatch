@@ -17,11 +17,12 @@ JOB_DIR="./jobs/${SLURM_JOB_NAME}-${SLURM_JOB_ID}"
 
 BUILD_DIR=
 
+CARDIAC_FIBERS_COMMIT=${CARDIAC_FIBERS_COMMIT:-HEAD}
+
 export SLURM_CPU_BIND=verbose
 
-
 function run {
-    srun --cpu-bind=rank ${BUILD_DIR}/cardiac-fibers \
+    srun --cpu-bind=rank ${BUILD_DIR}/cardiac-fibers/cardiac-fibers \
         --par-mesh \
         --mesh ${DATA_DIR}/"$1"/${SLURM_NTASKS}/"$1".mesh \
         --out ${JOB_DIR}/"$1" \
@@ -35,11 +36,15 @@ function main {
     set -o errexit
 
     BUILD_DIR=/global/D1/homes/iverh/work/cardiac-fibers-${SLURM_JOB_ID}
-
-    cp -r ${LDRB_DIR} ${BUILD_DIR}
-
-    . ${BUILD_DIR}/envsetup-ex3.sh defq
-
+    mkdir -p ${BUILD_DIR}
+    pushd ${BUILD_DIR}
+    git clone git@github.com:ivhak/cardiac-fibers.git
+    pushd cardiac-fibers
+    git checkout ${CARDIAC_FIBERS_COMMIT}
+    . envsetup-ex3.sh defq
+    make clean cardiac-fibers
+    popd
+    popd
 
     # Print some diagnostics
     echo "SLURM_JOB_NAME=${SLURM_JOB_NAME}"
@@ -53,10 +58,8 @@ function main {
     uname -a
     lscpu
     numactl -H
-    git -C "${BUILD_DIR}" describe --always --abbrev=40 --dirty
-    git -C "${BUILD_DIR}" log --oneline --decorate=short | head -n 10
-
-    make -C ${BUILD_DIR} clean cardiac-fibers
+    git -C "${BUILD_DIR}/cardiac-fibers" describe --always --abbrev=40 --dirty
+    git -C "${BUILD_DIR}/cardiac-fibers" log --oneline --decorate=short | head -n 10
 
     mkdir -p ${JOB_DIR}
 
@@ -69,8 +72,6 @@ function main {
     run heart07 --no-save-paraview
     run heart08 --no-save-paraview
     run heart09 --no-save-paraview
-    # run heart10
-    # run heart13
 }
 
 main
