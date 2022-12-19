@@ -59,6 +59,11 @@ CFLAGS += -fopenmp
 LFLAGS += -lgomp
 endif
 
+# Timing barrier
+ifeq ($(TIMING_BARRIERS), YES)
+CFLAGS += -DTIMING_BARRIERS
+endif
+
 # HIP
 ifeq ($(CARDIAC_FIBERS_HAS_HIP), YES)
 HIP_CXX ?= hipcc

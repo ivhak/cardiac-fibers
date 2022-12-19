@@ -38,7 +38,7 @@ namespace util {
     }
 
     namespace timing {
-        void tick(struct timespec *t);
+        void tick(struct timespec *t, bool barrier=true, bool device_barrier=true);
         double duration(struct timespec t0, struct timespec t1);
     }
 

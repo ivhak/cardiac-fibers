@@ -19,6 +19,8 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
+#include "mfem.hpp"
+
 #ifdef HIP_TRACE
 #include <roctx.h>
 #endif
@@ -36,6 +38,7 @@ void util::tracing::roctx_range_pop(void) {
     roctxRangePop();
 #endif
 }
+
 
 #define INDENT_WIDTH 2
 #define LOG_LEFT_COL_WIDTH 48
@@ -98,12 +101,26 @@ double util::timing::duration(
         (t1.tv_nsec - t0.tv_nsec) * 1e-9;
 }
 
-void util::timing::tick(struct timespec *t)
+void util::timing::tick(struct timespec *t, bool barrier, bool device_barrier)
 {
+    // the calls to tick will use an MPI barrier if `barrier` is true, and the
+    // code is compiled with -DTIMING_BARRIERS, and likewise force a device
+    // syncronization when `device_barrier` is true;
+    //
+    if (barrier) {
+#ifdef TIMING_BARRIERS
+        MPI_Barrier(MPI_COMM_WORLD);
+#endif
+    }
+
+    if (device_barrier) {
+#ifdef TIMING_BARRIERS
+        mfem::MFEM_DEVICE_SYNC;
+#endif
+    }
+
     clock_gettime(CLOCK_MONOTONIC, t);
 }
-
-
 
 std::string util::fs::basename(std::string const& path)
 {

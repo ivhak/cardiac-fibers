@@ -210,8 +210,7 @@ void laplace(
 
     solver->SetOperator(*A);
     solver->Mult(B, X);
-    MFEM_DEVICE_SYNC;
-    timing::tick(&t1);
+    timing::tick(&t1, /* barrier */ true, /* device barrier */ true);
     if (verbose >= 2 && rank == 0) {
         logging::timestamp(tout, log_prefix + " Solve", timing::duration(t0, t1), 3);
     }
@@ -525,7 +524,7 @@ int main(int argc, char *argv[])
     {
         struct timespec begin_apex, end_apex;
         timing::tick(&begin_apex);
-        timing::tick(&t0);
+        timing::tick(&t0, /* barrier */ false);
         tracing::roctx_range_push("Find apex");
 
         if (opts.verbose >= 2 && rank == 0) {
@@ -556,16 +555,13 @@ int main(int argc, char *argv[])
         }
 
         timing::tick(&t0);
-        // d_i = (x-apex_x)^2
-        MFEM_FORALL(i, n, { dist[i]  = (vert[0*n+i]-apex_x) * (vert[0*n+i]-apex_x); });
-        MFEM_DEVICE_SYNC;
-
-        // d_i += (y-apex_y)^2
-        MFEM_FORALL(i, n, { dist[i] += (vert[1*n+i]-apex_y) * (vert[1*n+i]-apex_y); });
-        MFEM_DEVICE_SYNC;
-
-        // d_i += (z-apex_z)^2
-        MFEM_FORALL(i, n, { dist[i] += (vert[2*n+i]-apex_z) * (vert[2*n+i]-apex_z); });
+        MFEM_FORALL(i, n, {
+            dist[i]  = (vert[0*n+i]-apex_x) * (vert[0*n+i]-apex_x);
+            MFEM_SYNC_THREAD;
+            dist[i] += (vert[1*n+i]-apex_y) * (vert[1*n+i]-apex_y);
+            MFEM_SYNC_THREAD;
+            dist[i] += (vert[2*n+i]-apex_z) * (vert[2*n+i]-apex_z);
+        });
         MFEM_DEVICE_SYNC;
         timing::tick(&t1);
         if (opts.verbose >= 2 && rank == 0) {
@@ -611,12 +607,12 @@ int main(int argc, char *argv[])
             logging::info(std::cout, msg);
         }
         timing::tick(&t1);
+        timing::tick(&end_apex, /* barrier*/ false);
+        tracing::roctx_range_pop();
         if (opts.verbose >= 2 && rank == 0) {
             logging::timestamp(tout, "Find global minimum", timing::duration(t0, t1), 1);
         }
 
-        tracing::roctx_range_pop();
-        timing::tick(&end_apex);
         if (opts.verbose >= 2 && rank == 0) {
             logging::timestamp(tout, "Total", timing::duration(begin_apex, end_apex), 1, '=');
         } else if (opts.verbose && rank == 0) {
@@ -657,15 +653,11 @@ int main(int argc, char *argv[])
     if (prec) cg->SetPreconditioner(*prec);
     solver = cg;
 
-
     timing::tick(&t1);
     if (opts.verbose && rank == 0) {
         logging::timestamp(tout, "Setup preconditioner and solver", timing::duration(t0,t1));
     }
 
-    // Time the fiber orientation calculations
-    struct timespec begin_fiber, end_fiber;
-    timing::tick(&begin_fiber);
 
     if (opts.verbose && rank == 0) {
         logging::marker(tout, "Run LDRB algorithm");
@@ -676,8 +668,10 @@ int main(int argc, char *argv[])
     if (opts.verbose >= 2 && rank == 0) {
         logging::marker(tout, "[LDRB] Compute Laplacians", 1);
     }
-
-    timing::tick(&t0);
+    // Time the fiber orientation calculations
+    struct timespec begin_fiber, end_fiber;
+    timing::tick(&begin_fiber);
+    timing::tick(&t0, /* barrier */ false);
 
 
     // Set up the finite element collection. We use  first order H1-conforming finite elements.
@@ -855,13 +849,12 @@ int main(int argc, char *argv[])
 
     // If we want the fibers to be in L2, we first have to project the
     // Laplacians from H1 to L2. Then we can compute the gradients in L2.
-
-    struct timespec begin_grad, end_grad;
-    timing::tick(&begin_grad);
     if (opts.verbose >= 2 && rank == 0) {
         logging::marker(tout, "[LDRB]: Compute gradients", 1);
     }
-    timing::tick(&t0);
+    struct timespec begin_grad, end_grad;
+    timing::tick(&begin_grad);
+    timing::tick(&t0, /* barrier */ false);
 
     L2_FECollection l2_fec(0, pmesh->Dimension());
     ParFiniteElementSpace fespace_vector_l2(pmesh, &l2_fec, 3, Ordering::byVDIM);
@@ -919,10 +912,8 @@ int main(int argc, char *argv[])
         compute_gradient(epi_grads, epi_vals, vert,
                          num_elements, num_vertices,
                          h1_I, h1_J, l2_I, l2_J);
-        MFEM_DEVICE_SYNC;
-
         tracing::roctx_range_pop();
-        timing::tick(&t1);
+        timing::tick(&t1, /* barrier */ true, /* device barrier*/ true);
         if (opts.verbose >= 2 && rank == 0) {
             logging::timestamp(tout, "[Gradients]: grad_phi_epi", timing::duration(t0, t1), 2);
         }
@@ -939,10 +930,8 @@ int main(int argc, char *argv[])
         compute_gradient(lv_grads, lv_vals, vert,
                          num_elements, num_vertices,
                          h1_I, h1_J, l2_I, l2_J);
-        MFEM_DEVICE_SYNC;
-
         tracing::roctx_range_pop();
-        timing::tick(&t1);
+        timing::tick(&t1, /* barrier */ true, /* device barrier*/ true);
         if (opts.verbose >= 2&& rank == 0) {
             logging::timestamp(tout, "[Gradients]: grad_phi_lv", timing::duration(t0, t1), 2);
         }
@@ -959,10 +948,8 @@ int main(int argc, char *argv[])
         compute_gradient(rv_grads, rv_vals, vert,
                          num_elements, num_vertices,
                          h1_I, h1_J, l2_I, l2_J);
-        MFEM_DEVICE_SYNC;
-
         tracing::roctx_range_pop();
-        timing::tick(&t1);
+        timing::tick(&t1, /* barrier */ true, /* device barrier*/ true);
         if (opts.verbose >= 2&& rank == 0) {
             logging::timestamp(tout, "[Gradients]: grad_phi_rv", timing::duration(t0, t1), 2);
         }
@@ -981,9 +968,8 @@ int main(int argc, char *argv[])
         compute_gradient(ab_grads, ab_vals, vert,
                          num_elements, num_vertices,
                          h1_I, h1_J, l2_I, l2_J);
-        MFEM_DEVICE_SYNC;
-
         tracing::roctx_range_pop();
+        timing::tick(&t1, /* barrier */ true, /* device barrier*/ true);
         timing::tick(&t1);
         if (opts.verbose >= 2&& rank == 0) {
             logging::timestamp(tout, "[Gradients]: grad_psi_ab", timing::duration(t0, t1), 2);
@@ -1011,8 +997,15 @@ int main(int argc, char *argv[])
         tracing::roctx_range_push("Project Laplacians H1 -> L2");
         tracing::roctx_range_push("Setup");
 
-        timing::tick(&t0);
+        timing::tick(&t0, /* barrier */ false);
         ParFiniteElementSpace *fespace_scalar_l2 = new ParFiniteElementSpace(pmesh, &l2_fec);
+        ParGridFunction *x_phi_epi_l2 = new ParGridFunction(fespace_scalar_l2);
+        ParGridFunction *x_phi_lv_l2 = new ParGridFunction(fespace_scalar_l2);
+        ParGridFunction *x_phi_rv_l2 = new ParGridFunction(fespace_scalar_l2);
+
+        x_phi_epi_l2->UseDevice(true);
+        x_phi_lv_l2->UseDevice(true);
+        x_phi_rv_l2->UseDevice(true);
 
         timing::tick(&t1);
         if (opts.verbose >= 2 && rank == 0) {
@@ -1024,44 +1017,33 @@ int main(int argc, char *argv[])
         // solutions and set the solution pointers to the projected ones.
 
         // Epicardium
-        ParGridFunction *x_phi_epi_l2 = new ParGridFunction(fespace_scalar_l2);
-        x_phi_epi_l2->UseDevice(true);
-        timing::tick(&t0);
         {
+            timing::tick(&t0);
             const double *x_phi_epi_h1_vals = x_phi_epi->Read();
             double *x_phi_epi_l2_vals = x_phi_epi_l2->Write();
             project_h1_to_l2(x_phi_epi_l2_vals, x_phi_epi_h1_vals, num_elements,
                               h1_I, h1_J, l2_I, l2_J);
-            MFEM_DEVICE_SYNC;
-            delete x_phi_epi;
-            x_phi_epi = x_phi_epi_l2;
-        }
-        timing::tick(&t1);
-        if (opts.verbose >= 2 && rank == 0) {
-            logging::timestamp(tout, "[Projection]: x_phi_epi", timing::duration(t0, t1), 2);
+            timing::tick(&t1, /* barrier */ true, /* device barrier*/ true);
+            if (opts.verbose >= 2 && rank == 0) {
+                logging::timestamp(tout, "[Projection]: x_phi_epi", timing::duration(t0, t1), 2);
+            }
         }
 
         // Left ventricle endocardium
-        ParGridFunction *x_phi_lv_l2 = new ParGridFunction(fespace_scalar_l2);
-        x_phi_lv_l2->UseDevice(true);
-        timing::tick(&t0);
         {
+            timing::tick(&t0);
             const double *x_phi_lv_h1_vals = x_phi_lv->Read();
             double *x_phi_lv_l2_vals = x_phi_lv_l2->Write();
             project_h1_to_l2(x_phi_lv_l2_vals, x_phi_lv_h1_vals, num_elements,
                               h1_I, h1_J, l2_I, l2_J);
-            MFEM_DEVICE_SYNC;
-            delete x_phi_lv;
-            x_phi_lv = x_phi_lv_l2;
+            timing::tick(&t1, /* barrier */ true, /* device barrier*/ true);
         }
-        timing::tick(&t1);
         if (opts.verbose >= 2 && rank == 0) {
             logging::timestamp(tout, "[Projection]: x_phi_lv", timing::duration(t0, t1), 2);
         }
 
         // Right ventricle endocardium
         if (mesh_has_right_ventricle) {
-            ParGridFunction *x_phi_rv_l2 = new ParGridFunction(fespace_scalar_l2);
             x_phi_rv_l2->UseDevice(true);
             timing::tick(&t0);
             {
@@ -1069,15 +1051,24 @@ int main(int argc, char *argv[])
                 double *x_phi_rv_l2_vals = x_phi_rv_l2->Write();
                 project_h1_to_l2(x_phi_rv_l2_vals, x_phi_rv_h1_vals, num_elements,
                                   h1_I, h1_J, l2_I, l2_J);
-                MFEM_DEVICE_SYNC;
-                delete x_phi_rv;
-                x_phi_rv = x_phi_rv_l2;
+                timing::tick(&t1, /* barrier */ true, /* device barrier*/ true);
             }
             timing::tick(&t1);
             if (opts.verbose >= 2 && rank == 0) {
                 logging::timestamp(tout, "[Projection]: x_phi_rv", timing::duration(t0, t1), 2);
             }
+        } else {
+            *x_phi_rv_l2 = 0.0;
         }
+
+        delete x_phi_epi;
+        delete x_phi_lv;
+        delete x_phi_rv;
+
+        x_phi_epi = x_phi_epi_l2;
+        x_phi_lv  = x_phi_lv_l2;
+        x_phi_rv  = x_phi_rv_l2;
+
         tracing::roctx_range_pop();
         timing::tick(&end_proj);
         if (opts.verbose >= 2 && rank == 0) {
@@ -1105,90 +1096,84 @@ int main(int argc, char *argv[])
 
         const int *v2e_I = vertex_to_element->ReadI();
         const int *v2e_J = vertex_to_element->ReadJ();
+        ParGridFunction *grad_phi_epi_h1 = new ParGridFunction(fespace_vector_h1);
+        ParGridFunction *grad_phi_lv_h1 = new ParGridFunction(fespace_vector_h1);
+        ParGridFunction *grad_phi_rv_h1 = new ParGridFunction(fespace_vector_h1);
+        ParGridFunction *grad_psi_ab_h1 = new ParGridFunction(fespace_vector_h1);
+
+        grad_phi_epi_h1->UseDevice(true);
+        grad_phi_lv_h1->UseDevice(true);
+        grad_phi_rv_h1->UseDevice(true);
+        grad_psi_ab->UseDevice(true);
+
         timing::tick(&t1);
         if (opts.verbose >= 2 && rank == 0) {
             logging::timestamp(tout, "[Interpolate]: Setup", timing::duration(t0, t1), 2);
         }
 
-
-        ParGridFunction *grad_phi_epi_h1 = new ParGridFunction(fespace_vector_h1);
-        grad_phi_epi_h1->UseDevice(true);
-        timing::tick(&t0);
         {
+            timing::tick(&t0);
             double *grads_epi_h1 = grad_phi_epi_h1->Write();
             const double *grads_epi_l2 = grad_phi_epi->Read();
 
             interpolate_gradient_to_h1(grads_epi_h1, grads_epi_l2, num_vertices,
                                        v2e_I, v2e_J, l2_I, l2_J);
-            MFEM_DEVICE_SYNC;
-            delete grad_phi_epi;
-            grad_phi_epi = grad_phi_epi_h1;
-        }
-        timing::tick(&t1);
-        if (opts.verbose >= 2 && rank == 0) {
-            logging::timestamp(tout, "[Interpolate]: grad_phi_epi", timing::duration(t0, t1), 2);
+            timing::tick(&t1, /* barrier */ true, /* device barrier*/ true);
+            if (opts.verbose >= 2 && rank == 0) {
+                logging::timestamp(tout, "[Interpolate]: grad_phi_epi", timing::duration(t0, t1), 2);
+            }
         }
 
-        ParGridFunction *grad_phi_lv_h1 = new ParGridFunction(fespace_vector_h1);
-        grad_phi_lv_h1->UseDevice(true);
-        timing::tick(&t0);
         {
+            timing::tick(&t0);
             double *grads_lv_h1 = grad_phi_lv_h1->Write();
             const double *grads_lv_l2 = grad_phi_lv->Read();
 
             interpolate_gradient_to_h1(grads_lv_h1, grads_lv_l2, num_vertices,
                                        v2e_I, v2e_J, l2_I, l2_J);
-            MFEM_DEVICE_SYNC;
-            delete grad_phi_lv;
-            grad_phi_lv = grad_phi_lv_h1;
-        }
-        timing::tick(&t1);
-        if (opts.verbose >= 2 && rank == 0) {
-            logging::timestamp(tout, "[Interpolate]: grad_phi_lv", timing::duration(t0, t1), 2);
+            timing::tick(&t1, /* barrier */ true, /* device barrier*/ true);
+            if (opts.verbose >= 2 && rank == 0) {
+                logging::timestamp(tout, "[Interpolate]: grad_phi_lv", timing::duration(t0, t1), 2);
+            }
         }
 
-        ParGridFunction *grad_phi_rv_h1 = new ParGridFunction(fespace_vector_h1);
-        grad_phi_rv_h1->UseDevice(true);
         if (mesh_has_right_ventricle) {
             timing::tick(&t0);
-            {
-                double *grads_rv_h1 = grad_phi_rv_h1->Write();
-                const double *grads_rv_l2 = grad_phi_rv->Read();
+            double *grads_rv_h1 = grad_phi_rv_h1->Write();
+            const double *grads_rv_l2 = grad_phi_rv->Read();
 
-                interpolate_gradient_to_h1(grads_rv_h1, grads_rv_l2, num_vertices,
-                                           v2e_I, v2e_J, l2_I, l2_J);
-                MFEM_DEVICE_SYNC;
-                delete grad_phi_rv;
-                grad_phi_rv = grad_phi_rv_h1;
-            }
-            timing::tick(&t1);
+            interpolate_gradient_to_h1(grads_rv_h1, grads_rv_l2, num_vertices,
+                                       v2e_I, v2e_J, l2_I, l2_J);
+            timing::tick(&t1, /* barrier */ true, /* device barrier*/ true);
             if (opts.verbose >= 2 && rank == 0) {
                 logging::timestamp(tout, "[Interpolate]: grad_phi_rv", timing::duration(t0, t1), 2);
             }
         } else {
             *grad_phi_rv_h1 = 0.0;
-            delete grad_phi_rv;
-            grad_phi_rv = grad_phi_rv_h1;
         }
 
-        ParGridFunction *grad_psi_ab_h1 = new ParGridFunction(fespace_vector_h1);
-        grad_psi_ab->UseDevice(true);
-        timing::tick(&t0);
         {
+            timing::tick(&t0);
             double *grads_ab_h1 = grad_psi_ab_h1->Write();
             const double *grads_ab_l2 = grad_psi_ab->Read();
 
             interpolate_gradient_to_h1(grads_ab_h1, grads_ab_l2, num_vertices,
                                        v2e_I, v2e_J, l2_I, l2_J);
-            MFEM_DEVICE_SYNC;
-            delete grad_psi_ab;
-            grad_psi_ab = grad_psi_ab_h1;
-        }
-        timing::tick(&t1);
-        if (opts.verbose >= 2 && rank == 0) {
-            logging::timestamp(tout, "[Interpolate]: grad_psi_ab", timing::duration(t0, t1), 2);
+            timing::tick(&t1, /* barrier */ true, /* device barrier*/ true);
+            if (opts.verbose >= 2 && rank == 0) {
+                logging::timestamp(tout, "[Interpolate]: grad_psi_ab", timing::duration(t0, t1), 2);
+            }
         }
 
+        delete grad_phi_epi;
+        delete grad_phi_lv;
+        delete grad_phi_rv;
+        delete grad_psi_ab;
+
+        grad_phi_epi = grad_phi_epi_h1;
+        grad_phi_lv = grad_phi_lv_h1;
+        grad_phi_rv = grad_phi_rv_h1;
+        grad_psi_ab = grad_psi_ab_h1;
 
         delete vertex_to_element;
         timing::tick(&end_interp);
@@ -1262,11 +1247,10 @@ int main(int argc, char *argv[])
                   opts.alpha_endo, opts.alpha_epi, opts.beta_endo, opts.beta_epi,
                   F_vals, S_vals, T_vals
     );
-    MFEM_DEVICE_SYNC;
 
     tracing::roctx_range_pop();
-    timing::tick(&t1);
-    timing::tick(&end_ldrb);
+    timing::tick(&t1, /* barrier */ true, /* device barrier */ true);
+    timing::tick(&end_ldrb, /* barrier */ false);
     if (opts.verbose >= 2 && rank == 0) {
         logging::timestamp(tout, "[Fiber]: Run define_fibers", timing::duration(t0, t1), 2);
         logging::timestamp(tout, "[Fiber]: Total", timing::duration(begin_ldrb, end_ldrb), 2, '=');
