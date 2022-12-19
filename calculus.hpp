@@ -29,34 +29,34 @@ typedef struct vec3 {
     }
 
     MFEM_HOST_DEVICE
-    vec3 operator-(vec3& b) {
+    inline vec3 operator-(vec3& b) {
         vec3 out = {data[0] -b.data[0], data[1] - b.data[1], data[2] - b.data[2] };
         return out;
     }
 
     MFEM_HOST_DEVICE
-    void operator+=(vec3& b) {
+    inline void operator+=(vec3& b) {
         data[0] += b.data[0];
         data[1] += b.data[1];
         data[2] += b.data[2];
     }
 
     MFEM_HOST_DEVICE
-    void operator-=(vec3& b) {
+    inline void operator-=(vec3& b) {
         data[0] -= b.data[0];
         data[1] -= b.data[1];
         data[2] -= b.data[2];
     }
 
     MFEM_HOST_DEVICE
-    void operator=(vec3&b) {
+    inline void operator=(vec3&b) {
         data[0] = b.data[0];
         data[1] = b.data[1];
         data[2] = b.data[2];
     }
 
     MFEM_HOST_DEVICE
-    void operator*=(double b) {
+    inline void operator*=(double b) {
         data[0] *= b;
         data[1] *= b;
         data[2] *= b;
@@ -71,7 +71,7 @@ typedef struct quat {
     }
 
     MFEM_HOST_DEVICE
-    void operator=(quat& b) {
+    inline void operator=(quat& b) {
         data[0] = b.data[0];
         data[1] = b.data[1];
         data[2] = b.data[2];
@@ -79,7 +79,7 @@ typedef struct quat {
     }
 
     MFEM_HOST_DEVICE
-    void operator*=(double b) {
+    inline void operator*=(double b) {
         data[0] *= b;
         data[1] *= b;
         data[2] *= b;
@@ -87,7 +87,7 @@ typedef struct quat {
     }
 
     MFEM_HOST_DEVICE
-    void operator+=(quat& b) {
+    inline void operator+=(quat& b) {
         data[0] += b.data[0];
         data[1] += b.data[1];
         data[2] += b.data[2];
@@ -97,19 +97,19 @@ typedef struct quat {
 
 typedef struct mat3x3 {
     double data[3][3];
-    MFEM_HOST_DEVICE double* operator[](int i) {
+    inline MFEM_HOST_DEVICE double* operator[](int i) {
         return (double *) &data[i];
     }
 } mat3x3;
 
-MFEM_HOST_DEVICE double vecdot(vec3& a, vec3& b);
-MFEM_HOST_DEVICE void cross(vec3& c, vec3& a, vec3& b);
+MFEM_HOST_DEVICE inline double vecdot(vec3& a, vec3& b);
+MFEM_HOST_DEVICE inline void cross(vec3& c, vec3& a, vec3& b);
 
-MFEM_HOST_DEVICE void quat2rot(mat3x3& Q, quat& q);
-MFEM_HOST_DEVICE void rot2quat(quat& q, mat3x3& Q);
-MFEM_HOST_DEVICE void orient(mat3x3& Q_out, mat3x3& Q, double a, double b);
-MFEM_HOST_DEVICE void axis(mat3x3& Q, vec3& psi, vec3& phi);
-MFEM_HOST_DEVICE void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t);
+MFEM_HOST_DEVICE inline void quat2rot(mat3x3& Q, quat& q);
+MFEM_HOST_DEVICE inline void rot2quat(quat& q, mat3x3& Q);
+MFEM_HOST_DEVICE inline void orient(mat3x3& Q_out, mat3x3& Q, double a, double b);
+MFEM_HOST_DEVICE inline void axis(mat3x3& Q, vec3& psi, vec3& phi);
+MFEM_HOST_DEVICE inline void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t);
 
 void define_fibers(
     int n,
