@@ -19,13 +19,15 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
-#include "mfem.hpp"
 
 #ifdef HIP_TRACE
 #include <roctx.h>
 #endif
 
 #include "util.hpp"
+
+#include "mfem.hpp"
+using namespace mfem;
 
 void util::tracing::roctx_range_push(const char *s) {
 #ifdef HIP_TRACE
@@ -115,7 +117,7 @@ void util::timing::tick(struct timespec *t, bool barrier, bool device_barrier)
 
     if (device_barrier) {
 #ifdef TIMING_BARRIERS
-        mfem::MFEM_DEVICE_SYNC;
+        MFEM_DEVICE_SYNC;
 #endif
     }
 
