@@ -267,6 +267,9 @@ int main(int argc, char *argv[])
     opts.uniform_refinement = 0;
 
 #if defined(MFEM_USE_HIP) || defined(MFEM_USE_CUDA)
+    opts.gpu_ids = Array<int>(nranks);
+    opts.gpu_ids = 0;
+
     opts.gpu_tuned_amg = false;
 #endif
 
@@ -378,6 +381,10 @@ int main(int argc, char *argv[])
             "or H1 (one fiber per vertex).");
 
 #if defined (MFEM_USE_HIP) || defined (MFEM_USE_CUDA)
+    args.AddOption(&opts.gpu_ids,
+            "-gid",  "--gpu-ids",
+            "Set the id of the GPU each rank should use");
+
     args.AddOption(&opts.gpu_tuned_amg,
             "-gamg",  "--gpu-tuned-amg",
             "-ngamg", "--no-gpu-tuned-amg",
@@ -422,7 +429,12 @@ int main(int argc, char *argv[])
 
     // Enable hardware devices such as GPUs, and programming models such as
     // HIP, CUDA, OCCA, RAJA and OpenMP based on command line options.
+
+#if defined (MFEM_USE_HIP) || defined (MFEM_USE_CUDA)
+    Device device(opts.device_config, opts.gpu_ids[rank]);
+#else
     Device device(opts.device_config);
+#endif
     if (opts.verbose >= 3 && rank == 0) {
         device.Print();
     }
