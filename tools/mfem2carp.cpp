@@ -238,11 +238,4 @@ int main(int argc, char **argv)
     util::timing::tick(&end);
     util::logging::timestamp(std::cout, "Mesh convert done",
                              util::timing::duration(start,end), 1, '=', LEFT_COL_WIDTH);
-
-
-
-
-
-
-
 }
