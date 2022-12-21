@@ -254,6 +254,8 @@ int main(int argc, char *argv[])
     opts.save_laplacians = true;
     opts.save_gradients  = false;
 
+    opts.save_partitioning = false;
+
     opts.alpha_endo =  60.0;
     opts.alpha_epi  = -60.0;
     opts.beta_endo  = -60.0;
@@ -335,6 +337,11 @@ int main(int argc, char *argv[])
             "-sg",  "--save-gradients",
             "-nsg", "--no-save-gradients",
             "Save the gradients of phi_epi, phi_lv, phi_rv and psi_ab");
+
+    args.AddOption(&opts.save_partitioning,
+            "-sp",  "--save-partitioning",
+            "-nso", "--no-save-partitioning",
+            "Save the mesh partitioning.");
 
     args.AddOption(&opts.alpha_endo,
             "-ao", "--alpha-endo",
@@ -439,12 +446,17 @@ int main(int argc, char *argv[])
         device.Print();
     }
 
+    int *partitioning = NULL;
+    int global_num_elements = 0;
+
     // Load the mesh
     ParMesh *pmesh = NULL;
     if (!opts.par_mesh) {
         timing::tick(&t0);
         Mesh mesh(opts.mesh_file, 1, 1);
         timing::tick(&t1);
+
+        global_num_elements = mesh.GetNE();
 
         if (opts.verbose >= 3 && rank == 0) {
             std::string msg = "Loaded meshfile '" + std::string(opts.mesh_file) + "' "
@@ -460,7 +472,12 @@ int main(int argc, char *argv[])
 
         // Define a parallel mesh by a partitioning of the serial mesh.
         timing::tick(&t0);
-        pmesh = new ParMesh(MPI_COMM_WORLD, mesh);
+        if (opts.save_partitioning) {
+            partitioning = mesh.GeneratePartitioning(nranks, 1);
+            pmesh = new ParMesh(MPI_COMM_WORLD, mesh, partitioning);
+        } else {
+            pmesh = new ParMesh(MPI_COMM_WORLD, mesh);
+        }
         mesh.Clear();
         timing::tick(&t1);
         if (opts.verbose && rank == 0)
@@ -1318,6 +1335,20 @@ int main(int argc, char *argv[])
                 save::save_solution(grad_phi_lv,  mfem_output_dir, mesh_basename, "_grad_phi_lv.gf", rank);
                 save::save_solution(grad_phi_rv,  mfem_output_dir, mesh_basename, "_grad_phi_rv.gf", rank);
                 save::save_solution(grad_psi_ab,  mfem_output_dir, mesh_basename, "_grad_psi_ab.gf", rank);
+            }
+            if (opts.save_partitioning && rank == 0) {
+                std::ofstream partitioning_out;
+                std::ostringstream partitioning_out_fname;
+                partitioning_out_fname << mfem_output_dir << "/partitioning.txt";
+                partitioning_out.open(partitioning_out_fname.str().c_str());
+                if (partitioning_out.fail()) {
+                    std::cerr << "Could not open output file '" << partitioning_out_fname.str().c_str() << "'" << std::endl;
+                    exit(1);
+                }
+                for (int i = 0; i < global_num_elements; i++) {
+                    partitioning_out << partitioning[i] << std::endl;
+                }
+                partitioning_out.close();
             }
             // Save the solutions
             save::save_solution(&F,  mfem_output_dir, mesh_basename, "_F.gf", rank);

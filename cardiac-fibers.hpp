@@ -30,6 +30,7 @@ typedef struct {
     bool save_mfem;
     bool save_laplacians;
     bool save_gradients;
+    bool save_partitioning;
     mfem::Vector prescribed_apex;
     double alpha_endo;
     double alpha_epi;
