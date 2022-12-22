@@ -227,7 +227,6 @@ int main(int argc, char *argv[])
     Mpi::Init();
     int rank = Mpi::WorldRank();
     int nranks = Mpi::WorldSize();
-    Hypre::Init();
 
     Options opts;
 
@@ -445,6 +444,8 @@ int main(int argc, char *argv[])
     if (opts.verbose >= 3 && rank == 0) {
         device.Print();
     }
+
+    Hypre::Init();
 
     int *partitioning = NULL;
     int global_num_elements = 0;
