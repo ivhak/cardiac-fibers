@@ -147,6 +147,7 @@ int main(int argc, char **argv)
 
     FiniteElementSpace *s_fes = sfiber->FESpace();
 
+    std::cout << "Reading partitioning" << std::endl;
     int *partitioning = (int *)malloc(num_elements * sizeof(int));
     std::string partitioning_file(parallel_dir);
     partitioning_file += "/mfem/partitioning.txt";
@@ -160,6 +161,7 @@ int main(int argc, char **argv)
         local_fibers[i] = pfiber_array[i]->Read();
     }
 
+    std::cout << "Converting parallel fibers to serial" << std::endl;
     GridFunction pfiber_serial(s_fes);
     int *rank_idx = (int *)calloc(np, sizeof(int));
     double *pfiber_serial_vals = pfiber_serial.Write();
@@ -171,6 +173,7 @@ int main(int argc, char **argv)
         pfiber_serial_vals[3*i+2] = local_fibers[element_in_rank][3*local_idx+2];
     }
 
+    std::cout << "Calculating diff against serial" << std::endl;
     GridFunction diff(s_fes);
     diff = *sfiber;
     diff -= pfiber_serial;

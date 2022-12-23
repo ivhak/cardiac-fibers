@@ -213,7 +213,7 @@ int main(int argc, char **argv)
     fibers_out_fname << out_prefix << ".lon";
     msg << "Writing fibers to '" << fibers_out_fname.str().c_str();
     fibers_out.open(fibers_out_fname.str().c_str());
-    if (pts_out.fail()) {
+    if (fibers_out.fail()) {
         std::cerr << "Could not open output file '" << fibers_out_fname.str().c_str() << "'" << std::endl;
         exit(1);
     }

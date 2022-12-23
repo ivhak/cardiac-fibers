@@ -8,3 +8,5 @@ rocprof/
 paraview/
 mfem
 tests
+tools/mfem2carp
+tools/check-fibers
