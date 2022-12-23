@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+
+JOBS_PER_NODE="$(echo "$SLURM_NTASKS/$SLURM_JOB_NUM_NODES" | bc)"
+GPUS_PER_NODE=2
+GPU_ID="$(echo "$SLURM_LOCALID >= $JOBS_PER_NODE/$GPUS_PER_NODE" | bc)"
+
+echo "Job $SLURM_LOCALID on node $SLURM_NODEID: GPU $GPU_ID"
+
+export ROCR_VISIBLE_DEVICES="$GPU_ID"
+
+"$@"

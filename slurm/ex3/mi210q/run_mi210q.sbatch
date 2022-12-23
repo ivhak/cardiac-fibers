@@ -19,12 +19,10 @@ JOB_DIR="./jobs/${SLURM_JOB_NAME}-${SLURM_JOB_ID}"
 BUILD_DIR=
 
 CARDIAC_FIBERS_COMMIT=${CARDIAC_FIBERS_COMMIT:-HEAD}
-GPU_BIND=${GPU_BIND:-'0'}
-
 export SLURM_CPU_BIND=verbose
 
 function run {
-    srun --cpu-bind=rank ${BUILD_DIR}/cardiac-fibers/cardiac-fibers \
+    srun --cpu-bind=rank ./gpu-wrapper.sh ${BUILD_DIR}/cardiac-fibers/cardiac-fibers \
         --par-mesh \
         --mesh ${DATA_DIR}/"$1"/${SLURM_NTASKS}/"$1".mesh \
         --out ${JOB_DIR}/"$1" \
@@ -67,15 +65,15 @@ function main {
 
     mkdir -p ${JOB_DIR}
 
-    run heart01 --no-save-paraview --gpu-ids=$GPU_BIND
-    run heart02 --save-paraview    --gpu-ids=$GPU_BIND
-    run heart03 --no-save-paraview --gpu-ids=$GPU_BIND
-    run heart04 --no-save-paraview --gpu-ids=$GPU_BIND
-    run heart05 --no-save-paraview --gpu-ids=$GPU_BIND
-    run heart06 --no-save-paraview --gpu-ids=$GPU_BIND
-    run heart07 --no-save-paraview --gpu-ids=$GPU_BIND
-    run heart08 --no-save-paraview --gpu-ids=$GPU_BIND
-    run heart09 --no-save-paraview --gpu-ids=$GPU_BIND
+    run heart01 --no-save-paraview
+    run heart02 --save-paraview
+    run heart03 --no-save-paraview
+    run heart04 --no-save-paraview
+    run heart05 --no-save-paraview
+    run heart06 --no-save-paraview
+    run heart07 --no-save-paraview
+    run heart08 --no-save-paraview
+    run heart09 --no-save-paraview
 }
 
 main
