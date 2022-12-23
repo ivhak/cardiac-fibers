@@ -102,14 +102,14 @@ typedef struct mat3x3 {
     }
 } mat3x3;
 
-MFEM_HOST_DEVICE inline double vecdot(vec3& a, vec3& b);
-MFEM_HOST_DEVICE inline void cross(vec3& c, vec3& a, vec3& b);
+MFEM_HOST_DEVICE double vecdot(vec3& a, vec3& b);
+MFEM_HOST_DEVICE void cross(vec3& c, vec3& a, vec3& b);
 
-MFEM_HOST_DEVICE inline void quat2rot(mat3x3& Q, quat& q);
-MFEM_HOST_DEVICE inline void rot2quat(quat& q, mat3x3& Q);
-MFEM_HOST_DEVICE inline void orient(mat3x3& Q_out, mat3x3& Q, double a, double b);
-MFEM_HOST_DEVICE inline void axis(mat3x3& Q, vec3& psi, vec3& phi);
-MFEM_HOST_DEVICE inline void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t);
+MFEM_HOST_DEVICE void quat2rot(mat3x3& Q, quat& q);
+MFEM_HOST_DEVICE void rot2quat(quat& q, mat3x3& Q);
+MFEM_HOST_DEVICE void orient(mat3x3& Q_out, mat3x3& Q, double a, double b);
+MFEM_HOST_DEVICE void axis(mat3x3& Q, vec3& psi, vec3& phi);
+MFEM_HOST_DEVICE void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t);
 
 void define_fibers(
     int n,
