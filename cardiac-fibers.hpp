@@ -42,7 +42,6 @@ typedef struct {
     int rv_id;
     int uniform_refinement;
 #ifdef MFEM_USE_CUDA_OR_HIP
-    mfem::Array<int> gpu_ids;
     bool gpu_tuned_amg;
 #endif
     bool fibers_per_element;
