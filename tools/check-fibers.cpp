@@ -117,11 +117,11 @@ int main(int argc, char **argv)
     int np = 1;
 
     OptionsParser args(argc, argv);
-    args.AddOption(&mesh_basename,      "-m",  "--mesh-basename", "Basename of the mesh", true);
-    args.AddOption(&serial_dir,         "-s",  "--serial",        "Directory hold the serial output", true);
-    args.AddOption(&parallel_dir,       "-p",  "--parallel",      "Directory holding the parallel output", true);
-    args.AddOption(&out,                "-o",  "--out",           "Output directory", true);
-    args.AddOption(&np,                 "-np", "--num-processes", "Number of processes in the parallel output", true);
+    args.AddOption(&mesh_basename, "-m",  "--mesh-basename", "Basename of the mesh", true);
+    args.AddOption(&serial_dir,    "-s",  "--serial",        "Directory hold the serial output", true);
+    args.AddOption(&parallel_dir,  "-p",  "--parallel",      "Directory holding the parallel output", true);
+    args.AddOption(&out,           "-o",  "--out",           "Output directory", true);
+    args.AddOption(&np,            "-np", "--num-processes", "Number of processes in the parallel output", true);
     args.Parse();
     if (!args.Good()) {
         args.PrintUsage(std::cout);
@@ -173,16 +173,24 @@ int main(int argc, char **argv)
         pfiber_serial_vals[3*i+2] = local_fibers[element_in_rank][3*local_idx+2];
     }
 
+    // Calculate the "diff" between the serial and parallel solution bu
+    // subtracting the parallel from the serial. If correct, the resulting
+    // vector should have a magnitude of 0.
     std::cout << "Calculating diff against serial" << std::endl;
     GridFunction diff(s_fes);
     diff = *sfiber;
     diff -= pfiber_serial;
 
+    std::cout << "" << std::endl;
     ParaViewDataCollection *pd = NULL;
     std::string paraview_path(out);
     paraview_path += "/paraview";
     util::fs::mksubdir(paraview_path);
 
+    {
+        std::string msg = "Saving ParaView files to '" + paraview_path + "'";
+        std::cout << msg << std::endl;
+    }
     pd = new ParaViewDataCollection(mesh_basename, smesh);
     pd->SetPrefixPath(paraview_path);
     pd->RegisterField("F_serial",   sfiber);
@@ -193,12 +201,16 @@ int main(int argc, char **argv)
     pd->SetHighOrderOutput(false);
     pd->Save();
 
-    std::string mfem_output_dir(out);
-    mfem_output_dir += "/mfem";
-    util::fs::mksubdir(mfem_output_dir);
+    std::string mfem_dir(out);
+    mfem_dir += "/mfem";
+    util::fs::mksubdir(mfem_dir);
+    {
+        std::string msg = "Saving MFEM files to '" + mfem_dir + "'";
+        std::cout << msg << std::endl;
+    }
+    save_fiber(sfiber,         mfem_dir, mesh_basename, "_F_serial.gf");
+    save_fiber(&pfiber_serial, mfem_dir, mesh_basename, "_F_parallel.gf");
+    save_fiber(&diff,          mfem_dir, mesh_basename, "_F_diff.gf");
 
-    save_fiber(sfiber,         mfem_output_dir, mesh_basename, "_F_serial.gf");
-    save_fiber(&pfiber_serial, mfem_output_dir, mesh_basename, "_F_parallel.gf");
-    save_fiber(&diff,          mfem_output_dir, mesh_basename, "_F_diff.gf");
     return 0;
 }

@@ -336,7 +336,7 @@ int main(int argc, char *argv[])
 
     args.AddOption(&opts.save_partitioning,
             "-sp",  "--save-partitioning",
-            "-nso", "--no-save-partitioning",
+            "-nsp", "--no-save-partitioning",
             "Save the mesh partitioning.");
 
     args.AddOption(&opts.alpha_endo,

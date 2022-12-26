@@ -57,6 +57,8 @@ Options:
         Save the Laplacians phi_epi, phi_lv and phi_rv
    -sg, --save-gradients, -nsg, --no-save-gradients, current option: --no-save-gradients
         Save the gradients of phi_epi, phi_lv, phi_rv and psi_ab
+   -sp, --save-partitioning, -nsp, --no-save-partitioning, current option: --no-save-partitioning
+        Save the mesh partitioning.
    -ao <double>, --alpha-endo <double>, current value: 60
         Alpha angle in endocardium.
    -ai <double>, --alpha-epi <double>, current value: -60
@@ -270,6 +272,13 @@ When building for AMD GPUs it is also possible enable tracing markers in the
 code, by running `make HIP_TRACE=YES cardiac-fibers`. This requires the `roctracer` library.
 
 Device execution will be enabled by default when compiling with either CUDA or HIP support.
+
+#### Multi GPU
+
+When CUDA or HIP is enabled, `cardiac-fibers` will use the device with ID 0. To
+use multiple GPUs, the desired GPU for each rank has to be set via the
+`{CUDA|ROCR}_VISIBLE_DEVICES` environment variables. An example wrapper script
+for assigning GPUs can be found [here](slurm/ex3/mi210q/gpu-wrapper.sh).
 
 ### OpenMP
 
