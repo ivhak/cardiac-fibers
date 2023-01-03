@@ -5,19 +5,19 @@
 
 using namespace mfem;
 
-static bool vec3equal(vec3& u, vec3& v) {
+static bool vec3_equal(vec3& u, vec3& v) {
     return u[0] == v[0]
         && u[1] == v[1]
         && u[2] == v[2];
 }
 
-static void test_vec3equal(
+static void test_vec3_equal(
         vec3& u,
         std::string const& u_name,
         vec3& v,
         std::string const& v_name)
 {
-    if (!vec3equal(u, v)) {
+    if (!vec3_equal(u, v)) {
         std::cout << "[FAILED] ("
                   << u_name << " = {" << u[0] << ", " << u[1] << ", " << u[2] << "}"
                   << ", "
@@ -59,7 +59,7 @@ bool test_axis(void)
 
     // Test 1: e1 == u
     std::cout << " Test 1: e1 == u: ";
-    test_vec3equal(e1, "e1", u, "u");
+    test_vec3_equal(e1, "e1", u, "u");
 
 
     // Test 2: v == ||v|| * e2
@@ -70,11 +70,11 @@ bool test_axis(void)
         v_norm_e2 *= v_norm;
     }
     std::cout << " Test 2: v == ||v|| * e2: ";
-    test_vec3equal(v,"v", v_norm_e2, "||v||*e2");
+    test_vec3_equal(v,"v", v_norm_e2, "||v||*e2");
 
     // Test 3: e0 dot e1 == 0
     std::cout << " Test 3: e0 dot e1 == 0: ";
-    const double e0_dot_e1 = vecdot(e0, e1);
+    const double e0_dot_e1 = vec3_dot(e0, e1);
     if (e0_dot_e1 != 0.0) {
         std::cout << "[FAILED] (e0 dot e1 = " << e0_dot_e1 << ")" << std::endl;
     } else {
@@ -83,7 +83,7 @@ bool test_axis(void)
 
     // Test 4: e0 dot e2 == 0
     std::cout << " Test 4: e0 dot e2 == 0: ";
-    const double e0_dot_e2 = vecdot(e0, e2);
+    const double e0_dot_e2 = vec3_dot(e0, e2);
     if (e0_dot_e2 != 0.0) {
         std::cout << "[FAILED] (e0 dot e2 = " << e0_dot_e2 << ")" << std::endl;
     } else {

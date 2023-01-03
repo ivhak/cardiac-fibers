@@ -47,7 +47,7 @@ void project_h1_to_l2(
 
 // Cross product of two 3D vectors a and b, store in c.
 MFEM_HOST_DEVICE
-void _cross(vec3& c, vec3& a, vec3& b)
+void _vec3_cross(vec3& c, vec3& a, vec3& b)
 {
     // c = a x b
     c[0] = a[1]*b[2] - a[2]*b[1];
@@ -57,7 +57,7 @@ void _cross(vec3& c, vec3& a, vec3& b)
 
 // Dot product of vectors a and b
 MFEM_HOST_DEVICE
-double _vecdot(vec3& a, vec3& b)
+double _vec3_dot(vec3& a, vec3& b)
 {
     return a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
 }
@@ -106,18 +106,18 @@ void compute_gradient(
         vec3 v_ji = v_j - v_i;
 
         // The normal vector of the plane adjacent to v_j
-        vec3 v_ik_x_v_hk; _cross(v_ik_x_v_hk, v_ik, v_hk);
+        vec3 v_ik_x_v_hk; _vec3_cross(v_ik_x_v_hk, v_ik, v_hk);
 
         // The normal vector of the plane adjacent to v_k
-        vec3 v_ih_x_v_jh; _cross(v_ih_x_v_jh, v_ih, v_jh);
+        vec3 v_ih_x_v_jh; _vec3_cross(v_ih_x_v_jh, v_ih, v_jh);
 
         // The normal vector of the plane adjacent to v_h
-        vec3 v_ki_x_v_ji; _cross(v_ki_x_v_ji, v_ki, v_ji);
+        vec3 v_ki_x_v_ji; _vec3_cross(v_ki_x_v_ji, v_ki, v_ji);
 
         double six_vol;
         {
             vec3 v_hi = v_h - v_i;
-            six_vol = abs(_vecdot(v_hi, v_ki_x_v_ji));
+            six_vol = abs(_vec3_dot(v_hi, v_ki_x_v_ji));
         }
 
         v_ik_x_v_hk *= (f_j - f_i);

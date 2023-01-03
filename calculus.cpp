@@ -27,7 +27,7 @@ using namespace mfem;
 
 // Dot product of two quaternions
 MFEM_HOST_DEVICE
-static double quatdot(quat& q1, quat& q2)
+static double quat_dot(quat& q1, quat& q2)
 {
     return q1[0] * q2[0]
          + q1[1] * q2[1]
@@ -37,7 +37,7 @@ static double quatdot(quat& q1, quat& q2)
 
 // Product of two quaternions
 MFEM_HOST_DEVICE
-static void quatprod(quat& q_out, quat& q1, quat& q2)
+static void quat_hamilton(quat& q_out, quat& q1, quat& q2)
 {
     const double a1=q1[0], b1=q1[1], c1=q1[2], d1=q1[3];
     const double a2=q2[0], b2=q2[1], c2=q2[2], d2=q2[3];
@@ -49,7 +49,7 @@ static void quatprod(quat& q_out, quat& q1, quat& q2)
 }
 
 MFEM_HOST_DEVICE
-static double quatlen(quat& q)
+static double quat_len(quat& q)
 {
     return sqrt(q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3]);
 }
@@ -57,7 +57,7 @@ static double quatlen(quat& q)
 
 // Negate the values of quaternion q
 MFEM_HOST_DEVICE
-static void quatnegate(quat& q)
+static void quat_negate(quat& q)
 {
     q[0] = -(q[0]);
     q[1] = -(q[1]);
@@ -68,7 +68,7 @@ static void quatnegate(quat& q)
 
 // Normalize quaternion
 MFEM_HOST_DEVICE
-static void quatnormalize(quat& q)
+static void quat_normalize(quat& q)
 {
     double sum = q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3];
     if (sum == 0.0) return;
@@ -79,9 +79,9 @@ static void quatnormalize(quat& q)
     q[3] = q[3] * m;
 }
 
-// Cross product of two 3D vectors a and b, store in c.
+// vec3_cross product of two 3D vectors a and b, store in c.
 MFEM_HOST_DEVICE
-void cross(vec3& c, vec3& a, vec3& b)
+void vec3_cross(vec3& c, vec3& a, vec3& b)
 {
     // c = a x b
     c[0] = a[1]*b[2] - a[2]*b[1];
@@ -91,13 +91,13 @@ void cross(vec3& c, vec3& a, vec3& b)
 
 // Dot product of vectors a and b
 MFEM_HOST_DEVICE
-double vecdot(vec3& a, vec3& b)
+double vec3_dot(vec3& a, vec3& b)
 {
     return a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
 }
 
 MFEM_HOST_DEVICE
-static void vecset(vec3& a, const double *b)
+static void vec3_set_from_ptr(vec3& a, const double *b)
 {
     a[0] = b[0];
     a[1] = b[1];
@@ -107,7 +107,7 @@ static void vecset(vec3& a, const double *b)
 
 // Normalize vector a, a = a / ||a||
 MFEM_HOST_DEVICE
-static void vecnormalize(vec3& a)
+static void vec3_normalize(vec3& a)
 {
     const double sum = a[0]*a[0] + a[1]*a[1] + a[2]*a[2];
     if (sum == 0.0) return;
@@ -120,7 +120,7 @@ static void vecnormalize(vec3& a)
 
 // Negate vector a; a = -a
 MFEM_HOST_DEVICE
-static void vecnegate(vec3& a)
+static void vec3_negate(vec3& a)
 {
     a[0] = -a[0];
     a[1] = -a[1];
@@ -129,7 +129,7 @@ static void vecnegate(vec3& a)
 
 // Copy matrix B into A
 MFEM_HOST_DEVICE
-static void matcopy(mat3x3& A, mat3x3& B)
+static void mat3x3_copy(mat3x3& A, mat3x3& B)
 {
     A[0][0] = B[0][0]; A[0][1] = B[0][1]; A[0][2] = B[0][2];
     A[1][0] = B[1][0]; A[1][1] = B[1][1]; A[1][2] = B[1][2];
@@ -138,7 +138,7 @@ static void matcopy(mat3x3& A, mat3x3& B)
 
 // Copy matrix B into A
 MFEM_HOST_DEVICE
-static bool matiszero(mat3x3& A)
+static bool mat3x3_is_zero(mat3x3& A)
 {
     return A[0][0] == 0.0
         && A[0][1] == 0.0
@@ -153,7 +153,7 @@ static bool matiszero(mat3x3& A)
 
 // Set matrix C to the matrix multiplication of A and B; C = A x B
 MFEM_HOST_DEVICE
-static void matmul(mat3x3& C, mat3x3& A, mat3x3& B )
+static void mat3x3_mul(mat3x3& C, mat3x3& A, mat3x3& B )
 {
     C[0][0] = A[0][0]*B[0][0] + A[0][1]*B[1][0] + A[0][2]*B[2][0];
     C[0][1] = A[0][0]*B[0][1] + A[0][1]*B[1][1] + A[0][2]*B[2][1];
@@ -217,7 +217,7 @@ void rot2quat(quat& q, mat3x3& Q)
     q[3] = z;
 
     // Make sure the quaternion is normalized
-    quatnormalize(q);
+    quat_normalize(q);
 }
 
 // Convert the quaternion q to a 3x3 rotation matrix Q, using the algorithm
@@ -268,12 +268,12 @@ void quat2rot(mat3x3& Q, quat& q)
 MFEM_HOST_DEVICE
 static void slerp(quat& q, quat& q1, quat& q2, double t)
 {
-    double dot = quatdot(q1, q2);
+    double dot = quat_dot(q1, q2);
     q = q2;
 
     if (dot < 0) {
         dot = -dot;
-        quatnegate(q);
+        quat_negate(q);
     }
 
     // Slerp(q1, q2, t) = ((sin(1-t)*theta)/sin(theta))q1 + ((sin(t)*theta)/sin(theta))q2
@@ -303,28 +303,28 @@ void axis(mat3x3& Q, vec3& u, vec3& v)
 
     // e1 = u / ||u||
     e1 = u;
-    vecnormalize(e1);
+    vec3_normalize(e1);
 
     // e2 = u / || u ||
     // where u = v - (e0*v)e0
     //
     // Normalize v as an initial guess for e0
     e2 = v;
-    vecnormalize(e2);
+    vec3_normalize(e2);
 
     vec3 e1_dot_e2_e1;
     {
-        const double e1_dot_e2 = vecdot(e1, e2);
+        const double e1_dot_e2 = vec3_dot(e1, e2);
         e1_dot_e2_e1 = e1;
         e1_dot_e2_e1 *= e1_dot_e2;
     }
     e2 -= e1_dot_e2_e1;
-    vecnormalize(e2);
+    vec3_normalize(e2);
 
     // e0 = e1 x e2
-    cross(e0, e1, e2);
+    vec3_cross(e0, e1, e2);
 
-    vecnormalize(e0);
+    vec3_normalize(e0);
 
     Q[0][0] = e0[0];
     Q[1][0] = e0[1];
@@ -362,7 +362,7 @@ void orient(mat3x3& Q_out, mat3x3& Q, double a, double b)
     //
     // Since the two rightmost matrices are constant (depending only on the
     // angles a and b), we instead precompute it, and end up with a single
-    // matmul:
+    // mat3x3_mul:
     //
     //         | cosa  -sina*cosb  -sina*sinb |
     //     Q x | sina   cosa*cosb   cosa*sinb |
@@ -375,7 +375,7 @@ void orient(mat3x3& Q_out, mat3x3& Q, double a, double b)
     A[1][0] = sina; A[1][1] =  cosa*cosb; A[1][2] = cosa*sinb;
     A[2][0] = 0;    A[2][1] = -sinb;      A[2][2] = cosb;
 
-    matmul(Q_out, Q, A);
+    mat3x3_mul(Q_out, Q, A);
 }
 
 // BIdirectional SLERP
@@ -388,14 +388,14 @@ MFEM_HOST_DEVICE
 void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t)
 {
 
-    if (matiszero(Qa) && matiszero(Qb)) {
+    if (mat3x3_is_zero(Qa) && mat3x3_is_zero(Qb)) {
         // Assume that Qab is already zero
         return;
-    } else if (matiszero(Qa)) {
-        matcopy(Qab, Qb);
+    } else if (mat3x3_is_zero(Qa)) {
+        mat3x3_copy(Qab, Qb);
         return;
-    } else if (matiszero(Qb)) {
-        matcopy(Qab, Qa);
+    } else if (mat3x3_is_zero(Qb)) {
+        mat3x3_copy(Qab, Qa);
         return;
     }
 
@@ -428,8 +428,8 @@ void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t)
     for (int i = 0; i < 8; i++) {
         quat *v = quat_array[i];
         quat t = {0};
-        quatprod(t, *v, qb);
-        const double abs_dot = quatlen(t);
+        quat_hamilton(t, *v, qb);
+        const double abs_dot = quat_len(t);
         if (abs_dot > max_abs_dot) {
             max_abs_dot = abs_dot;
             qm = *v;
@@ -438,13 +438,13 @@ void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t)
 
     // If the angle is very small, i.e. max_dot is very close to one, return Qb.
     if (max_abs_dot > 1-1e-12) {
-        matcopy(Qab, Qb);
+        mat3x3_copy(Qab, Qb);
         return;
     }
 
     quat q = {0};
     slerp(q, qm, qb, t);
-    quatnormalize(q);
+    quat_normalize(q);
     quat2rot(Qab, q);
 }
 
@@ -481,7 +481,7 @@ static void calculate_fiber(
     mat3x3 Q_lv = {{{0}}};
     {
         vec3 grad_lv_neg = grad_lv;
-        vecnegate(grad_lv_neg);
+        vec3_negate(grad_lv_neg);
 
         mat3x3 T = {{{0}}};
         axis(T, grad_ab, grad_lv_neg);
@@ -553,16 +553,16 @@ void define_fibers(
                     "The laplacians epi, lv and rv do not add up to 1.");
 
         vec3 grad_phi_epi_i;
-        vecset(grad_phi_epi_i, &grad_phi_epi[3*i]);
+        vec3_set_from_ptr(grad_phi_epi_i, &grad_phi_epi[3*i]);
 
         vec3 grad_phi_lv_i;
-        vecset(grad_phi_lv_i, &grad_phi_lv[3*i]);
+        vec3_set_from_ptr(grad_phi_lv_i, &grad_phi_lv[3*i]);
 
         vec3 grad_phi_rv_i;
-        vecset(grad_phi_rv_i, &grad_phi_rv[3*i]);
+        vec3_set_from_ptr(grad_phi_rv_i, &grad_phi_rv[3*i]);
 
         vec3 grad_psi_ab_i;
-        vecset(grad_psi_ab_i, &grad_psi_ab[3*i]);
+        vec3_set_from_ptr(grad_psi_ab_i, &grad_psi_ab[3*i]);
 
         MFEM_ASSERT_KERNEL(abs(grad_phi_epi_i[0] + grad_phi_lv_i[0] + grad_phi_rv_i[0]) < 1e-3
                         && abs(grad_phi_epi_i[1] + grad_phi_lv_i[1] + grad_phi_rv_i[1]) < 1e-3
