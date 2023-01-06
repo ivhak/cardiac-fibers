@@ -886,6 +886,7 @@ int main(int argc, char *argv[])
     // after the fiber computations. However, they are only needed until we are
     // done with the gradients/projections. Make sure they are manually freed
     // after that.
+#if 0
     Vector local_vertices;
     pmesh->GetVertices(local_vertices);
     const double *vert = local_vertices.Read();
@@ -901,6 +902,7 @@ int main(int argc, char *argv[])
 
     const int num_elements = pmesh->GetNE();
     const int num_vertices = pmesh->GetNV();
+#endif
 
     ParGridFunction *grad_phi_epi, *grad_phi_lv, *grad_phi_rv, *grad_psi_ab;
 
@@ -924,12 +926,17 @@ int main(int argc, char *argv[])
         timing::tick(&t0);
         tracing::roctx_range_push("grad_phi_epi");
 
+#if 0
         const double *epi_vals = x_phi_epi->Read();
         double *epi_grads = grad_phi_epi->Write();
 
         compute_gradient(epi_grads, epi_vals, vert,
                          num_elements, num_vertices,
                          h1_I, h1_J, l2_I, l2_J);
+#else
+        GradientGridFunctionCoefficient gfc(x_phi_epi);
+        grad_phi_epi->ProjectCoefficient(gfc);
+#endif
         tracing::roctx_range_pop();
         timing::tick(&t1, /* barrier */ true, /* device barrier*/ true);
         if (opts.verbose >= 2 && rank == 0) {
@@ -942,12 +949,17 @@ int main(int argc, char *argv[])
         timing::tick(&t0);
         tracing::roctx_range_push("grad_phi_lv");
 
+#if 0
         const double *lv_vals = x_phi_lv->Read();
         double *lv_grads = grad_phi_lv->Write();
 
         compute_gradient(lv_grads, lv_vals, vert,
                          num_elements, num_vertices,
                          h1_I, h1_J, l2_I, l2_J);
+#else
+        GradientGridFunctionCoefficient gfc(x_phi_lv);
+        grad_phi_lv->ProjectCoefficient(gfc);
+#endif
         tracing::roctx_range_pop();
         timing::tick(&t1, /* barrier */ true, /* device barrier*/ true);
         if (opts.verbose >= 2&& rank == 0) {
@@ -960,12 +972,17 @@ int main(int argc, char *argv[])
         timing::tick(&t0);
         tracing::roctx_range_push("grad_phi_rv");
 
+#if 0
         const double *rv_vals = x_phi_rv->Read();
         double *rv_grads = grad_phi_rv->Write();
 
         compute_gradient(rv_grads, rv_vals, vert,
                          num_elements, num_vertices,
                          h1_I, h1_J, l2_I, l2_J);
+#else
+        GradientGridFunctionCoefficient gfc(x_phi_lv);
+        grad_phi_lv->ProjectCoefficient(gfc);
+#endif
         tracing::roctx_range_pop();
         timing::tick(&t1, /* barrier */ true, /* device barrier*/ true);
         if (opts.verbose >= 2&& rank == 0) {
@@ -980,12 +997,17 @@ int main(int argc, char *argv[])
         timing::tick(&t0);
         tracing::roctx_range_push("grad_psi_ab");
 
+#if 0
         const double *ab_vals = x_psi_ab->Read();
         double *ab_grads = grad_psi_ab->Write();
 
         compute_gradient(ab_grads, ab_vals, vert,
                          num_elements, num_vertices,
                          h1_I, h1_J, l2_I, l2_J);
+#else
+        GradientGridFunctionCoefficient gfc(x_psi_ab);
+        grad_psi_ab->ProjectCoefficient(gfc);
+#endif
         tracing::roctx_range_pop();
         timing::tick(&t1, /* barrier */ true, /* device barrier*/ true);
         timing::tick(&t1);
@@ -1037,10 +1059,15 @@ int main(int argc, char *argv[])
         // Epicardium
         {
             timing::tick(&t0);
+#if 0
             const double *x_phi_epi_h1_vals = x_phi_epi->Read();
             double *x_phi_epi_l2_vals = x_phi_epi_l2->Write();
             project_h1_to_l2(x_phi_epi_l2_vals, x_phi_epi_h1_vals, num_elements,
                               h1_I, h1_J, l2_I, l2_J);
+#else
+            GridFunctionCoefficient gfc(x_phi_epi);
+            x_phi_epi_l2->ProjectCoefficient(gfc);
+#endif
             timing::tick(&t1, /* barrier */ true, /* device barrier*/ true);
             if (opts.verbose >= 2 && rank == 0) {
                 logging::timestamp(tout, "[Projection]: x_phi_epi", timing::duration(t0, t1), 2);
@@ -1050,10 +1077,15 @@ int main(int argc, char *argv[])
         // Left ventricle endocardium
         {
             timing::tick(&t0);
+#if 0
             const double *x_phi_lv_h1_vals = x_phi_lv->Read();
             double *x_phi_lv_l2_vals = x_phi_lv_l2->Write();
             project_h1_to_l2(x_phi_lv_l2_vals, x_phi_lv_h1_vals, num_elements,
                               h1_I, h1_J, l2_I, l2_J);
+#else
+            GridFunctionCoefficient gfc(x_phi_epi);
+            x_phi_epi_l2->ProjectCoefficient(gfc);
+#endif
             timing::tick(&t1, /* barrier */ true, /* device barrier*/ true);
         }
         if (opts.verbose >= 2 && rank == 0) {
@@ -1065,10 +1097,15 @@ int main(int argc, char *argv[])
             x_phi_rv_l2->UseDevice(true);
             timing::tick(&t0);
             {
+#if 0
                 const double *x_phi_rv_h1_vals = x_phi_rv->Read();
                 double *x_phi_rv_l2_vals = x_phi_rv_l2->Write();
                 project_h1_to_l2(x_phi_rv_l2_vals, x_phi_rv_h1_vals, num_elements,
                                   h1_I, h1_J, l2_I, l2_J);
+#else
+                GridFunctionCoefficient gfc(x_phi_epi);
+                x_phi_epi_l2->ProjectCoefficient(gfc);
+#endif
                 timing::tick(&t1, /* barrier */ true, /* device barrier*/ true);
             }
             timing::tick(&t1);
@@ -1110,10 +1147,11 @@ int main(int argc, char *argv[])
 
         timing::tick(&t0);
         ParFiniteElementSpace *fespace_vector_h1 = new ParFiniteElementSpace(pmesh, &h1_fec, 3, Ordering::byVDIM);
+#if 0
         Table *vertex_to_element = pmesh->GetVertexToElementTable();
-
         const int *v2e_I = vertex_to_element->ReadI();
         const int *v2e_J = vertex_to_element->ReadJ();
+#endif
         ParGridFunction *grad_phi_epi_h1 = new ParGridFunction(fespace_vector_h1);
         ParGridFunction *grad_phi_lv_h1 = new ParGridFunction(fespace_vector_h1);
         ParGridFunction *grad_phi_rv_h1 = new ParGridFunction(fespace_vector_h1);
@@ -1131,11 +1169,16 @@ int main(int argc, char *argv[])
 
         {
             timing::tick(&t0);
+#if 0
             double *grads_epi_h1 = grad_phi_epi_h1->Write();
             const double *grads_epi_l2 = grad_phi_epi->Read();
 
             interpolate_gradient_to_h1(grads_epi_h1, grads_epi_l2, num_vertices,
                                        v2e_I, v2e_J, l2_I, l2_J);
+#else
+            GridFunctionCoefficient gfc(grad_phi_epi);
+            grad_phi_rv_h1->ProjectCoefficient(gfc);
+#endif
             timing::tick(&t1, /* barrier */ true, /* device barrier*/ true);
             if (opts.verbose >= 2 && rank == 0) {
                 logging::timestamp(tout, "[Interpolate]: grad_phi_epi", timing::duration(t0, t1), 2);
@@ -1144,11 +1187,16 @@ int main(int argc, char *argv[])
 
         {
             timing::tick(&t0);
+#if 0
             double *grads_lv_h1 = grad_phi_lv_h1->Write();
             const double *grads_lv_l2 = grad_phi_lv->Read();
 
             interpolate_gradient_to_h1(grads_lv_h1, grads_lv_l2, num_vertices,
                                        v2e_I, v2e_J, l2_I, l2_J);
+#else
+            GridFunctionCoefficient gfc(grad_phi_lv);
+            grad_phi_lv_h1->ProjectCoefficient(gfc);
+#endif
             timing::tick(&t1, /* barrier */ true, /* device barrier*/ true);
             if (opts.verbose >= 2 && rank == 0) {
                 logging::timestamp(tout, "[Interpolate]: grad_phi_lv", timing::duration(t0, t1), 2);
@@ -1157,11 +1205,16 @@ int main(int argc, char *argv[])
 
         if (mesh_has_right_ventricle) {
             timing::tick(&t0);
+#if 0
             double *grads_rv_h1 = grad_phi_rv_h1->Write();
             const double *grads_rv_l2 = grad_phi_rv->Read();
 
             interpolate_gradient_to_h1(grads_rv_h1, grads_rv_l2, num_vertices,
                                        v2e_I, v2e_J, l2_I, l2_J);
+#else
+            GridFunctionCoefficient gfc(grad_phi_rv);
+            grad_phi_rv_h1->ProjectCoefficient(gfc);
+#endif
             timing::tick(&t1, /* barrier */ true, /* device barrier*/ true);
             if (opts.verbose >= 2 && rank == 0) {
                 logging::timestamp(tout, "[Interpolate]: grad_phi_rv", timing::duration(t0, t1), 2);
@@ -1172,11 +1225,16 @@ int main(int argc, char *argv[])
 
         {
             timing::tick(&t0);
+#if 0
             double *grads_ab_h1 = grad_psi_ab_h1->Write();
             const double *grads_ab_l2 = grad_psi_ab->Read();
 
             interpolate_gradient_to_h1(grads_ab_h1, grads_ab_l2, num_vertices,
                                        v2e_I, v2e_J, l2_I, l2_J);
+#else
+            GridFunctionCoefficient gfc(grad_psi_ab);
+            grad_psi_ab_h1->ProjectCoefficient(gfc);
+#endif
             timing::tick(&t1, /* barrier */ true, /* device barrier*/ true);
             if (opts.verbose >= 2 && rank == 0) {
                 logging::timestamp(tout, "[Interpolate]: grad_psi_ab", timing::duration(t0, t1), 2);
@@ -1193,7 +1251,9 @@ int main(int argc, char *argv[])
         grad_phi_rv = grad_phi_rv_h1;
         grad_psi_ab = grad_psi_ab_h1;
 
+#if 0
         delete vertex_to_element;
+#endif
         timing::tick(&end_interp);
         if (opts.verbose >= 2 && rank == 0) {
             logging::timestamp(tout, "[Interpolate]: Total", timing::duration(begin_interp, end_interp), 2, '=');
@@ -1203,6 +1263,7 @@ int main(int argc, char *argv[])
         }
     }
 
+#if 0
     // We are done with the gradients/projections, so we can free the device
     // side vertices, as well as the element-to-DoF tables for H1 and L2.
     {
@@ -1220,6 +1281,7 @@ int main(int argc, char *argv[])
 
         local_vertices.DeleteDevice(/* copy_back */ false);
     }
+#endif
 
     if (opts.verbose >= 2 && rank == 0) {
         logging::marker(tout, "[LDRB]: Compute fibers", 1);
