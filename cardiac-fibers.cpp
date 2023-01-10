@@ -257,8 +257,8 @@ int main(int argc, char *argv[])
 
     opts.alpha_endo =  60.0;
     opts.alpha_epi  = -60.0;
-    opts.beta_endo  = -60.0;
-    opts.beta_epi   =  60.0;
+    opts.beta_endo  =  0.0;
+    opts.beta_epi   =  0.0;
 
     opts.base_id = 1;
     opts.epi_id  = 2;

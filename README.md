@@ -63,9 +63,9 @@ Options:
         Alpha angle in endocardium.
    -ai <double>, --alpha-epi <double>, current value: -60
         Alpha angle in epicardium.
-   -bo <double>, --beta-endo <double>, current value: -60
+   -bo <double>, --beta-endo <double>, current value: 0
         Beta angle in endocardium.
-   -bi <double>, --beta-epi <double>, current value: 60
+   -bi <double>, --beta-epi <double>, current value: 0
         Beta angle in epicardium.
    -base <int>, --base-id <int>, current value: 1
         Id of the base surface.
