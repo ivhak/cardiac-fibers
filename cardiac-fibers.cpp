@@ -34,43 +34,15 @@ using namespace util;
 //      delta u = 0
 //
 // using the solver `solver`, storing the solution in `x`.
-//
-// This routine expects that
-//   1. ParGridFunction `x` and its associated ParFiniteElementSpace has been
-//      set up before hand.
-//   2. The wanted solver, `solver`, and possible preconditioner, has been configured.
-//
-//
-// Notes:
-//
-// - The boundary surfaces that are essential for a given solution are set in
-//   `essential_boundaries`. For this use case these surfaces are the
-//   epicardium, the left ventricle endocardium, the right ventricle and the
-//   base. Each of these surfaces are expected to have an id/attribute
-//   associated to it, which is dependent on the input mesh.
-//
-// - The essential boundary surfaces with boundary condition 0 are set
-//   `zero_essential_boundaries`. For the boundary condition to be properly
-//   enforced on a given surface, it also has to be set as an essential
-//   boundary in `essential_boundaries`.
-//
-// - The boundary surfaces with boundary condition 1 are set in
-//   `nonzero_essential_boundaries`. For the boundary condition to be properly
-//   enforced on a given surface, it also has to be set as an essential boundary
-//   in `essential_boundaries`.
-//
-// - The `apex` variable handles a corner case when solving the Laplace
-//   equation from the base to the epicardium (psi_ab). In this special case, a
-//   boundary condition of 0 needs to be enforced in a single vertex, namely
-//   the apex. This is handled by setting `apex` to be the index of the apex
-//   vertex in the mesh.
 void laplace(
     ParGridFunction* x,
     Solver* solver,
-    Array<int> &essential_boundaries,
+    ParBilinearForm *a,
+    ParLinearForm *b,
+    Array<int> &ess_tdof_list,
     Array<int> &nonzero_essential_boundaries,
     Array<int> &zero_essential_boundaries,
-    int apex,
+    int apex_dof,
     int verbose,
     std::ostream& tout,
     std::string tag,
@@ -79,15 +51,6 @@ void laplace(
     struct timespec t0, t1;
 
     std::string log_prefix = "[" + tag + "]:";
-
-    // Determine the list of true (i.e. parallel conforming) essential boundary
-    // dofs, defined by the boundary attributes marked as essential (Dirichlet)
-    // and converting to a list of true dofs..
-    Array<int> ess_tdof_list;
-
-    ParFiniteElementSpace *fespace = x->ParFESpace();
-
-    fespace->GetEssentialTrueDofs(essential_boundaries, ess_tdof_list);
 
     // Set up boundary conditions
     tracing::roctx_range_push("Setup boundary conditions");
@@ -105,25 +68,8 @@ void laplace(
         ConstantCoefficient zero_bdr(0.0);
         x->ProjectBdrCoefficient(zero_bdr, zero_essential_boundaries);
 
-        // For the laplacian involving the apex we need to treat the boundary
-        // conditions a little different, as it is to be enforced on a single node
-        // rather than a whole boundary surface. To do so, we make sure that the
-        // apex is en essential true dof, and then we project the wanted value, in
-        // this case 0.0, to only that node.
-        if (apex >= 0) {
-            // Initialize the internal data needed in the finite element space
-            fespace->BuildDofToArrays();
-
-            // Find the dof at the local apex vertex
-            int apex_dof = fespace->GetLocalTDofNumber(apex);
-
-            // This assertion should never fail, as we should have made sure that
-            // the apex is in the form of a local vertex number.
-            MFEM_ASSERT(apex_dof != -1, "No local DoF for the given local apex vertex");
-
-            // Make sure the apex is in the list of essential true Dofs
-            ess_tdof_list.Append(apex_dof);
-
+        // If we are dealing with apex to base, set the boundary condition in the apex vertex.
+        if (apex_dof >= 0) {
             Array<int> node_disp(1);
             node_disp[0] = apex_dof;
             Vector node_disp_value(1);
@@ -141,63 +87,13 @@ void laplace(
     }
     tracing::roctx_range_pop(); // Setup boundary conditions
 
-    // Set up the parallel linear form b(.) which corresponds to the right-hand
-    // side of the FEM linear system, which in this case is (1,phi_i) where
-    // phi_i are the basis functions in fespace.
-    tracing::roctx_range_push("Assemble RHS");
-    timing::tick(&t0);
-
-    ParLinearForm b(fespace);
-    ConstantCoefficient zero(0.0);
-    b.AddDomainIntegrator(new DomainLFIntegrator(zero));
-
-    if (b.SupportsDevice()) {
-        // This does not work on a simplex mesh, probably for the same reason that
-        // AssemblyLevel::FULL does not work.
-        if (verbose >= 3 && rank == 0)
-            logging::info(std::cout, "MFEM_VERSION >= 4.5, using FastAssembly on RHS b.");
-        b.UseFastAssembly(true);
-    }
-
-    b.Assemble();
-    timing::tick(&t1);
-    if (verbose >= 2 && rank == 0) {
-        logging::timestamp(tout, log_prefix + " Assemble RHS", timing::duration(t0, t1), 3);
-    }
-    tracing::roctx_range_pop(); // Assemble RHS
-
-    // Set up the parallel bilinear form a(.,.) on the finite element space
-    // corresponding to the Laplacian operator -Delta, by adding the
-    // Diffusion domain integrator.
-    tracing::roctx_range_push("Assemble LHS");
-    timing::tick(&t0);
-    ParBilinearForm a(fespace);
-
-    // Assemble the parallel bilinear form and the corresponding linear system.
-    ConstantCoefficient one(1.0);
-    a.AddDomainIntegrator(new DiffusionIntegrator(one));
-
-#if 0
-    // AssemblyLevel::FULL makes Assemble() call some partial assembly
-    // functions, and since partial assembly is not supported for simplex
-    // elements, e.g. tetrahedrons, full assembly does not work.
-    a.SetAssemblyLevel(AssemblyLevel::FULL);
-#endif
-
-    a.Assemble();
-    timing::tick(&t1);
-    if (verbose >= 2 && rank == 0) {
-        logging::timestamp(tout, log_prefix + " Assemble LHS", timing::duration(t0, t1), 3);
-    }
-    tracing::roctx_range_pop(); // Assemble LHS
-
     // Form the linear system
     tracing::roctx_range_push("Form linear system");
     timing::tick(&t0);
 
     OperatorPtr A;
     Vector B, X;
-    a.FormLinearSystem(ess_tdof_list, *x, b, A, X, B);
+    a->FormLinearSystem(ess_tdof_list, *x, *b, A, X, B);
     timing::tick(&t1);
     if (verbose >= 2 && rank == 0) {
         logging::timestamp(tout, log_prefix + " Form linear system", timing::duration(t0, t1), 3);
@@ -218,7 +114,7 @@ void laplace(
 
     // Recover the parallel grid function corresponding to X. This is the local
     // finite element solution on each processor.
-    a.RecoverFEMSolution(X, b, *x);
+    a->RecoverFEMSolution(X, *b, *x);
 }
 
 int main(int argc, char *argv[])
@@ -708,15 +604,82 @@ int main(int argc, char *argv[])
     x_phi_rv->UseDevice(true);
     x_psi_ab->UseDevice(true);
 
+    // Determine the list of true (i.e. parallel conforming) essential boundary
+    // dofs, defined by the boundary attributes marked as essential (Dirichlet)
+    // and converting to a list of true dofs..
+    //
+    // The first three linear systems have the same essential true dofs, which depend on boundary conditions on the left ventricle endocardium surface, the right ventricle endocardium surface and the epicardium surface. This means that we can reuse the left-hand side `a` and right-hand side `b` for these three systems.
+    Array<int> epi_lv_rv_ess_tdof_list;
+
     int nattr = pmesh->bdr_attributes.Max();
-    Array<int> ess_bdr(nattr);          // Essential boundaries
-    Array<int> nonzero_ess_bdr(nattr);  // Essential boundaries with value 1.0
-    Array<int> zero_ess_bdr(nattr);     // Essential boundaries with value 0.0
+    Array<int> essential_boundaries(nattr);          // Essential boundaries
+    Array<int> nonzero_essential_boundaries(nattr);  // Essential boundaries with value 1.0
+    Array<int> zero_essential_boundaries(nattr);     // Essential boundaries with value 0.0
+
+    // EPI, LV, and RV are the essential boundaries
+    essential_boundaries = 0;
+    essential_boundaries[opts.epi_id-1] = 1;
+    essential_boundaries[opts.lv_id -1] = 1;
+    if (mesh_has_right_ventricle)
+        essential_boundaries[opts.rv_id-1] = 1;
+    fespace_scalar_h1.GetEssentialTrueDofs(essential_boundaries, epi_lv_rv_ess_tdof_list);
 
     timing::tick(&t1);
     if (opts.verbose >= 2 && rank == 0) {
         logging::timestamp(tout, "[Laplacians]: Setup", timing::duration(t0, t1), 2);
     }
+
+    ParLinearForm *b = new ParLinearForm(&fespace_scalar_h1);
+    ConstantCoefficient zero(0.0);
+    b->AddDomainIntegrator(new DomainLFIntegrator(zero));
+
+    if (b->SupportsDevice()) {
+        // This does not work on a simplex mesh, probably for the same reason that
+        // AssemblyLevel::FULL does not work.
+        if (opts.verbose >= 3 && rank == 0)
+            logging::info(std::cout, "MFEM_VERSION >= 4.5, using FastAssembly on RHS b.");
+        b->UseFastAssembly(true);
+    }
+
+    b->Assemble();
+    timing::tick(&t1);
+    if (opts.verbose >= 2 && rank == 0) {
+        logging::timestamp(tout, "[Laplacians]: Assemble RHS", timing::duration(t0, t1), 2);
+    }
+    tracing::roctx_range_pop(); // Assemble RHS
+
+    // Set up the parallel bilinear form a(.,.) on the finite element space
+    // corresponding to the Laplacian operator -Delta, by adding the
+    // Diffusion domain integrator.
+    tracing::roctx_range_push("Assemble LHS");
+    timing::tick(&t0);
+    ParBilinearForm *a = new ParBilinearForm(&fespace_scalar_h1);
+
+    // Assemble the parallel bilinear form and the corresponding linear system.
+    ConstantCoefficient one(1.0);
+    a->AddDomainIntegrator(new DiffusionIntegrator(one));
+
+#if 0
+    // AssemblyLevel::FULL makes Assemble() call some partial assembly
+    // functions, and since partial assembly is not supported for simplex
+    // elements, e.g. tetrahedrons, full assembly does not work.
+    a->SetAssemblyLevel(AssemblyLevel::FULL);
+#endif
+
+    a->Assemble();
+    timing::tick(&t1);
+    if (opts.verbose >= 2 && rank == 0) {
+        logging::timestamp(tout, "[Laplacians]: Assemble LHS", timing::duration(t0, t1), 2);
+    }
+
+    tracing::roctx_range_pop(); // Assemble LHS
+    // Set up the parallel linear form b(.) which corresponds to the right-hand
+    // side of the FEM linear system, which in this case is (1,phi_i) where
+    // phi_i are the basis functions in fespace.
+    tracing::roctx_range_push("Assemble RHS");
+    timing::tick(&t0);
+
+
     // Solve the Laplace equation from EPI (1.0) to (LV_ENDO union RV_ENDO) (0.0)
     {
         if (opts.verbose >= 2 && rank == 0) {
@@ -724,24 +687,20 @@ int main(int argc, char *argv[])
         }
         timing::tick(&t0);
 
-        ess_bdr = 0;
-        ess_bdr[opts.epi_id-1] = 1;
-        ess_bdr[opts.lv_id -1] = 1;
-        if (mesh_has_right_ventricle)
-            ess_bdr[opts.rv_id-1] = 1;
+        nonzero_essential_boundaries = 0;
+        nonzero_essential_boundaries[opts.epi_id-1] = 1;
 
-        nonzero_ess_bdr = 0;
-        nonzero_ess_bdr[opts.epi_id-1] = 1;
-
-        zero_ess_bdr = 0;
-        zero_ess_bdr[opts.lv_id-1] = 1;
+        zero_essential_boundaries = 0;
+        zero_essential_boundaries[opts.lv_id-1] = 1;
         if (mesh_has_right_ventricle)
-            zero_ess_bdr[opts.rv_id-1] = 1;
+            zero_essential_boundaries[opts.rv_id-1] = 1;
 
         tracing::roctx_range_push("laplace x_phi_epi");
 
-        laplace(x_phi_epi, solver,
-                ess_bdr, nonzero_ess_bdr, zero_ess_bdr,
+        laplace(x_phi_epi, solver, a, b,
+                epi_lv_rv_ess_tdof_list,
+                nonzero_essential_boundaries,
+                zero_essential_boundaries,
                 -1, opts.verbose, tout, "phi_epi", rank);
 
         tracing::roctx_range_pop();
@@ -760,24 +719,20 @@ int main(int argc, char *argv[])
         }
         timing::tick(&t0);
 
-        ess_bdr = 0;
-        ess_bdr[opts.epi_id-1] = 1;
-        ess_bdr[opts.lv_id -1] = 1;
-        if (mesh_has_right_ventricle)
-            ess_bdr[opts.rv_id-1] = 1;
+        nonzero_essential_boundaries = 0;
+        nonzero_essential_boundaries[opts.lv_id-1] = 1;
 
-        nonzero_ess_bdr = 0;
-        nonzero_ess_bdr[opts.lv_id-1] = 1;
-
-        zero_ess_bdr = 0;
-        zero_ess_bdr[opts.epi_id-1] = 1;
+        zero_essential_boundaries = 0;
+        zero_essential_boundaries[opts.epi_id-1] = 1;
         if (mesh_has_right_ventricle)
-            zero_ess_bdr[opts.rv_id-1] = 1;
+            zero_essential_boundaries[opts.rv_id-1] = 1;
 
         tracing::roctx_range_push("laplace x_phi_lv");
 
-        laplace(x_phi_lv, solver,
-                ess_bdr, nonzero_ess_bdr, zero_ess_bdr,
+        laplace(x_phi_lv, solver, a, b,
+                epi_lv_rv_ess_tdof_list,
+                nonzero_essential_boundaries,
+                zero_essential_boundaries,
                 -1, opts.verbose, tout, "phi_lv", rank);
 
         tracing::roctx_range_pop();
@@ -796,22 +751,19 @@ int main(int argc, char *argv[])
         }
         timing::tick(&t0);
 
-        ess_bdr = 0;
-        ess_bdr[opts.epi_id    -1] = 1;
-        ess_bdr[opts.lv_id-1] = 1;
-        ess_bdr[opts.rv_id-1] = 1;
+        nonzero_essential_boundaries = 0;
+        nonzero_essential_boundaries[opts.rv_id-1] = 1;
 
-        nonzero_ess_bdr = 0;
-        nonzero_ess_bdr[opts.rv_id-1] = 1;
-
-        zero_ess_bdr = 0;
-        zero_ess_bdr[opts.epi_id-1] = 1;
-        zero_ess_bdr[opts.lv_id -1] = 1;
+        zero_essential_boundaries = 0;
+        zero_essential_boundaries[opts.epi_id-1] = 1;
+        zero_essential_boundaries[opts.lv_id -1] = 1;
 
         tracing::roctx_range_push("laplace x_phi_rv");
 
-        laplace(x_phi_rv, solver,
-                ess_bdr, nonzero_ess_bdr, zero_ess_bdr,
+        laplace(x_phi_rv, solver, a, b,
+                epi_lv_rv_ess_tdof_list,
+                nonzero_essential_boundaries,
+                zero_essential_boundaries,
                 -1, opts.verbose, tout, "phi_rv", rank);
 
         tracing::roctx_range_pop();
@@ -823,6 +775,42 @@ int main(int argc, char *argv[])
         *x_phi_rv = 0.0;
     }
 
+    // For the last linear sysetem, the list of essential true dofs change because the essential boundar surfaces change.
+    // The left-hand side `a` and the right-hand side `b` needs to be re-assembled.
+    Array<int> apex_base_ess_tdof_list;
+    essential_boundaries = 0;
+    essential_boundaries[opts.base_id-1] = 1;
+    fespace_scalar_h1.GetEssentialTrueDofs(essential_boundaries, apex_base_ess_tdof_list);
+    int apex_dof = -1;
+    if (apex >= 0) {
+        // Initialize the internal data needed in the finite element space
+        fespace_scalar_h1.BuildDofToArrays();
+
+        // Find the dof at the local apex vertex
+        apex_dof = fespace_scalar_h1.GetLocalTDofNumber(apex);
+
+        // This assertion should never fail, as we should have made sure that
+        // the apex is in the form of a local vertex number.
+        MFEM_ASSERT(apex_dof != -1, "No local DoF for the given local apex vertex");
+
+        // Make sure the apex is in the list of essential true Dofs
+        apex_base_ess_tdof_list.Append(apex_dof);
+    }
+
+    timing::tick(&t0);
+    b->Update();
+    b->Assemble();
+    timing::tick(&t1);
+    if (opts.verbose >= 2 && rank == 0) {
+        logging::timestamp(tout, "[Laplacians]: Reassemble RHS", timing::duration(t0, t1), 2);
+    }
+    timing::tick(&t0);
+    a->Update();
+    a->Assemble();
+    timing::tick(&t1);
+    if (opts.verbose >= 2 && rank == 0) {
+        logging::timestamp(tout, "[Laplacians]: Reassemble LHS", timing::duration(t0, t1), 2);
+    }
 
     // Solve the Laplace equation from BASE (1.0) to APEX (0.0)
     {
@@ -831,19 +819,16 @@ int main(int argc, char *argv[])
         }
         timing::tick(&t0);
 
-        ess_bdr = 0;
-        ess_bdr[opts.base_id-1] = 1;
+        nonzero_essential_boundaries = 0;
+        nonzero_essential_boundaries[opts.base_id-1] = 1;
 
-        nonzero_ess_bdr = 0;
-        nonzero_ess_bdr[opts.base_id-1] = 1;
-
-        zero_ess_bdr = 0;
+        zero_essential_boundaries = 0;
 
         tracing::roctx_range_push("laplace x_psi_ab");
 
-        laplace(x_psi_ab, solver,
-                ess_bdr, nonzero_ess_bdr, zero_ess_bdr,
-                apex, opts.verbose, tout, "psi_ab", rank);
+        laplace(x_psi_ab, solver, a, b,
+                apex_base_ess_tdof_list, nonzero_essential_boundaries, zero_essential_boundaries,
+                apex_dof, opts.verbose, tout, "psi_ab", rank);
 
         tracing::roctx_range_pop();
 
@@ -853,9 +838,12 @@ int main(int argc, char *argv[])
         }
     }
 
-    // We are done using the preconditioner and solver
+    // We are done using everything related to solving
     delete solver;
     delete prec;
+    delete a;
+    delete b;
+
 
     timing::tick(&end_laplace);
     if (opts.verbose >= 2 && rank == 0) {
