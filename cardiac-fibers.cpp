@@ -608,7 +608,11 @@ int main(int argc, char *argv[])
     // dofs, defined by the boundary attributes marked as essential (Dirichlet)
     // and converting to a list of true dofs..
     //
-    // The first three linear systems have the same essential true dofs, which depend on boundary conditions on the left ventricle endocardium surface, the right ventricle endocardium surface and the epicardium surface. This means that we can reuse the left-hand side `a` and right-hand side `b` for these three systems.
+    // The first three linear systems have the same essential true dofs, which
+    // depend on boundary conditions on the left ventricle endocardium surface,
+    // the right ventricle endocardium surface and the epicardium surface. This
+    // means that we can reuse the left-hand side `a` and right-hand side `b`
+    // for these three systems.
     Array<int> epi_lv_rv_ess_tdof_list;
 
     int nattr = pmesh->bdr_attributes.Max();
@@ -628,6 +632,12 @@ int main(int argc, char *argv[])
     if (opts.verbose >= 2 && rank == 0) {
         logging::timestamp(tout, "[Laplacians]: Setup", timing::duration(t0, t1), 2);
     }
+
+    // Set up the parallel linear form b(.) which corresponds to the right-hand
+    // side of the FEM linear system, which in this case is (1,phi_i) where
+    // phi_i are the basis functions in fespace.
+    tracing::roctx_range_push("Assemble RHS");
+    timing::tick(&t0);
 
     ParLinearForm *b = new ParLinearForm(&fespace_scalar_h1);
     ConstantCoefficient zero(0.0);
@@ -673,11 +683,6 @@ int main(int argc, char *argv[])
     }
 
     tracing::roctx_range_pop(); // Assemble LHS
-    // Set up the parallel linear form b(.) which corresponds to the right-hand
-    // side of the FEM linear system, which in this case is (1,phi_i) where
-    // phi_i are the basis functions in fespace.
-    tracing::roctx_range_push("Assemble RHS");
-    timing::tick(&t0);
 
 
     // Solve the Laplace equation from EPI (1.0) to (LV_ENDO union RV_ENDO) (0.0)
@@ -775,8 +780,9 @@ int main(int argc, char *argv[])
         *x_phi_rv = 0.0;
     }
 
-    // For the last linear sysetem, the list of essential true dofs change because the essential boundar surfaces change.
-    // The left-hand side `a` and the right-hand side `b` needs to be re-assembled.
+    // For the last linear sysetem, the list of essential true dofs change
+    // because the essential boundar surfaces change. The left-hand side `a`
+    // and the right-hand side `b` needs to be re-assembled.
     Array<int> apex_base_ess_tdof_list;
     essential_boundaries = 0;
     essential_boundaries[opts.base_id-1] = 1;
