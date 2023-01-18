@@ -34,6 +34,9 @@ using namespace util;
 //      delta u = 0
 //
 // using the solver `solver`, storing the solution in `x`.
+//
+// It is assumed that the ParBilinearForm `a` and the ParLinearForm `b` is
+// already assembled.
 void laplace(
     ParGridFunction* x,
     Solver* solver,
@@ -83,7 +86,8 @@ void laplace(
     }
     timing::tick(&t1);
     if (verbose >= 2 && rank == 0) {
-        logging::timestamp(tout, log_prefix + " Setup boundary cond.", timing::duration(t0, t1), 3);
+        logging::timestamp(tout, log_prefix + " Setup boundary cond.",
+                           timing::duration(t0, t1), 3);
     }
     tracing::roctx_range_pop(); // Setup boundary conditions
 
@@ -96,7 +100,8 @@ void laplace(
     a->FormLinearSystem(ess_tdof_list, *x, *b, A, X, B);
     timing::tick(&t1);
     if (verbose >= 2 && rank == 0) {
-        logging::timestamp(tout, log_prefix + " Form linear system", timing::duration(t0, t1), 3);
+        logging::timestamp(tout, log_prefix + " Form linear system",
+                           timing::duration(t0, t1), 3);
     }
     tracing::roctx_range_pop(); // Form linear system
 
@@ -108,7 +113,8 @@ void laplace(
     solver->Mult(B, X);
     timing::tick(&t1, /* barrier */ true, /* device barrier */ true);
     if (verbose >= 2 && rank == 0) {
-        logging::timestamp(tout, log_prefix + " Solve", timing::duration(t0, t1), 3);
+        logging::timestamp(tout, log_prefix + " Solve",
+                           timing::duration(t0, t1), 3);
     }
     tracing::roctx_range_pop(); // Solve
 
@@ -162,10 +168,6 @@ int main(int argc, char *argv[])
     opts.rv_id   = 4;
 
     opts.uniform_refinement = 0;
-
-#if defined(MFEM_USE_HIP) || defined(MFEM_USE_CUDA)
-    opts.gpu_tuned_amg = false;
-#endif
 
     opts.fibers_per_element = true;
 
@@ -278,14 +280,6 @@ int main(int argc, char *argv[])
             "-fpv",  "--fibers-per-vertex",
             "Calculate fibers in the L2 space (one fiber per element) "
             "or H1 (one fiber per vertex).");
-
-#if defined (MFEM_USE_HIP) || defined (MFEM_USE_CUDA)
-    args.AddOption(&opts.gpu_tuned_amg,
-            "-gamg",  "--gpu-tuned-amg",
-            "-ngamg", "--no-gpu-tuned-amg",
-            "Tune the BoomerAmg preconditioner for (hopefully) better GPU performance.");
-#endif
-
     args.Parse();
 
     if (!args.Good()) {
@@ -543,20 +537,6 @@ int main(int argc, char *argv[])
     {
         prec = new HypreBoomerAMG;
         prec->SetPrintLevel(opts.verbose >= 4 ? 1 : 0);
-
-#ifdef MFEM_USE_CUDA_OR_HIP
-        // FIXME (ivhak): Currently, these setting end up giving the wrong
-        // solution to grad_psi_ab, probably caused by enforcing a boundary
-        // condition in a single vertex in psi_ab.
-        if (opts.gpu_tuned_amg) {
-            prec->SetCoarsening(8);           // PMIS
-            prec->SetCycleNumSweeps(1,1);     // 1 sweep on the up and down cycle
-            prec->SetInterpolation(17);       // extended+i, matrix-matrix
-            prec->SetAggressiveCoarsening(1); // Number of levels of aggressive coarsening
-            prec->SetStrengthThresh(0.5);
-            prec->SetRelaxType(7);            // weighted Jacobi
-        }
-#endif
     }
 
     Solver *solver;
@@ -604,11 +584,7 @@ int main(int argc, char *argv[])
     x_phi_rv->UseDevice(true);
     x_psi_ab->UseDevice(true);
 
-    // Determine the list of true (i.e. parallel conforming) essential boundary
-    // dofs, defined by the boundary attributes marked as essential (Dirichlet)
-    // and converting to a list of true dofs..
-    //
-    // The first three linear systems have the same essential true dofs, which
+    // The first three linear systems have the same essential true DoFs, which
     // depend on boundary conditions on the left ventricle endocardium surface,
     // the right ventricle endocardium surface and the epicardium surface. This
     // means that we can reuse the left-hand side `a` and right-hand side `b`
@@ -634,8 +610,7 @@ int main(int argc, char *argv[])
     }
 
     // Set up the parallel linear form b(.) which corresponds to the right-hand
-    // side of the FEM linear system, which in this case is (1,phi_i) where
-    // phi_i are the basis functions in fespace.
+    // side of the FEM linear system.
     tracing::roctx_range_push("Assemble RHS");
     timing::tick(&t0);
 
@@ -684,7 +659,6 @@ int main(int argc, char *argv[])
 
     tracing::roctx_range_pop(); // Assemble LHS
 
-
     // Solve the Laplace equation from EPI (1.0) to (LV_ENDO union RV_ENDO) (0.0)
     {
         if (opts.verbose >= 2 && rank == 0) {
@@ -716,7 +690,6 @@ int main(int argc, char *argv[])
         }
     }
 
-
     // Solve the Laplace equation from LV_ENDO (1.0) to (RV_ENDO union EPI) (0.0)
     {
         if (opts.verbose >= 2 && rank == 0) {
@@ -747,7 +720,6 @@ int main(int argc, char *argv[])
             logging::timestamp(tout, "[phi_lv]: Total", timing::duration(t0, t1), 3, '=');
         }
     }
-
 
     // Solve the Laplace equation from RV_ENDO (1.0) to (LV_ENDO union EPI) (0.0)
     if (mesh_has_right_ventricle) {
@@ -781,12 +753,15 @@ int main(int argc, char *argv[])
     }
 
     // For the last linear sysetem, the list of essential true dofs change
-    // because the essential boundar surfaces change. The left-hand side `a`
+    // because the essential boundary surfaces change. The left-hand side `a`
     // and the right-hand side `b` needs to be re-assembled.
     Array<int> apex_base_ess_tdof_list;
     essential_boundaries = 0;
     essential_boundaries[opts.base_id-1] = 1;
     fespace_scalar_h1.GetEssentialTrueDofs(essential_boundaries, apex_base_ess_tdof_list);
+
+    // The DoF in the apex is part of the epicardium surface, but we only want
+    // this single DoF. Add it manually.
     int apex_dof = -1;
     if (apex >= 0) {
         // Initialize the internal data needed in the finite element space
@@ -1021,7 +996,8 @@ int main(int argc, char *argv[])
 
         timing::tick(&t1);
         if (opts.verbose >= 2 && rank == 0) {
-            logging::timestamp(tout, "[Projection]: Setup", timing::duration(t0, t1), 2);
+            logging::timestamp(tout, "[Projection]: Setup",
+                               timing::duration(t0, t1), 2);
         }
         tracing::roctx_range_pop();
 
@@ -1037,7 +1013,8 @@ int main(int argc, char *argv[])
                               h1_I, h1_J, l2_I, l2_J);
             timing::tick(&t1, /* barrier */ true, /* device barrier*/ true);
             if (opts.verbose >= 2 && rank == 0) {
-                logging::timestamp(tout, "[Projection]: x_phi_epi", timing::duration(t0, t1), 2);
+                logging::timestamp(tout, "[Projection]: x_phi_epi",
+                                   timing::duration(t0, t1), 2);
             }
         }
 
@@ -1051,7 +1028,8 @@ int main(int argc, char *argv[])
             timing::tick(&t1, /* barrier */ true, /* device barrier*/ true);
         }
         if (opts.verbose >= 2 && rank == 0) {
-            logging::timestamp(tout, "[Projection]: x_phi_lv", timing::duration(t0, t1), 2);
+            logging::timestamp(tout, "[Projection]: x_phi_lv",
+                               timing::duration(t0, t1), 2);
         }
 
         // Right ventricle endocardium
@@ -1067,7 +1045,8 @@ int main(int argc, char *argv[])
             }
             timing::tick(&t1);
             if (opts.verbose >= 2 && rank == 0) {
-                logging::timestamp(tout, "[Projection]: x_phi_rv", timing::duration(t0, t1), 2);
+                logging::timestamp(tout, "[Projection]: x_phi_rv",
+                                   timing::duration(t0, t1), 2);
             }
         } else {
             *x_phi_rv_l2 = 0.0;
@@ -1084,7 +1063,8 @@ int main(int argc, char *argv[])
         tracing::roctx_range_pop();
         timing::tick(&end_proj);
         if (opts.verbose >= 2 && rank == 0) {
-            logging::timestamp(tout, "[Projection]: Total", timing::duration(begin_proj, end_proj), 2, '=');
+            logging::timestamp(tout, "[Projection]: Total",
+                               timing::duration(begin_proj, end_proj), 2, '=');
         } else if (opts.verbose && rank == 0) {
             logging::timestamp(tout, "Project Laplacians from H1 -> L2",
                                timing::duration(begin_proj, end_proj), 1);
@@ -1103,7 +1083,8 @@ int main(int argc, char *argv[])
         tracing::roctx_range_push("Interpolate gradients L2 -> H1");
 
         timing::tick(&t0);
-        ParFiniteElementSpace *fespace_vector_h1 = new ParFiniteElementSpace(pmesh, &h1_fec, 3, Ordering::byVDIM);
+        ParFiniteElementSpace *fespace_vector_h1;
+        fepsace_vector_h1 = new ParFiniteElementSpace(pmesh, &h1_fec, 3, Ordering::byVDIM);
         Table *vertex_to_element = pmesh->GetVertexToElementTable();
 
         const int *v2e_I = vertex_to_element->ReadI();
@@ -1132,7 +1113,8 @@ int main(int argc, char *argv[])
                                        v2e_I, v2e_J, l2_I, l2_J);
             timing::tick(&t1, /* barrier */ true, /* device barrier*/ true);
             if (opts.verbose >= 2 && rank == 0) {
-                logging::timestamp(tout, "[Interpolate]: grad_phi_epi", timing::duration(t0, t1), 2);
+                logging::timestamp(tout, "[Interpolate]: grad_phi_epi",
+                                   timing::duration(t0, t1), 2);
             }
         }
 
@@ -1145,7 +1127,8 @@ int main(int argc, char *argv[])
                                        v2e_I, v2e_J, l2_I, l2_J);
             timing::tick(&t1, /* barrier */ true, /* device barrier*/ true);
             if (opts.verbose >= 2 && rank == 0) {
-                logging::timestamp(tout, "[Interpolate]: grad_phi_lv", timing::duration(t0, t1), 2);
+                logging::timestamp(tout, "[Interpolate]: grad_phi_lv",
+                                   timing::duration(t0, t1), 2);
             }
         }
 
@@ -1158,7 +1141,8 @@ int main(int argc, char *argv[])
                                        v2e_I, v2e_J, l2_I, l2_J);
             timing::tick(&t1, /* barrier */ true, /* device barrier*/ true);
             if (opts.verbose >= 2 && rank == 0) {
-                logging::timestamp(tout, "[Interpolate]: grad_phi_rv", timing::duration(t0, t1), 2);
+                logging::timestamp(tout, "[Interpolate]: grad_phi_rv",
+                                   timing::duration(t0, t1), 2);
             }
         } else {
             *grad_phi_rv_h1 = 0.0;
@@ -1173,7 +1157,8 @@ int main(int argc, char *argv[])
                                        v2e_I, v2e_J, l2_I, l2_J);
             timing::tick(&t1, /* barrier */ true, /* device barrier*/ true);
             if (opts.verbose >= 2 && rank == 0) {
-                logging::timestamp(tout, "[Interpolate]: grad_psi_ab", timing::duration(t0, t1), 2);
+                logging::timestamp(tout, "[Interpolate]: grad_psi_ab",
+                                   timing::duration(t0, t1), 2);
             }
         }
 
@@ -1190,7 +1175,8 @@ int main(int argc, char *argv[])
         delete vertex_to_element;
         timing::tick(&end_interp);
         if (opts.verbose >= 2 && rank == 0) {
-            logging::timestamp(tout, "[Interpolate]: Total", timing::duration(begin_interp, end_interp), 2, '=');
+            logging::timestamp(tout, "[Interpolate]: Total",
+                               timing::duration(begin_interp, end_interp), 2, '=');
         } else if (opts.verbose && rank == 0) {
             logging::timestamp(tout, "Interpolate gradients from L2 -> H1",
                                timing::duration(begin_interp, end_interp), 1);
@@ -1264,17 +1250,22 @@ int main(int argc, char *argv[])
     timing::tick(&t1, /* barrier */ true, /* device barrier */ true);
     timing::tick(&end_ldrb, /* barrier */ false);
     if (opts.verbose >= 2 && rank == 0) {
-        logging::timestamp(tout, "[Fiber]: Run define_fibers", timing::duration(t0, t1), 2);
-        logging::timestamp(tout, "[Fiber]: Total", timing::duration(begin_ldrb, end_ldrb), 2, '=');
+        logging::timestamp(tout, "[Fiber]: Run define_fibers",
+                           timing::duration(t0, t1), 2);
+        logging::timestamp(tout, "[Fiber]: Total",
+                           timing::duration(begin_ldrb, end_ldrb), 2, '=');
     } else if (opts.verbose && rank == 0) {
-        logging::timestamp(tout, "Run LDRB", timing::duration(begin_ldrb, end_ldrb), 1, '-');
+        logging::timestamp(tout, "Run LDRB",
+                           timing::duration(begin_ldrb, end_ldrb), 1, '-');
     }
 
     timing::tick(&end_fiber);
     if (opts.verbose >= 2 && rank == 0) {
-        logging::timestamp(tout, "[LDRB]: Total", timing::duration(begin_fiber, end_fiber), 1, '=');
+        logging::timestamp(tout, "[LDRB]: Total",
+                           timing::duration(begin_fiber, end_fiber), 1, '=');
     } else if (opts.verbose && rank == 0) {
-        logging::timestamp(tout, "Total", timing::duration(begin_fiber, end_fiber), 1, '=');
+        logging::timestamp(tout, "Total",
+                           timing::duration(begin_fiber, end_fiber), 1, '=');
     }
 
 
@@ -1308,24 +1299,34 @@ int main(int argc, char *argv[])
             save::save_mesh(pmesh, mfem_output_dir, mesh_basename, rank);
 
             if (opts.save_laplacians) {
-                save::save_solution(x_phi_epi, mfem_output_dir, mesh_basename, "_phi_epi.gf", rank);
-                save::save_solution(x_phi_lv,  mfem_output_dir, mesh_basename, "_phi_lv.gf", rank);
-                save::save_solution(x_phi_rv,  mfem_output_dir, mesh_basename, "_phi_rv.gf", rank);
+                save::save_solution(x_phi_epi, mfem_output_dir, mesh_basename,
+                                    "_phi_epi.gf", rank);
+                save::save_solution(x_phi_lv,  mfem_output_dir, mesh_basename,
+                                    "_phi_lv.gf", rank);
+                save::save_solution(x_phi_rv,  mfem_output_dir, mesh_basename,
+                                    "_phi_rv.gf", rank);
             }
 
             if (opts.save_gradients) {
-                save::save_solution(grad_phi_epi, mfem_output_dir, mesh_basename, "_grad_phi_epi.gf", rank);
-                save::save_solution(grad_phi_lv,  mfem_output_dir, mesh_basename, "_grad_phi_lv.gf", rank);
-                save::save_solution(grad_phi_rv,  mfem_output_dir, mesh_basename, "_grad_phi_rv.gf", rank);
-                save::save_solution(grad_psi_ab,  mfem_output_dir, mesh_basename, "_grad_psi_ab.gf", rank);
+                save::save_solution(grad_phi_epi, mfem_output_dir, mesh_basename,
+                                    "_grad_phi_epi.gf", rank);
+                save::save_solution(grad_phi_lv,  mfem_output_dir, mesh_basename,
+                                    "_grad_phi_lv.gf", rank);
+                save::save_solution(grad_phi_rv,  mfem_output_dir, mesh_basename,
+                                    "_grad_phi_rv.gf", rank);
+                save::save_solution(grad_psi_ab,  mfem_output_dir, mesh_basename,
+                                    "_grad_psi_ab.gf", rank);
             }
+
             if (opts.save_partitioning && rank == 0) {
                 std::ofstream partitioning_out;
                 std::ostringstream partitioning_out_fname;
                 partitioning_out_fname << mfem_output_dir << "/partitioning.txt";
                 partitioning_out.open(partitioning_out_fname.str().c_str());
                 if (partitioning_out.fail()) {
-                    std::cerr << "Could not open output file '" << partitioning_out_fname.str().c_str() << "'" << std::endl;
+                    std::cerr << "Could not open output file '"
+                              << partitioning_out_fname.str().c_str() << "'"
+                              << std::endl;
                     exit(1);
                 }
                 for (int i = 0; i < global_num_elements; i++) {
