@@ -435,7 +435,7 @@ void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t)
     quat2rot(Qab, q);
 }
 
-// Calculate the fiber orientation at vertex i
+// Calculate the fiber orientation in element (or vertex) i
 MFEM_HOST_DEVICE
 static void calculate_fiber(
     int i,
