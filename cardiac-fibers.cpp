@@ -1084,7 +1084,7 @@ int main(int argc, char *argv[])
 
         timing::tick(&t0);
         ParFiniteElementSpace *fespace_vector_h1;
-        fepsace_vector_h1 = new ParFiniteElementSpace(pmesh, &h1_fec, 3, Ordering::byVDIM);
+        fespace_vector_h1 = new ParFiniteElementSpace(pmesh, &h1_fec, 3, Ordering::byVDIM);
         Table *vertex_to_element = pmesh->GetVertexToElementTable();
 
         const int *v2e_I = vertex_to_element->ReadI();
