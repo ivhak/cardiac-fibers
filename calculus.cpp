@@ -305,20 +305,15 @@ void axis(mat3x3& Q, vec3& u, vec3& v)
     e1 = u;
     vec3_normalize(e1);
 
-    // e2 = u / || u ||
-    // where u = v - (e0*v)e0
-    //
-    // Normalize v as an initial guess for e0
+    // e2 = v - (e1*v)e1 / || v - (e1*v)e1 ||
     e2 = v;
-    vec3_normalize(e2);
-
-    vec3 e1_dot_e2_e1;
+    vec3 e1_dot_v_e1;
     {
-        const double e1_dot_e2 = vec3_dot(e1, e2);
-        e1_dot_e2_e1 = e1;
-        e1_dot_e2_e1 *= e1_dot_e2;
+        const double e1_dot_v = vec3_dot(e1, v);
+        e1_dot_v_e1 = e1;
+        e1_dot_v_e1 *= e1_dot_v;
     }
-    e2 -= e1_dot_e2_e1;
+    e2 -= e1_dot_v_e1;
     vec3_normalize(e2);
 
     // e0 = e1 x e2
@@ -326,17 +321,9 @@ void axis(mat3x3& Q, vec3& u, vec3& v)
 
     vec3_normalize(e0);
 
-    Q[0][0] = e0[0];
-    Q[1][0] = e0[1];
-    Q[2][0] = e0[2];
-
-    Q[0][1] = e1[0];
-    Q[1][1] = e1[1];
-    Q[2][1] = e1[2];
-
-    Q[0][2] = e2[0];
-    Q[1][2] = e2[1];
-    Q[2][2] = e2[2];
+    Q[0][0] = e0[0]; Q[0][1] = e1[0]; Q[0][2] = e2[0];
+    Q[1][0] = e0[1]; Q[1][1] = e1[1]; Q[1][2] = e2[1];
+    Q[2][0] = e0[2]; Q[2][1] = e1[2]; Q[2][2] = e2[2];
 }
 
 // Take the coordinate system Q, in the form of a 3x3 matrix, and the fiber
