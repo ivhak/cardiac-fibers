@@ -41,14 +41,37 @@ Options:
    -pm, --par-mesh, -npm, --no-par-mesh, current option: --no-par-mesh
         Mesh is parallel, i.e, one file for each rank.
         Each rank will read the mesh <MESH_FILE>.<rank>, e.g., mesh.000000.
-   -a '<double>...', --apex '<double>...', (required)
+   -a '<double>...', --apex '<double>...', current value: '0 0 0'
         Coordinate of apex, space separated list: 'x y z'.
+   -aid <int>, --apex-id <int>, current value: -1
+        Treat the apex as a surface instead of a single vertex and set the id. Overrides the --apex flag.
+   -base <int>, --base-id <int>, current value: 1
+        Id of the base surface.
+   -epi <int>, --epi-id <int>, current value: 2
+        Id of the epicardium surface.
+   -lv <int>, --lv-id <int>, current value: 3
+        Id of the left ventricle endocardium surface.
+   -rv <int>, --rv-id <int>, current value: 4
+        Id of the right ventricle endocardium surface.
+        Set to -1 if there is no right ventricle in the geometry, e.g. for a single ventricle geometry.
+   -ao <double>, --alpha-endo <double>, current value: 60
+        Alpha angle in endocardium.
+   -ai <double>, --alpha-epi <double>, current value: -60
+        Alpha angle in epicardium.
+   -bo <double>, --beta-endo <double>, current value: 0
+        Beta angle in endocardium.
+   -bi <double>, --beta-epi <double>, current value: 0
+        Beta angle in epicardium.
+   -u <int>, --uniform-refinement <int>, current value: 0
+        Perform n levels of uniform refinement on the mesh.
+   -fpe, --fibers-per-element, -fpv, --fibers-per-vertex, current option: --fibers-per-element
+        Calculate fibers in the L2 space (one fiber per element) or H1 (one fiber per vertex).
+   -d <string>, --device <string>, current value: cpu
+        Device configuration string, see Device::Configure().
    -o <string>, --out <string>, current value: .
         Directory for output files.
    -t, --time-to-file, -nt, --no-time-to-file, current option: --no-time-to-file
         Output time log to <OUT>/time.txt rather than stdout, where <OUT> is set with the -o (--out) flag.
-   -d <string>, --device <string>, current value: cpu
-        Device configuration string, see Device::Configure().
    -p, --save-paraview, -np, --no-save-paraview, current option: --save-paraview
         Save data files for ParaView (paraview.org) visualization.
    -s, --save-mfem, -ns, --no-save-mfem, current option: --no-save-mfem
@@ -59,29 +82,6 @@ Options:
         Save the gradients of phi_epi, phi_lv, phi_rv and psi_ab
    -sp, --save-partitioning, -nsp, --no-save-partitioning, current option: --no-save-partitioning
         Save the mesh partitioning.
-   -ao <double>, --alpha-endo <double>, current value: 60
-        Alpha angle in endocardium.
-   -ai <double>, --alpha-epi <double>, current value: -60
-        Alpha angle in epicardium.
-   -bo <double>, --beta-endo <double>, current value: 0
-        Beta angle in endocardium.
-   -bi <double>, --beta-epi <double>, current value: 0
-        Beta angle in epicardium.
-   -base <int>, --base-id <int>, current value: 1
-        Id of the base surface.
-   -epi <int>, --epi-id <int>, current value: 2
-        Id of the epicardium surface.
-   -lv <int>, --lv-id <int>, current value: 3
-        Id of the left ventricle endocardium surface.
-   -rv <int>, --rv-id <int>, current value: 4
-        Id of the right ventricle endocardium surface.
-        Set to -1 if there is no right ventricle in the geometry, e.g. for a single ventricle geometry.
-   -u <int>, --uniform-refinement <int>, current value: 0
-        Perform n levels of uniform refinement on the mesh.
-   -fpe, --fibers-per-element, -fpv, --fibers-per-vertex, current option: --fibers-per-element
-        Calculate fibers in the L2 space (one fiber per element) or H1 (one fiber per vertex).
-   -gamg, --gpu-tuned-amg, -ngamg, --no-gpu-tuned-amg, current option: --no-gpu-tuned-amg
-        Tune the BoomerAmg preconditioner for (hopefully) better GPU performance.
 ```
 
 ### Example 1: Patient specific bi-ventricle geometry

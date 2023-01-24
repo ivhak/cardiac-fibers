@@ -147,7 +147,11 @@ int main(int argc, char *argv[])
 #endif
 
     opts.verbose = 0;
+
     opts.prescribed_apex = Vector(3);
+    opts.prescribed_apex[0] = 0;
+    opts.prescribed_apex[1] = 0;
+    opts.prescribed_apex[2] = 0;
 
     opts.save_paraview   = true;
     opts.save_mfem       = false;
@@ -166,6 +170,7 @@ int main(int argc, char *argv[])
     opts.epi_id  = 2;
     opts.lv_id   = 3;
     opts.rv_id   = 4;
+    opts.apex_id = -1;
 
     opts.uniform_refinement = 0;
 
@@ -196,7 +201,61 @@ int main(int argc, char *argv[])
 
     args.AddOption(&opts.prescribed_apex,
             "-a", "--apex",
-            "Coordinate of apex, space separated list: 'x y z'.", true);
+            "Coordinate of apex, space separated list: 'x y z'.");
+
+    args.AddOption(&opts.apex_id,
+            "-aid", "--apex-id",
+            "Treat the apex as a surface instead of a single vertex and set the id. "
+            "Overrides the --apex flag.");
+
+    args.AddOption(&opts.base_id,
+            "-base", "--base-id",
+            "Id of the base surface.");
+
+    args.AddOption(&opts.epi_id,
+            "-epi", "--epi-id",
+            "Id of the epicardium surface.");
+
+    args.AddOption(&opts.lv_id,
+            "-lv", "--lv-id",
+            "Id of the left ventricle endocardium surface.");
+
+    args.AddOption(&opts.rv_id,
+            "-rv", "--rv-id",
+            "Id of the right ventricle endocardium surface.\n"
+            "\tSet to -1 if there is no right ventricle in the geometry, "
+            "e.g. for a single ventricle geometry.");
+
+
+    args.AddOption(&opts.alpha_endo,
+            "-ao", "--alpha-endo",
+            "Alpha angle in endocardium.");
+
+    args.AddOption(&opts.alpha_epi,
+            "-ai", "--alpha-epi",
+            "Alpha angle in epicardium.");
+
+    args.AddOption(&opts.beta_endo,
+            "-bo", "--beta-endo",
+            "Beta angle in endocardium.");
+
+    args.AddOption(&opts.beta_epi,
+            "-bi", "--beta-epi",
+            "Beta angle in epicardium.");
+
+    args.AddOption(&opts.uniform_refinement,
+            "-u", "--uniform-refinement",
+            "Perform n levels of uniform refinement on the mesh.");
+
+    args.AddOption(&opts.fibers_per_element,
+            "-fpe",  "--fibers-per-element",
+            "-fpv",  "--fibers-per-vertex",
+            "Calculate fibers in the L2 space (one fiber per element) "
+            "or H1 (one fiber per vertex).");
+
+    args.AddOption(&opts.device_config,
+            "-d", "--device",
+            "Device configuration string, see Device::Configure().");
 
     args.AddOption(&opts.output_dir,
             "-o", "--out",
@@ -207,10 +266,6 @@ int main(int argc, char *argv[])
             "-nt","--no-time-to-file",
             "Output time log to <OUT>/time.txt rather than stdout, "
             "where <OUT> is set with the -o (--out) flag.");
-
-    args.AddOption(&opts.device_config,
-            "-d", "--device",
-            "Device configuration string, see Device::Configure().");
 
     args.AddOption(&opts.save_paraview,
             "-p",  "--save-paraview",
@@ -237,49 +292,7 @@ int main(int argc, char *argv[])
             "-nsp", "--no-save-partitioning",
             "Save the mesh partitioning.");
 
-    args.AddOption(&opts.alpha_endo,
-            "-ao", "--alpha-endo",
-            "Alpha angle in endocardium.");
 
-    args.AddOption(&opts.alpha_epi,
-            "-ai", "--alpha-epi",
-            "Alpha angle in epicardium.");
-
-    args.AddOption(&opts.beta_endo,
-            "-bo", "--beta-endo",
-            "Beta angle in endocardium.");
-
-    args.AddOption(&opts.beta_epi,
-            "-bi", "--beta-epi",
-            "Beta angle in epicardium.");
-
-    args.AddOption(&opts.base_id,
-            "-base", "--base-id",
-            "Id of the base surface.");
-
-    args.AddOption(&opts.epi_id,
-            "-epi", "--epi-id",
-            "Id of the epicardium surface.");
-
-    args.AddOption(&opts.lv_id,
-            "-lv", "--lv-id",
-            "Id of the left ventricle endocardium surface.");
-
-    args.AddOption(&opts.rv_id,
-            "-rv", "--rv-id",
-            "Id of the right ventricle endocardium surface.\n"
-            "\tSet to -1 if there is no right ventricle in the geometry, "
-            "e.g. for a single ventricle geometry.");
-
-    args.AddOption(&opts.uniform_refinement,
-            "-u", "--uniform-refinement",
-            "Perform n levels of uniform refinement on the mesh.");
-
-    args.AddOption(&opts.fibers_per_element,
-            "-fpe",  "--fibers-per-element",
-            "-fpv",  "--fibers-per-vertex",
-            "Calculate fibers in the L2 space (one fiber per element) "
-            "or H1 (one fiber per vertex).");
     args.Parse();
 
     if (!args.Good()) {
@@ -293,7 +306,8 @@ int main(int argc, char *argv[])
         args.PrintOptions(std::cout);
     }
 
-    bool mesh_has_right_ventricle = opts.rv_id != -1;
+    const bool mesh_has_right_ventricle = opts.rv_id != -1;
+    const bool apex_is_surface = opts.apex_id != -1;
 
     // Make sure the output directory exists if we are saving anything
     if (opts.save_mfem || opts.save_paraview || opts.time_to_file) {
@@ -429,7 +443,7 @@ int main(int argc, char *argv[])
     // prescribed apex. The rank with the closest one sets up the boundary
     // conditions in that vertex.
     int apex = -1;
-    {
+    if (!apex_is_surface) {
         struct timespec begin_apex, end_apex;
         timing::tick(&begin_apex);
         timing::tick(&t0, /* barrier */ false);
@@ -528,6 +542,10 @@ int main(int argc, char *argv[])
                                timing::duration(begin_apex, end_apex), 0);
         }
 
+    } else {
+        logging::info(std::cout, 
+                      "The --apex-id flag was passed, treating the apex as a surface "
+                      "rather than a single vertex.");
     }
 
 
@@ -758,12 +776,15 @@ int main(int argc, char *argv[])
     Array<int> apex_base_ess_tdof_list;
     essential_boundaries = 0;
     essential_boundaries[opts.base_id-1] = 1;
+    if (apex_is_surface) {
+        essential_boundaries[opts.apex_id-1] = 1;
+    }
     fespace_scalar_h1.GetEssentialTrueDofs(essential_boundaries, apex_base_ess_tdof_list);
 
     // The DoF in the apex is part of the epicardium surface, but we only want
     // this single DoF. Add it manually.
     int apex_dof = -1;
-    if (apex >= 0) {
+    if (apex >= 0 && !apex_is_surface) {
         // Initialize the internal data needed in the finite element space
         fespace_scalar_h1.BuildDofToArrays();
 
@@ -802,6 +823,11 @@ int main(int argc, char *argv[])
 
         nonzero_essential_boundaries = 0;
         nonzero_essential_boundaries[opts.base_id-1] = 1;
+
+        if (apex_is_surface) {
+            zero_essential_boundaries = 0;
+            zero_essential_boundaries[opts.apex_id-1] = 1;
+        }
 
         zero_essential_boundaries = 0;
 

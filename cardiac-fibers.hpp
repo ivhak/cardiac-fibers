@@ -40,6 +40,7 @@ typedef struct {
     int epi_id;
     int lv_id;
     int rv_id;
+    int apex_id;
     int uniform_refinement;
     bool fibers_per_element;
 } Options;
