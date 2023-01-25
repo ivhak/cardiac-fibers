@@ -77,6 +77,22 @@ elif [ "$1" = "dgx2q" ]; then
 
     CARDIAC_FIBERS_HAS_CUDA=YES
 
+elif [ "$1" = "hgx2q" ]; then
+    # CUDA build
+    echo "Setting up environment for dgx2q (CUDA)"
+
+    module use /global/D1/homes/james/ex3modules/hgx2q/2022-08-17/modulefiles
+
+    module load cuda11.0/toolkit/11.0.3
+    module load hypre-32-2.25.0
+    module load openmpi-4.1.4
+    module load metis-32-5.1.0
+
+    export MFEM_ROOT="${PKG_ROOT}/hgx2q/mfem-4.5"
+    export MFEM_DBG_ROOT="${PKG_ROOT}/hgx2q/mfem-dbg-4.5"
+
+    CARDIAC_FIBERS_HAS_CUDA=YES
+
 elif [ "$1" = "defq" ]; then
     # CPU build
     echo "Setting up environment for defq (cpu)"
