@@ -54,18 +54,6 @@ static double quat_len(quat& q)
     return sqrt(q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3]);
 }
 
-
-// Negate the values of quaternion q
-MFEM_HOST_DEVICE
-static void quat_negate(quat& q)
-{
-    q[0] = -(q[0]);
-    q[1] = -(q[1]);
-    q[2] = -(q[2]);
-    q[3] = -(q[3]);
-}
-
-
 // Normalize quaternion
 MFEM_HOST_DEVICE
 static void quat_normalize(quat& q)
@@ -270,11 +258,6 @@ static void slerp(quat& q, quat& q1, quat& q2, double t)
 {
     double dot = quat_dot(q1, q2);
     q = q2;
-
-    if (dot < 0) {
-        dot = -dot;
-        quat_negate(q);
-    }
 
     // Slerp(q1, q2, t) = ((sin(1-t)*theta)/sin(theta))q1 + ((sin(t)*theta)/sin(theta))q2
     // where theta = acos(q1 dot q2)
