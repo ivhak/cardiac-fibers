@@ -410,25 +410,26 @@ void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t)
         &k_qa, &k_qa_minus,
     };
 
-    double max_abs_dot  = -1.0;
-    quat qm = {0};
+    double max_norm  = -1.0;
+    quat qm = {0}, temp = {0};
     for (int i = 0; i < 8; i++) {
         quat *v = quat_array[i];
-        quat t = {0};
-        quat_hamilton(t, *v, qb);
-        const double abs_dot = quat_len(t);
-        if (abs_dot > max_abs_dot) {
-            max_abs_dot = abs_dot;
+        quat_hamilton(temp, *v, qb);
+        const double norm = quat_len(temp);
+        if (norm > max_norm) {
+            max_norm = norm;
             qm = *v;
         }
     }
 
     // If the angle is very small, i.e. max_dot is very close to one, return Qb.
-    if (max_abs_dot > 1-1e-12) {
+    if (max_norm > 1-1e-12) {
         mat3x3_copy(Qab, Qb);
         return;
     }
 
+    // We have found the candiate qm that requires the smallest rotation angle.
+    // Interpolate with slerp.
     quat q = {0};
     slerp(q, qm, qb, t);
     quat_normalize(q);
