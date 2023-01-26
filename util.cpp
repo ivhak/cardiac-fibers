@@ -106,18 +106,19 @@ void util::timing::tick(struct timespec *t, bool barrier, bool device_barrier)
     // the calls to tick will use an MPI barrier if `barrier` is true, and the
     // code is compiled with -DTIMING_BARRIERS, and likewise force a device
     // syncronization when `device_barrier` is true;
-    //
+
+    if (device_barrier) {
+#ifdef TIMING_BARRIERS
+        MFEM_STREAM_SYNC;
+        MFEM_DEVICE_SYNC;
+#endif
+    }
     if (barrier) {
 #ifdef TIMING_BARRIERS
         MPI_Barrier(MPI_COMM_WORLD);
 #endif
     }
 
-    if (device_barrier) {
-#ifdef TIMING_BARRIERS
-        MFEM_DEVICE_SYNC;
-#endif
-    }
 
     clock_gettime(CLOCK_MONOTONIC, t);
 }
