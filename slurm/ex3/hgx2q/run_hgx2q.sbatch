@@ -55,21 +55,21 @@ function main {
     lscpu
     numactl -H
     nvidia-smi
-    git -C "${BUILD_DIR}" describe --always --abbrev=40 --dirty
-    git -C "${BUILD_DIR}" log --oneline --decorate=short | head -n 10
+    git -C "${BUILD_DIR}/cardiac-fibers" describe --always --abbrev=40 --dirty
+    git -C "${BUILD_DIR}/cardiac-fibers" log --oneline --decorate=short | head -n 10
 
-    make -C ${BUILD_DIR} clean cardiac-fibers
+    make -C "${BUILD_DIR}/cardiac-fibers" clean cardiac-fibers
 
     mkdir -p ${JOB_DIR}
 
-    # run heart01 --no-save-paraview
-    # run heart02 --save-paraview
-    # run heart03 --no-save-paraview
-    # run heart04 --no-save-paraview
-    # run heart05 --no-save-paraview
-    # run heart06 --no-save-paraview
-    # run heart07 --no-save-paraview
-    # run heart08 --no-save-paraview
+    run heart01 --no-save-paraview
+    run heart02 --save-paraview
+    run heart03 --no-save-paraview
+    run heart04 --no-save-paraview
+    run heart05 --no-save-paraview
+    run heart06 --no-save-paraview
+    run heart07 --no-save-paraview
+    run heart08 --no-save-paraview
     run heart09 --no-save-paraview
 }
 

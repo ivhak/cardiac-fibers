@@ -1,5 +1,7 @@
 #!/usr/bin/env sh
 
-export CUDA_VISIBLE_DEVICES="$SLURM_LOCALID"
+export CUDA_VISIBLE_DEVICES="$(echo $CUDA_VISIBLE_DEVICES | cut -d',' -f $$(($SLURM_LOCALID+1)))"
+
+echo "Rank $SLURM_LOCALID: CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
 
 "$@"
