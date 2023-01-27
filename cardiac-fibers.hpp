@@ -41,6 +41,9 @@ typedef struct {
     int lv_id;
     int rv_id;
     int apex_id;
+    double tol_lv_free_wall;
+    double tol_rv_free_wall;
+    double tol_septum;
     int uniform_refinement;
     bool fibers_per_element;
 } Options;

@@ -67,6 +67,16 @@ static void quat_normalize(quat& q)
     q[3] = q[3] * m;
 }
 
+// Negate quaternion
+MFEM_HOST_DEVICE
+static void quat_negate(quat& q)
+{
+    q[0] = -q[0];
+    q[1] = -q[1];
+    q[2] = -q[2];
+    q[3] = -q[3];
+}
+
 // vec3_cross product of two 3D vectors a and b, store in c.
 MFEM_HOST_DEVICE
 void vec3_cross(vec3& c, vec3& a, vec3& b)
@@ -115,28 +125,10 @@ static void vec3_negate(vec3& a)
     a[2] = -a[2];
 }
 
-// Copy matrix B into A
+// Calculate the magnitude of a vec3
 MFEM_HOST_DEVICE
-static void mat3x3_copy(mat3x3& A, mat3x3& B)
-{
-    A[0][0] = B[0][0]; A[0][1] = B[0][1]; A[0][2] = B[0][2];
-    A[1][0] = B[1][0]; A[1][1] = B[1][1]; A[1][2] = B[1][2];
-    A[2][0] = B[2][0]; A[2][1] = B[2][1]; A[2][2] = B[2][2];
-}
-
-// Copy matrix B into A
-MFEM_HOST_DEVICE
-static bool mat3x3_is_zero(mat3x3& A)
-{
-    return A[0][0] == 0.0
-        && A[0][1] == 0.0
-        && A[0][2] == 0.0
-        && A[1][0] == 0.0
-        && A[1][1] == 0.0
-        && A[1][2] == 0.0
-        && A[2][0] == 0.0
-        && A[2][1] == 0.0
-        && A[2][2] == 0.0;
+static double vec3_magnitude(vec3& v){
+    return sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
 }
 
 // Set matrix C to the matrix multiplication of A and B; C = A x B
@@ -257,18 +249,27 @@ MFEM_HOST_DEVICE
 static void slerp(quat& q, quat& q1, quat& q2, double t)
 {
     double dot = quat_dot(q1, q2);
-    q = q2;
+    // If the dot product is close to one, the angle approaches zero, and slerp
+    // reduces to a regular linear interpolation.
+    if (dot > 1-1e-12) {
+        // Slerp(q1, q2, t) = ((sin(1-t)*theta)/sin(theta))q1 + ((sin(t)*theta)/sin(theta))q2
+        // where theta = acos(q1 dot q2)
+        const double angle = acos(dot);
+        const double a = sin(angle * (1-t))/sin(angle);
+        const double b = sin(angle * t)/sin(angle);
 
-    // Slerp(q1, q2, t) = ((sin(1-t)*theta)/sin(theta))q1 + ((sin(t)*theta)/sin(theta))q2
-    // where theta = acos(q1 dot q2)
-    const double angle = acos(dot);
-    const double a = sin(angle * (1-t))/sin(angle);
-    const double b = sin(angle * t)/sin(angle);
-
-    quat q1a = q1;
-    q1a *= a;
-    q *= b;
-    q += q1a;
+        q = q2;
+        q *= b;
+        quat q1a = q1;
+        q1a *= a;
+        q += q1a;
+    } else {
+        q = q1;
+        q *= (1-t);
+        quat q2t = q2;
+        q2t *= t;
+        q += q2t;
+    }
 }
 
 // Given two vectors u and v, u being a vector pointing in
@@ -357,22 +358,12 @@ void orient(mat3x3& Q_out, mat3x3& Q, double a, double b)
 MFEM_HOST_DEVICE
 void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t)
 {
-
-    if (mat3x3_is_zero(Qa) && mat3x3_is_zero(Qb)) {
-        // Assume that Qab is already zero
-        return;
-    } else if (mat3x3_is_zero(Qa)) {
-        mat3x3_copy(Qab, Qb);
-        return;
-    } else if (mat3x3_is_zero(Qb)) {
-        mat3x3_copy(Qab, Qa);
-        return;
-    }
-
     // Translate the rotation matrices Qa and Qb into quaternions
     quat qa = {0}, qb = {0};
     rot2quat(qa, Qa);
     rot2quat(qb, Qb);
+    quat_normalize(qa);
+    quat_normalize(qb);
 
     // Find qm in { ±qa, ±i*qa, ±j*qa, ±k*qa} that maximizes ||qm*qb||
     const double a = qa[0], b = qa[1], c = qa[2], d = qa[3];
@@ -381,35 +372,35 @@ void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t)
     quat j_qa = {-c,  d,  a, -b};
     quat k_qa = {-d, -c,  b,  a};
 
-    quat qa_minus   = {-a, -b, -c, -d};
-    quat i_qa_minus = {-i_qa[0], -i_qa[1], -i_qa[2], -i_qa[3]};
-    quat j_qa_minus = {-j_qa[0], -j_qa[1], -j_qa[2], -j_qa[3]};
-    quat k_qa_minus = {-k_qa[0], -k_qa[1], -k_qa[2], -k_qa[3]};
+    quat minus_qa   = {-a, -b, -c, -d};
+    quat minus_i_qa = {-i_qa[0], -i_qa[1], -i_qa[2], -i_qa[3]};
+    quat minus_j_qa = {-j_qa[0], -j_qa[1], -j_qa[2], -j_qa[3]};
+    quat minus_k_qa = {-k_qa[0], -k_qa[1], -k_qa[2], -k_qa[3]};
 
     quat *quat_array[8] = {
-        &qa,   &qa_minus,
-        &i_qa, &i_qa_minus,
-        &j_qa, &j_qa_minus,
-        &k_qa, &k_qa_minus,
+        &qa,   &minus_qa,
+        &i_qa, &minus_i_qa,
+        &j_qa, &minus_j_qa,
+        &k_qa, &minus_k_qa,
     };
 
-    double max_norm  = -1.0;
-    quat qm = {0}, temp = {0};
+    quat qm = {0};
+    double max_abs_dot  = -1.0;
     for (int i = 0; i < 8; i++) {
         quat *v = quat_array[i];
-        quat_hamilton(temp, *v, qb);
-        const double norm = quat_len(temp);
-        if (norm > max_norm) {
-            max_norm = norm;
+        const double abs_dot = abs(quat_dot(*v, qb));
+        if (abs_dot > max_abs_dot) {
+            max_abs_dot = abs_dot;
             qm = *v;
         }
     }
 
-    // If the angle is very small, i.e. max_dot is very close to one, return Qb.
-    if (max_norm > 1-1e-12) {
-        mat3x3_copy(Qab, Qb);
+#if 1
+    if (max_abs_dot > 1-1e-12) {
+        quat2rot(Qab, qb);
         return;
     }
+#endif
 
     // We have found the candiate qm that requires the smallest rotation angle.
     // Interpolate with slerp.
@@ -419,80 +410,6 @@ void bislerp(mat3x3& Qab, mat3x3& Qa, mat3x3& Qb, double t)
     quat2rot(Qab, q);
 }
 
-// Calculate the fiber orientation in element (or vertex) i
-MFEM_HOST_DEVICE
-static void calculate_fiber(
-    int i,
-    const double epi,
-    const double lv,
-    const double rv,
-    vec3& grad_epi,
-    vec3& grad_lv,
-    vec3& grad_rv,
-    vec3& grad_ab,
-    double alpha_endo,
-    double alpha_epi,
-    double beta_endo,
-    double beta_epi,
-    double *F,
-    double *S,
-    double *T)
-{
-
-    double depth = (lv > 0 || rv > 0) ? rv / (lv + rv) : 0.5;
-
-    MFEM_ASSERT_KERNEL(depth >= 0.0 && depth <= 1.0, "depth not in range [0,1]");
-
-    const double alpha_s = alpha_endo*(1.0-depth) - alpha_endo*depth;
-    const double alpha_w = alpha_endo*(1.0-epi)   + alpha_epi*epi;
-
-    const double beta_s  = beta_endo*(1.0-depth) - beta_endo*depth;
-    const double beta_w  = beta_endo*(1.0-epi)   + beta_epi*epi;
-
-    mat3x3 Q_lv = {{{0}}};
-    {
-        vec3 grad_lv_neg = grad_lv;
-        vec3_negate(grad_lv_neg);
-
-        mat3x3 T = {{{0}}};
-        axis(T, grad_ab, grad_lv_neg);
-        orient(Q_lv, T, alpha_s, beta_s);
-    }
-
-    mat3x3 Q_rv = {{{0}}};
-    {
-        mat3x3 T = {{{0}}};
-        axis(T, grad_ab, grad_rv);
-        orient(Q_rv, T, alpha_s, beta_s);
-    }
-
-    mat3x3 Q_endo = {{{0}}};
-    bislerp(Q_endo, Q_lv, Q_rv, depth);
-
-    mat3x3 Q_epi = {{{0}}};
-    {
-        mat3x3 T = {{{0}}};
-        axis(T, grad_ab, grad_epi);
-        orient(Q_epi, T, alpha_w, beta_w);
-    }
-
-    mat3x3 Q_fiber = {{{0}}};
-
-    bislerp(Q_fiber, Q_endo, Q_epi, epi);
-
-    F[3*i+0] = Q_fiber[0][0];
-    F[3*i+1] = Q_fiber[1][0];
-    F[3*i+2] = Q_fiber[2][0];
-
-    S[3*i+0] = Q_fiber[0][1];
-    S[3*i+1] = Q_fiber[1][1];
-    S[3*i+2] = Q_fiber[2][1];
-
-    T[3*i+0] = Q_fiber[0][2];
-    T[3*i+1] = Q_fiber[1][2];
-    T[3*i+2] = Q_fiber[2][2];
-
-}
 
 // Calculate the fiber orientations in each vertex.
 //
@@ -512,38 +429,82 @@ void define_fibers(
     double beta_epi,
     double *F,
     double *S,
-    double *T)
+    double *T,
+    const double tol_lv,
+    const double tol_rv,
+    const double tol_epi)
 {
     MFEM_FORALL(i, n,
     {
-        const double phi_epi_i = CLAMP(phi_epi[i], 0.0, 1.0);
-        const double phi_lv_i  = CLAMP(phi_lv[i],  0.0, 1.0);
-        const double phi_rv_i  = CLAMP(phi_rv[i],  0.0, 1.0);
 
-        MFEM_ASSERT_KERNEL(abs(phi_epi_i + phi_lv_i + phi_rv_i - 1.0) < 1e-3,
-                    "The laplacians epi, lv and rv do not add up to 1.");
+        const double epi = CLAMP(phi_epi[i], 0.0, 1.0);
+        const double lv  = CLAMP(phi_lv[i],  0.0, 1.0);
+        const double rv  = CLAMP(phi_rv[i],  0.0, 1.0);
 
-        vec3 grad_phi_epi_i;
-        vec3_set_from_ptr(grad_phi_epi_i, &grad_phi_epi[3*i]);
+        vec3 grad_epi, grad_lv, grad_rv, grad_ab;
+        vec3_set_from_ptr(grad_epi, &grad_phi_epi[3*i]);
+        vec3_set_from_ptr(grad_lv,  &grad_phi_lv[3*i]);
+        vec3_set_from_ptr(grad_rv,  &grad_phi_rv[3*i]);
+        vec3_set_from_ptr(grad_ab,  &grad_psi_ab[3*i]);
 
-        vec3 grad_phi_lv_i;
-        vec3_set_from_ptr(grad_phi_lv_i, &grad_phi_lv[3*i]);
+        double depth = (lv > 0 || rv > 0) ? rv / (lv + rv) : 0.0;
+        const double alpha_s = alpha_endo*(1.0-depth) - alpha_endo*depth;
+        const double alpha_w = alpha_endo*(1.0-epi)   + alpha_epi*epi;
 
-        vec3 grad_phi_rv_i;
-        vec3_set_from_ptr(grad_phi_rv_i, &grad_phi_rv[3*i]);
+        const double beta_s  = beta_endo*(1.0-depth) - beta_endo*depth;
+        const double beta_w  = beta_endo*(1.0-epi)   + beta_epi*epi;
 
-        vec3 grad_psi_ab_i;
-        vec3_set_from_ptr(grad_psi_ab_i, &grad_psi_ab[3*i]);
+        const double grad_epi_mag = vec3_magnitude(grad_epi);
+        const double grad_lv_mag  = vec3_magnitude(grad_lv);
+        const double grad_rv_mag  = vec3_magnitude(grad_rv);
 
-        MFEM_ASSERT_KERNEL(abs(grad_phi_epi_i[0] + grad_phi_lv_i[0] + grad_phi_rv_i[0]) < 1e-3
-                        && abs(grad_phi_epi_i[1] + grad_phi_lv_i[1] + grad_phi_rv_i[1]) < 1e-3
-                        && abs(grad_phi_epi_i[2] + grad_phi_lv_i[2] + grad_phi_rv_i[2]) < 1e-3,
-                        "The gradients do not add up to zero");
+        mat3x3 Q_lv = {{{0}}};
+        {
+            vec3 grad_lv_neg = grad_lv;
+            vec3_negate(grad_lv_neg);
 
-        calculate_fiber(i, phi_epi_i, phi_lv_i, phi_rv_i,
-                        grad_phi_epi_i, grad_phi_lv_i, grad_phi_rv_i, grad_psi_ab_i,
-                        alpha_endo, alpha_epi, beta_endo, beta_epi,
-                        F, S, T);
+            mat3x3 T = {{{0}}};
+            axis(T, grad_ab, grad_lv_neg);
+            orient(Q_lv, T, alpha_s, beta_s);
+        }
+
+
+        mat3x3 Q_epi = {{{0}}};
+        {
+            mat3x3 T = {{{0}}};
+            axis(T, grad_ab, grad_epi);
+            orient(Q_epi, T, alpha_w, beta_w);
+        }
+
+
+        mat3x3 Q_fiber = {{{0}}};
+        if (grad_epi_mag < tol_epi) {
+            // We are in the septum
+            Q_fiber = Q_lv;
+        } else if (grad_epi_mag >= tol_epi && grad_lv_mag >= tol_lv && grad_rv_mag < tol_rv) {
+            // We are in the LV free wall
+            Q_fiber = Q_epi;
+        } else if (grad_epi_mag >= tol_epi && grad_lv_mag < tol_lv  && grad_rv_mag >= tol_rv) {
+            // We are in the RV free wall
+            Q_fiber = Q_epi;
+        } else {
+            // We are in the junction between the septum and the LV and RV free
+            // walls. Here we have to apply the full algorithm.
+            mat3x3 Q_rv = {{{0}}};
+            {
+                mat3x3 T = {{{0}}};
+                axis(T, grad_ab, grad_rv);
+                orient(Q_rv, T, alpha_s, beta_s);
+            }
+            mat3x3 Q_endo = {{{0}}};
+            bislerp(Q_endo, Q_lv, Q_rv, depth);
+            bislerp(Q_fiber, Q_endo, Q_epi, epi);
+        }
+
+        F[3*i+0] = Q_fiber[0][0]; S[3*i+0] = Q_fiber[0][1]; T[3*i+0] = Q_fiber[0][2];
+        F[3*i+1] = Q_fiber[1][0]; S[3*i+1] = Q_fiber[1][1]; T[3*i+1] = Q_fiber[1][2];
+        F[3*i+2] = Q_fiber[2][0]; S[3*i+2] = Q_fiber[2][1]; T[3*i+2] = Q_fiber[2][2];
+
     });
 }
 

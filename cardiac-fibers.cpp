@@ -172,6 +172,10 @@ int main(int argc, char *argv[])
     opts.rv_id   = 4;
     opts.apex_id = -1;
 
+    opts.tol_lv_free_wall = 0.01;
+    opts.tol_rv_free_wall = 0.01;
+    opts.tol_septum = 0.05;
+
     opts.uniform_refinement = 0;
 
     opts.fibers_per_element = true;
@@ -242,6 +246,18 @@ int main(int argc, char *argv[])
     args.AddOption(&opts.beta_epi,
             "-bi", "--beta-epi",
             "Beta angle in epicardium.");
+
+    args.AddOption(&opts.tol_lv_free_wall,
+            "-tlv", "--tol-lv-free-wall",
+            "Set the tolerance for LV free wall.");
+
+    args.AddOption(&opts.tol_rv_free_wall,
+            "-trv", "--tol-rv-free-wall",
+            "Set the tolerance for LV free wall.");
+
+    args.AddOption(&opts.tol_rv_free_wall,
+            "-ts", "--tol-septum",
+            "Set the tolerance for septum.");
 
     args.AddOption(&opts.uniform_refinement,
             "-u", "--uniform-refinement",
@@ -1269,7 +1285,8 @@ int main(int argc, char *argv[])
                   phi_epi, phi_lv, phi_rv,
                   grad_phi_epi_vals, grad_phi_lv_vals, grad_phi_rv_vals, grad_psi_ab_vals,
                   opts.alpha_endo, opts.alpha_epi, opts.beta_endo, opts.beta_epi,
-                  F_vals, S_vals, T_vals
+                  F_vals, S_vals, T_vals,
+                  opts.tol_lv_free_wall, opts.tol_rv_free_wall, opts.tol_septum
     );
 
     tracing::roctx_range_pop();

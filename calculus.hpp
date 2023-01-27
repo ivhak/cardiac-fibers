@@ -127,5 +127,8 @@ void define_fibers(
     double beta_epi,
     double *F,
     double *S,
-    double *T);
+    double *T,
+    const double tol_lv,
+    const double tol_rv,
+    const double tol_epi);
 #endif
