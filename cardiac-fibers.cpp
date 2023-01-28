@@ -1281,13 +1281,22 @@ int main(int argc, char *argv[])
     // Calculate the fiber orientation
     timing::tick(&t0);
     tracing::roctx_range_push("define_fibers");
-    define_fibers(x_phi_epi->Size(),
-                  phi_epi, phi_lv, phi_rv,
-                  grad_phi_epi_vals, grad_phi_lv_vals, grad_phi_rv_vals, grad_psi_ab_vals,
-                  opts.alpha_endo, opts.alpha_epi, opts.beta_endo, opts.beta_epi,
-                  F_vals, S_vals, T_vals,
-                  opts.tol_lv_free_wall, opts.tol_rv_free_wall, opts.tol_septum
-    );
+    if (mesh_has_right_ventricle) {
+        define_fibers(
+                x_phi_epi->Size(), phi_epi, phi_lv, phi_rv,
+                grad_phi_epi_vals, grad_phi_lv_vals, grad_phi_rv_vals, grad_psi_ab_vals,
+                opts.alpha_endo, opts.alpha_epi, opts.beta_endo, opts.beta_epi,
+                F_vals, S_vals, T_vals,
+                opts.tol_lv_free_wall, opts.tol_rv_free_wall, opts.tol_septum
+        );
+    } else {
+        define_fibers_single_ventricle(
+                x_phi_epi->Size(), phi_epi,
+                grad_phi_epi_vals, grad_psi_ab_vals,
+                opts.alpha_endo, opts.alpha_epi, opts.beta_endo, opts.beta_epi,
+                F_vals, S_vals, T_vals
+        );
+    }
 
     tracing::roctx_range_pop();
     timing::tick(&t1, /* barrier */ true, /* device barrier */ true);

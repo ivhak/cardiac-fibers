@@ -508,3 +508,45 @@ void define_fibers(
     });
 }
 
+void define_fibers_single_ventricle(
+        int n,
+        const double *phi_epi,
+        const double *grad_phi_epi,
+        const double *grad_psi_ab,
+        double alpha_endo,
+        double alpha_epi,
+        double beta_endo,
+        double beta_epi,
+        double *F,
+        double *S,
+        double *T)
+{
+    MFEM_FORALL(i, n, {
+        // In the case where there is a single ventricle, we can simply skip
+        // all the considerations we have to make for biventricular meshes. Use
+        // the gradient `grad_psi_ab` as the apicobasal, as usual, and set the
+        // transmural vector to be `grad_phi_epi`. Orient using alpha_w and
+        // beta_w.
+
+        double epi = phi_epi[i];
+        vec3 grad_epi, grad_ab;
+        vec3_set_from_ptr(grad_epi, &grad_phi_epi[3*i]);
+        vec3_set_from_ptr(grad_ab,  &grad_psi_ab[3*i]);
+        const double alpha_w = alpha_endo*(1.0-epi) + alpha_epi*epi;
+        const double beta_w  = beta_endo*(1.0-epi)  + beta_epi*epi;
+
+        mat3x3 Q_epi = {{{0}}};
+        {
+            mat3x3 T = {{{0}}};
+            axis(T, grad_ab, grad_epi);
+            orient(Q_epi, T, alpha_w, beta_w);
+        }
+
+        F[3*i+0] = Q_epi[0][0]; S[3*i+0] = Q_epi[0][1]; T[3*i+0] = Q_epi[0][2];
+        F[3*i+1] = Q_epi[1][0]; S[3*i+1] = Q_epi[1][1]; T[3*i+1] = Q_epi[1][2];
+        F[3*i+2] = Q_epi[2][0]; S[3*i+2] = Q_epi[2][1]; T[3*i+2] = Q_epi[2][2];
+
+    });
+}
+
+

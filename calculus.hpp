@@ -131,4 +131,18 @@ void define_fibers(
     const double tol_lv,
     const double tol_rv,
     const double tol_epi);
+
+void define_fibers_single_ventricle(
+    int n,
+    const double *phi_epi,
+    const double *grad_phi_epi,
+    const double *grad_psi_ab,
+    double alpha_endo,
+    double alpha_epi,
+    double beta_endo,
+    double beta_epi,
+    double *F,
+    double *S,
+    double *T);
+
 #endif
