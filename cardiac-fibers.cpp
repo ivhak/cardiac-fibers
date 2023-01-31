@@ -253,9 +253,9 @@ int main(int argc, char *argv[])
 
     args.AddOption(&opts.tol_rv_free_wall,
             "-trv", "--tol-rv-free-wall",
-            "Set the tolerance for LV free wall.");
+            "Set the tolerance for RV free wall.");
 
-    args.AddOption(&opts.tol_rv_free_wall,
+    args.AddOption(&opts.tol_septum,
             "-ts", "--tol-septum",
             "Set the tolerance for septum.");
 
