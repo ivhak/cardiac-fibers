@@ -35,24 +35,6 @@ static double quat_dot(quat& q1, quat& q2)
          + q1[3] * q2[3];
 }
 
-// Product of two quaternions
-MFEM_HOST_DEVICE
-static void quat_hamilton(quat& q_out, quat& q1, quat& q2)
-{
-    const double a1=q1[0], b1=q1[1], c1=q1[2], d1=q1[3];
-    const double a2=q2[0], b2=q2[1], c2=q2[2], d2=q2[3];
-
-    q_out[0] /* w */ = a1*a2 - b1*b2 - c1*c2 - d1*d2;
-    q_out[1] /* x */ = a1*b2 + b1*a2 + c1*d2 - d1*c2;
-    q_out[2] /* y */ = a1*c2 - b1*d2 + c1*a2 + d1*b2;
-    q_out[3] /* z */ = a1*d2 + b1*c2 - c1*b2 + d1*a2;
-}
-
-MFEM_HOST_DEVICE
-static double quat_len(quat& q)
-{
-    return sqrt(q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3]);
-}
 
 // Normalize quaternion
 MFEM_HOST_DEVICE
@@ -65,16 +47,6 @@ static void quat_normalize(quat& q)
     q[1] = q[1] * m;
     q[2] = q[2] * m;
     q[3] = q[3] * m;
-}
-
-// Negate quaternion
-MFEM_HOST_DEVICE
-static void quat_negate(quat& q)
-{
-    q[0] = -q[0];
-    q[1] = -q[1];
-    q[2] = -q[2];
-    q[3] = -q[3];
 }
 
 // vec3_cross product of two 3D vectors a and b, store in c.
