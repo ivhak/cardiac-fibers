@@ -1,4 +1,5 @@
 cardiac-fibers
+cardiac-fibers-error
 *.o
 transfer.sh
 copy_back_data.sh
@@ -10,3 +11,5 @@ mfem
 tests
 tools/mfem2carp
 tools/check-fibers
+envsetup-tp.sh
+
