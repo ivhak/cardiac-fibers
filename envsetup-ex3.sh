@@ -83,7 +83,7 @@ elif [ "$1" = "hgx2q" ]; then
 
     module use /global/D1/homes/james/ex3modules/hgx2q/2022-08-17/modulefiles
 
-    module load cuda11.0/toolkit/11.0.3
+    module load cuda11.8/toolkit/11.8
     module load hypre-32-2.25.0
     module load openmpi-4.1.4
     module load metis-32-5.1.0
