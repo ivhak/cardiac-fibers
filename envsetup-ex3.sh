@@ -79,7 +79,7 @@ elif [ "$1" = "dgx2q" ]; then
 
 elif [ "$1" = "hgx2q" ]; then
     # CUDA build
-    echo "Setting up environment for dgx2q (CUDA)"
+    echo "Setting up environment for hgx2q (CUDA)"
 
     module use /global/D1/homes/james/ex3modules/hgx2q/2022-08-17/modulefiles
 
