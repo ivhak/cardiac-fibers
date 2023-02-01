@@ -478,6 +478,7 @@ void define_fibers(
         F[3*i+2] = Q_fiber[2][0]; S[3*i+2] = Q_fiber[2][1]; T[3*i+2] = Q_fiber[2][2];
 
     });
+    cf_device_barrier();
 }
 
 void define_fibers_single_ventricle(
@@ -519,6 +520,7 @@ void define_fibers_single_ventricle(
         F[3*i+2] = Q_epi[2][0]; S[3*i+2] = Q_epi[2][1]; T[3*i+2] = Q_epi[2][2];
 
     });
+    cf_device_barrier();
 }
 
 

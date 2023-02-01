@@ -25,6 +25,8 @@
 #define INDENT_WIDTH 2
 #define LOG_LEFT_COL_WIDTH 48
 
+void cf_device_barrier(void);
+
 namespace util {
     namespace tracing {
         // Wrappers around roctxRangePush/Pop that are no-ops if tracing is not enabled

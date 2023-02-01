@@ -3,6 +3,7 @@
 
 #include "calculus.hpp"
 #include "fem.hpp"
+#include "util.hpp"
 
 // We could just setup a GridFunctionCoefficient of the solution in
 // H1, and then project that coefficient onto the new L2 space.
@@ -40,6 +41,7 @@ void project_h1_to_l2(
         avg *= 0.25;
         l2_vals[l2_table_row[l2_table_col[i]]] = avg;
     });
+    cf_device_barrier();
 }
 
 // XXX: For some reason amdgcn-link refuses to find and link against the cross
@@ -135,6 +137,7 @@ void compute_gradient(
         gradient[3*l2_dof+1] = grad[1];
         gradient[3*l2_dof+2] = grad[2];
     });
+    cf_device_barrier();
 }
 
 void interpolate_gradient_to_h1(
@@ -182,4 +185,5 @@ void interpolate_gradient_to_h1(
         h1_vals[3*i+1] = grad[1];
         h1_vals[3*i+2] = grad[2];
     });
+    cf_device_barrier();
 }

@@ -41,6 +41,12 @@ void util::tracing::roctx_range_pop(void) {
 #endif
 }
 
+void cf_device_barrier(void) {
+#ifdef TIMING_BARRIERS
+    MFEM_DEVICE_SYNC;
+#endif
+}
+
 void util::logging::timestamp(
     std::ostream& out,
     std::string const& log_string,
