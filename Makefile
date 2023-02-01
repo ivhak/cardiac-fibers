@@ -18,7 +18,7 @@
 
 CFLAGS = -std=c++11
 ifneq ($(DEBUG), YES)
-CFLAGS += -O3 -Wall -march=native
+CFLAGS += -Wall
 else
 CFLAGS += -O0 -DDEBUG -g3 -Wall
 endif
