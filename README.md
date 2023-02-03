@@ -62,6 +62,12 @@ Options:
         Beta angle in endocardium.
    -bi <double>, --beta-epi <double>, current value: 0
         Beta angle in epicardium.
+   -tlv <double>, --tol-lv-free-wall <double>, current value: 0.01
+        Set the tolerance for LV free wall.
+   -trv <double>, --tol-rv-free-wall <double>, current value: 0.01
+        Set the tolerance for RV free wall.
+   -ts <double>, --tol-septum <double>, current value: 0.05
+        Set the tolerance for septum.
    -u <int>, --uniform-refinement <int>, current value: 0
         Perform n levels of uniform refinement on the mesh.
    -fpe, --fibers-per-element, -fpv, --fibers-per-vertex, current option: --fibers-per-element
